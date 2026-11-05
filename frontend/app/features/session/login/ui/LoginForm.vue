@@ -19,6 +19,17 @@ const errorText = computed(() => {
 })
 
 const onSubmit = () => submit(email.value.trim(), password.value)
+
+const demoAccounts = [
+  { label: 'Арендатор', email: 'rider@example.com' },
+  { label: 'Админ', email: 'admin@example.com' },
+  { label: 'Владелец', email: 'owner@example.com' },
+]
+
+const useDemo = (demoEmail: string) => {
+  email.value = demoEmail
+  password.value = 'password123'
+}
 </script>
 
 <template>
@@ -73,8 +84,18 @@ const onSubmit = () => submit(email.value.trim(), password.value)
           class="muted"
           style="margin: 0; font-size: 0.85rem"
         >
-          Мок: любой email и пароль от 8 символов.
+          Мок: пароль от 8 символов. Роль определяется по email:
         </p>
+        <div class="row">
+          <Button
+            v-for="account in demoAccounts"
+            :key="account.email"
+            :label="account.label"
+            size="small"
+            text
+            @click="useDemo(account.email)"
+          />
+        </div>
       </form>
     </template>
   </Card>

@@ -3,13 +3,14 @@
   "info": {
     "title": "Keep Rollin API",
     "version": "1.0.0-seed",
-    "description": "Seed-подмножество контракта (§4 плана): публичный каталог, авторизация, аренды. Источник правды переезжает в Pydantic на CT-03."
+    "description": "Seed-подмножество контракта (§4 плана): публичный каталог, авторизация, аренды, staff-операции (аренды, верификация, тикеты). Источник правды переезжает в Pydantic на CT-03."
   },
   "servers": [{ "url": "/" }],
   "tags": [
     { "name": "public", "description": "Доступно без токена" },
     { "name": "auth", "description": "Аутентификация" },
-    { "name": "rentals", "description": "Брони и аренды" }
+    { "name": "rentals", "description": "Брони и аренды" },
+    { "name": "admin", "description": "Staff-операции (admin, owner)" }
   ],
   "paths": {
     "/api/v1/public/tenant": {
@@ -197,6 +198,181 @@
           "401": { "$ref": "#/components/responses/Unauthorized" },
           "404": { "$ref": "#/components/responses/NotFound" },
           "409": { "$ref": "#/components/responses/Conflict" }
+        }
+      }
+    },
+    "/api/v1/admin/rentals": {
+      "get": {
+        "operationId": "listAdminRentals",
+        "tags": ["admin"],
+        "summary": "Аренды для staff",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["booked", "active", "overdue", "completed", "cancelled"]
+            }
+          },
+          { "name": "lot_id", "in": "query", "schema": { "type": "string", "format": "uuid" } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 } },
+          { "name": "offset", "in": "query", "schema": { "type": "integer", "minimum": 0, "default": 0 } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Страница аренд",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AdminRentalPage" } } }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
+    "/api/v1/admin/rentals/{id}/close": {
+      "post": {
+        "operationId": "closeAdminRental",
+        "tags": ["admin"],
+        "summary": "Закрыть аренду и вернуть лот",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CloseRentalRequest" } } }
+        },
+        "responses": {
+          "200": {
+            "description": "Аренда закрыта",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AdminRental" } } }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "422": { "$ref": "#/components/responses/Validation" }
+        }
+      }
+    },
+    "/api/v1/admin/rentals/{id}/cancel": {
+      "post": {
+        "operationId": "cancelAdminRental",
+        "tags": ["admin"],
+        "summary": "Отменить аренду staff-ом",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CancelAdminRentalRequest" } } }
+        },
+        "responses": {
+          "200": {
+            "description": "Аренда отменена",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AdminRental" } } }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "422": { "$ref": "#/components/responses/Validation" }
+        }
+      }
+    },
+    "/api/v1/admin/verification-requests": {
+      "get": {
+        "operationId": "listVerificationRequests",
+        "tags": ["admin"],
+        "summary": "Очередь верификации",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": { "type": "string", "enum": ["pending", "approved", "rejected"] }
+          },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 } },
+          { "name": "offset", "in": "query", "schema": { "type": "integer", "minimum": 0, "default": 0 } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Страница заявок",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/VerificationRequestPage" } } }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
+    "/api/v1/admin/verification-requests/{id}/decision": {
+      "post": {
+        "operationId": "decideVerificationRequest",
+        "tags": ["admin"],
+        "summary": "Решение по заявке верификации",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/VerificationDecisionRequest" } } }
+        },
+        "responses": {
+          "200": {
+            "description": "Заявка обработана",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/VerificationRequest" } } }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "422": { "$ref": "#/components/responses/Validation" }
+        }
+      }
+    },
+    "/api/v1/admin/tickets": {
+      "get": {
+        "operationId": "listAdminTickets",
+        "tags": ["admin"],
+        "summary": "Очередь тикетов",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": { "type": "string", "enum": ["submitted", "in_progress", "resolved"] }
+          },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 } },
+          { "name": "offset", "in": "query", "schema": { "type": "integer", "minimum": 0, "default": 0 } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Страница тикетов",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TicketPage" } } }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
+    "/api/v1/admin/tickets/{id}": {
+      "patch": {
+        "operationId": "updateAdminTicket",
+        "tags": ["admin"],
+        "summary": "Изменить статус тикета",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TicketPatchRequest" } } }
+        },
+        "responses": {
+          "200": {
+            "description": "Тикет обновлён",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Ticket" } } }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "422": { "$ref": "#/components/responses/Validation" }
         }
       }
     }
@@ -460,6 +636,171 @@
           "lot_id": { "type": "string", "format": "uuid" },
           "start_time": { "type": "string", "format": "date-time" },
           "end_time": { "type": "string", "format": "date-time" }
+        }
+      },
+      "AdminUserRef": {
+        "type": "object",
+        "required": ["id", "name", "email"],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "name": { "type": "string" },
+          "email": { "type": "string", "format": "email" }
+        }
+      },
+      "AdminRental": {
+        "type": "object",
+        "required": [
+          "id",
+          "lot",
+          "user",
+          "status",
+          "start_time",
+          "end_time",
+          "price_minor",
+          "currency",
+          "remaining_seconds",
+          "version"
+        ],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "lot": { "$ref": "#/components/schemas/RentalLot" },
+          "user": { "$ref": "#/components/schemas/AdminUserRef" },
+          "status": { "type": "string", "enum": ["booked", "active", "overdue", "completed", "cancelled"] },
+          "start_time": { "type": "string", "format": "date-time" },
+          "end_time": { "type": "string", "format": "date-time" },
+          "price_minor": { "type": "integer" },
+          "currency": { "type": "string" },
+          "remaining_seconds": { "type": "integer" },
+          "cancellation_deadline": { "type": ["string", "null"], "format": "date-time" },
+          "version": { "type": "integer" }
+        }
+      },
+      "AdminRentalPage": {
+        "type": "object",
+        "required": ["items", "total", "limit", "offset"],
+        "properties": {
+          "items": { "type": "array", "items": { "$ref": "#/components/schemas/AdminRental" } },
+          "total": { "type": "integer" },
+          "limit": { "type": "integer" },
+          "offset": { "type": "integer" }
+        }
+      },
+      "CloseRentalRequest": {
+        "type": "object",
+        "required": ["comment", "lot_status"],
+        "properties": {
+          "comment": { "type": "string", "minLength": 3, "maxLength": 500 },
+          "lot_status": { "type": "string", "enum": ["active", "maintenance"] }
+        }
+      },
+      "CancelAdminRentalRequest": {
+        "type": "object",
+        "required": ["reason"],
+        "properties": {
+          "reason": { "type": "string", "minLength": 3, "maxLength": 200 }
+        }
+      },
+      "VerificationPassport": {
+        "type": "object",
+        "required": ["full_name", "birth_date", "passport_number", "issued_by"],
+        "properties": {
+          "full_name": { "type": "string" },
+          "birth_date": { "type": "string", "format": "date" },
+          "passport_number": { "type": "string" },
+          "issued_by": { "type": "string" }
+        }
+      },
+      "VerificationDocument": {
+        "type": "object",
+        "required": ["purpose", "url"],
+        "properties": {
+          "purpose": {
+            "type": "string",
+            "enum": ["verification_passport", "verification_registration", "verification_selfie"]
+          },
+          "url": { "type": "string", "format": "uri" }
+        }
+      },
+      "VerificationRequest": {
+        "type": "object",
+        "required": ["id", "user", "status", "passport", "documents", "created_at", "version"],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "user": { "$ref": "#/components/schemas/AdminUserRef" },
+          "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+          "passport": { "$ref": "#/components/schemas/VerificationPassport" },
+          "documents": { "type": "array", "items": { "$ref": "#/components/schemas/VerificationDocument" } },
+          "admin_comment": { "type": ["string", "null"] },
+          "created_at": { "type": "string", "format": "date-time" },
+          "reviewed_at": { "type": ["string", "null"], "format": "date-time" },
+          "version": { "type": "integer" }
+        }
+      },
+      "VerificationRequestPage": {
+        "type": "object",
+        "required": ["items", "total", "limit", "offset"],
+        "properties": {
+          "items": { "type": "array", "items": { "$ref": "#/components/schemas/VerificationRequest" } },
+          "total": { "type": "integer" },
+          "limit": { "type": "integer" },
+          "offset": { "type": "integer" }
+        }
+      },
+      "VerificationDecisionRequest": {
+        "type": "object",
+        "required": ["decision", "version"],
+        "properties": {
+          "decision": { "type": "string", "enum": ["approved", "rejected"] },
+          "comment": { "type": "string", "maxLength": 500 },
+          "version": { "type": "integer" }
+        }
+      },
+      "Ticket": {
+        "type": "object",
+        "required": [
+          "id",
+          "rental_id",
+          "lot",
+          "user",
+          "category",
+          "description",
+          "photo_urls",
+          "status",
+          "created_at",
+          "version"
+        ],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "rental_id": { "type": "string", "format": "uuid" },
+          "lot": { "$ref": "#/components/schemas/RentalLot" },
+          "user": { "$ref": "#/components/schemas/AdminUserRef" },
+          "category": { "type": "string", "enum": ["no_power", "no_drive", "battery", "damage", "other"] },
+          "description": { "type": "string", "minLength": 10, "maxLength": 1000 },
+          "photo_urls": { "type": "array", "items": { "type": "string", "format": "uri" } },
+          "status": { "type": "string", "enum": ["submitted", "in_progress", "resolved"] },
+          "admin_comment": { "type": ["string", "null"] },
+          "created_at": { "type": "string", "format": "date-time" },
+          "resolved_at": { "type": ["string", "null"], "format": "date-time" },
+          "version": { "type": "integer" }
+        }
+      },
+      "TicketPage": {
+        "type": "object",
+        "required": ["items", "total", "limit", "offset"],
+        "properties": {
+          "items": { "type": "array", "items": { "$ref": "#/components/schemas/Ticket" } },
+          "total": { "type": "integer" },
+          "limit": { "type": "integer" },
+          "offset": { "type": "integer" }
+        }
+      },
+      "TicketPatchRequest": {
+        "type": "object",
+        "required": ["status", "version"],
+        "properties": {
+          "status": { "type": "string", "enum": ["in_progress", "resolved"] },
+          "admin_comment": { "type": "string", "maxLength": 500 },
+          "version": { "type": "integer" }
         }
       }
     }

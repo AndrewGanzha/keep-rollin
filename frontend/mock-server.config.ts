@@ -14,6 +14,13 @@ type LoginResponse = components['schemas']['LoginResponse']
 type Rental = components['schemas']['Rental']
 type RentalPage = components['schemas']['RentalPage']
 type CreateRentalRequest = components['schemas']['CreateRentalRequest']
+type AdminRental = components['schemas']['AdminRental']
+type AdminRentalPage = components['schemas']['AdminRentalPage']
+type AdminUserRef = components['schemas']['AdminUserRef']
+type VerificationRequest = components['schemas']['VerificationRequest']
+type VerificationRequestPage = components['schemas']['VerificationRequestPage']
+type Ticket = components['schemas']['Ticket']
+type TicketPage = components['schemas']['TicketPage']
 
 const HOUR = 60 * 60 * 1000
 const uid = (n: number): string => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`
@@ -112,6 +119,39 @@ const mockUser: User = {
   verification_status: 'approved',
 }
 
+/** Демо-аккаунты: роль определяется по email, пароль — любой от 8 символов. */
+const seedUsers: User[] = [
+  mockUser,
+  {
+    id: uid(901),
+    email: 'admin@example.com',
+    name: 'Мария Админова',
+    role: 'admin',
+    verification_status: 'approved',
+  },
+  {
+    id: uid(902),
+    email: 'owner@example.com',
+    name: 'Олег Владельцев',
+    role: 'owner',
+    verification_status: 'approved',
+  },
+  {
+    id: uid(903),
+    email: 'anna@example.com',
+    name: 'Анна Смирнова',
+    role: 'user',
+    verification_status: 'pending',
+  },
+  {
+    id: uid(904),
+    email: 'pavel@example.com',
+    name: 'Павел Кузнецов',
+    role: 'user',
+    verification_status: 'approved',
+  },
+]
+
 const tokens = new Map<string, User>()
 
 const rentalLot = (lot: Lot): Rental['lot'] => ({
@@ -143,6 +183,165 @@ const rentals: Rental[] = [
     currency: 'RUB',
     remaining_seconds: 3600,
     cancellation_deadline: null,
+  },
+  {
+    id: uid(303),
+    lot: rentalLot(lots[1]!),
+    status: 'overdue',
+    start_time: iso(-30 * HOUR),
+    end_time: iso(-2 * HOUR),
+    price_minor: 138000,
+    currency: 'RUB',
+    remaining_seconds: 0,
+    cancellation_deadline: null,
+  },
+]
+
+const userById = (id: string): User => seedUsers.find(user => user.id === id) ?? mockUser
+
+const userRef = (user: User): AdminUserRef => ({ id: user.id, name: user.name, email: user.email })
+
+const rentalOwners = new Map<string, User>([
+  [uid(301), userById(uid(903))],
+  [uid(302), userById(uid(904))],
+  [uid(303), userById(uid(903))],
+])
+
+const rentalVersions = new Map<string, number>([
+  [uid(301), 1],
+  [uid(302), 1],
+  [uid(303), 1],
+])
+
+const verificationRequests: VerificationRequest[] = [
+  {
+    id: uid(501),
+    user: userRef(userById(uid(903))),
+    status: 'pending',
+    passport: {
+      full_name: 'Смирнова Анна Игоревна',
+      birth_date: '1996-04-12',
+      passport_number: '4510 123456',
+      issued_by: 'ОВД Тверского района, 14.05.2016',
+    },
+    documents: [
+      { purpose: 'verification_passport', url: 'https://example.com/docs/passport-501.jpg' },
+      { purpose: 'verification_registration', url: 'https://example.com/docs/registration-501.jpg' },
+      { purpose: 'verification_selfie', url: 'https://example.com/docs/selfie-501.jpg' },
+    ],
+    admin_comment: null,
+    created_at: iso(-3 * HOUR),
+    reviewed_at: null,
+    version: 1,
+  },
+  {
+    id: uid(502),
+    user: {
+      id: uid(905),
+      email: 'kirill@example.com',
+      name: 'Кирилл Орлов',
+    },
+    status: 'pending',
+    passport: {
+      full_name: 'Орлов Кирилл Владимирович',
+      birth_date: '1991-11-02',
+      passport_number: '5012 998877',
+      issued_by: 'МФЦ Хамовники, 03.02.2019',
+    },
+    documents: [
+      { purpose: 'verification_passport', url: 'https://example.com/docs/passport-502.jpg' },
+      { purpose: 'verification_selfie', url: 'https://example.com/docs/selfie-502.jpg' },
+    ],
+    admin_comment: null,
+    created_at: iso(-26 * HOUR),
+    reviewed_at: null,
+    version: 1,
+  },
+  {
+    id: uid(503),
+    user: userRef(userById(uid(904))),
+    status: 'approved',
+    passport: {
+      full_name: 'Кузнецов Павел Андреевич',
+      birth_date: '1989-07-21',
+      passport_number: '4009 554433',
+      issued_by: 'ОВД Арбат, 10.09.2012',
+    },
+    documents: [
+      { purpose: 'verification_passport', url: 'https://example.com/docs/passport-503.jpg' },
+    ],
+    admin_comment: 'Документы в порядке',
+    created_at: iso(-72 * HOUR),
+    reviewed_at: iso(-70 * HOUR),
+    version: 2,
+  },
+  {
+    id: uid(504),
+    user: {
+      id: uid(906),
+      email: 'olga@example.com',
+      name: 'Ольга Белова',
+    },
+    status: 'rejected',
+    passport: {
+      full_name: 'Белова Ольга Сергеевна',
+      birth_date: '1994-01-30',
+      passport_number: '4514 112233',
+      issued_by: 'ОВД Пресня, 22.03.2018',
+    },
+    documents: [
+      { purpose: 'verification_passport', url: 'https://example.com/docs/passport-504.jpg' },
+      { purpose: 'verification_selfie', url: 'https://example.com/docs/selfie-504.jpg' },
+    ],
+    admin_comment: 'Селфи не совпадает с фото в паспорте',
+    created_at: iso(-120 * HOUR),
+    reviewed_at: iso(-118 * HOUR),
+    version: 2,
+  },
+]
+
+const tickets: Ticket[] = [
+  {
+    id: uid(601),
+    rental_id: uid(301),
+    lot: rentalLot(lots[0]!),
+    user: userRef(userById(uid(903))),
+    category: 'no_power',
+    description: 'Батарея не включается после зарядки, индикатор мигает красным',
+    photo_urls: ['https://example.com/tickets/601-1.jpg'],
+    status: 'submitted',
+    admin_comment: null,
+    created_at: iso(-2 * HOUR),
+    resolved_at: null,
+    version: 1,
+  },
+  {
+    id: uid(602),
+    rental_id: uid(302),
+    lot: rentalLot(lots[2]!),
+    user: userRef(userById(uid(904))),
+    category: 'battery',
+    description: 'Аккумулятор держит заряд примерно вдвое меньше заявленного',
+    photo_urls: [],
+    status: 'in_progress',
+    admin_comment: 'Проверяем состояние на складе',
+    created_at: iso(-20 * HOUR),
+    resolved_at: null,
+    version: 2,
+  },
+  {
+    id: uid(603),
+    rental_id: uid(301),
+    lot: rentalLot(lots[1]!),
+    user: userRef(userById(uid(903))),
+    category: 'damage',
+    description: 'На раме обнаружена трещина возле крепления двигателя',
+    photo_urls: ['https://example.com/tickets/603-1.jpg', 'https://example.com/tickets/603-2.jpg'],
+    status: 'resolved',
+    admin_comment: 'Лот переведён в обслуживание',
+    created_at: iso(-96 * HOUR),
+    resolved_at: iso(-90 * HOUR),
+    version: 3,
   },
 ]
 
@@ -194,6 +393,12 @@ const currentUser = (request: AuthorizedRequest): User | null => {
 const withRemaining = (rental: Rental): Rental => ({
   ...rental,
   remaining_seconds: Math.round((Date.parse(rental.end_time) - Date.now()) / 1000),
+})
+
+const toAdminRental = (rental: Rental): AdminRental => ({
+  ...withRemaining(rental),
+  user: userRef(rentalOwners.get(rental.id) ?? mockUser),
+  version: rentalVersions.get(rental.id) ?? 1,
 })
 
 const priceFor = (lot: Lot, startMs: number, endMs: number): number => {
@@ -289,7 +494,8 @@ export default mock(
           )
         }
 
-        const user: User = { ...mockUser, email: body.email }
+        const user: User = seedUsers.find(item => item.email === body.email)
+          ?? { ...mockUser, email: body.email }
         const token = `mock-${Math.random().toString(36).slice(2, 10)}`
         tokens.set(token, user)
 
@@ -398,6 +604,8 @@ export default mock(
         }
 
         rentals.unshift(rental)
+        rentalOwners.set(rental.id, user)
+        rentalVersions.set(rental.id, 1)
         params.setStatusCode(201)
 
         return rental
@@ -428,6 +636,290 @@ export default mock(
 
         return withRemaining(rental)
       }, { delay: 120 }),
+
+      rest.get('/api/v1/admin/rentals', (params) => {
+        const user = currentUser(params)
+
+        if (!user) {
+          return fail(params, 401, problem('token_invalid', 401, 'Требуется вход'))
+        }
+
+        if (user.role !== 'admin' && user.role !== 'owner') {
+          return fail(params, 403, problem('forbidden_role', 403, 'Недостаточно прав'))
+        }
+
+        const query = params.request.queries as Record<string, unknown>
+        const status = typeof query.status === 'string' ? query.status : undefined
+        const lotId = typeof query.lot_id === 'string' ? query.lot_id : undefined
+        const limit = Number(query.limit ?? 20)
+        const offset = Number(query.offset ?? 0)
+
+        const filtered = rentals
+          .filter(rental =>
+            (!status || rental.status === status)
+            && (!lotId || rental.lot.id === lotId),
+          )
+          .map(toAdminRental)
+
+        const page: AdminRentalPage = {
+          items: filtered.slice(offset, offset + limit),
+          total: filtered.length,
+          limit,
+          offset,
+        }
+
+        return page
+      }, { delay: 80 }),
+
+      rest.post('/api/v1/admin/rentals/:id/close', (params) => {
+        const user = currentUser(params)
+
+        if (!user) {
+          return fail(params, 401, problem('token_invalid', 401, 'Требуется вход'))
+        }
+
+        if (user.role !== 'admin' && user.role !== 'owner') {
+          return fail(params, 403, problem('forbidden_role', 403, 'Недостаточно прав'))
+        }
+
+        const rental = rentals.find(item => item.id === params.request.params.id)
+
+        if (!rental) {
+          return fail(params, 404, problem('not_found', 404, 'Аренда не найдена'))
+        }
+
+        const body = (params.request.body ?? {}) as { comment?: string; lot_status?: string }
+        const comment = body.comment?.trim() ?? ''
+
+        if (comment.length < 3) {
+          return fail(
+            params,
+            422,
+            problem('validation_error', 422, 'Проверьте поля', undefined, { comment: 'Минимум 3 символа' }),
+          )
+        }
+
+        if (body.lot_status !== 'active' && body.lot_status !== 'maintenance') {
+          return fail(
+            params,
+            422,
+            problem('validation_error', 422, 'Проверьте поля', undefined, { lot_status: 'Выберите статус лота' }),
+          )
+        }
+
+        if (!['booked', 'active', 'overdue'].includes(rental.status)) {
+          return fail(params, 409, problem('rental_already_closed', 409, 'Аренда уже закрыта'))
+        }
+
+        rental.status = 'completed'
+        rentalVersions.set(rental.id, (rentalVersions.get(rental.id) ?? 1) + 1)
+
+        return toAdminRental(rental)
+      }, { delay: 150 }),
+
+      rest.post('/api/v1/admin/rentals/:id/cancel', (params) => {
+        const user = currentUser(params)
+
+        if (!user) {
+          return fail(params, 401, problem('token_invalid', 401, 'Требуется вход'))
+        }
+
+        if (user.role !== 'admin' && user.role !== 'owner') {
+          return fail(params, 403, problem('forbidden_role', 403, 'Недостаточно прав'))
+        }
+
+        const rental = rentals.find(item => item.id === params.request.params.id)
+
+        if (!rental) {
+          return fail(params, 404, problem('not_found', 404, 'Аренда не найдена'))
+        }
+
+        const body = (params.request.body ?? {}) as { reason?: string }
+        const reason = body.reason?.trim() ?? ''
+
+        if (reason.length < 3) {
+          return fail(
+            params,
+            422,
+            problem('validation_error', 422, 'Проверьте поля', undefined, { reason: 'Минимум 3 символа' }),
+          )
+        }
+
+        if (rental.status !== 'booked' && rental.status !== 'active') {
+          return fail(params, 409, problem('rental_not_active', 409, 'Аренду нельзя отменить в этом статусе'))
+        }
+
+        rental.status = 'cancelled'
+        rentalVersions.set(rental.id, (rentalVersions.get(rental.id) ?? 1) + 1)
+
+        return toAdminRental(rental)
+      }, { delay: 150 }),
+
+      rest.get('/api/v1/admin/verification-requests', (params) => {
+        const user = currentUser(params)
+
+        if (!user) {
+          return fail(params, 401, problem('token_invalid', 401, 'Требуется вход'))
+        }
+
+        if (user.role !== 'admin' && user.role !== 'owner') {
+          return fail(params, 403, problem('forbidden_role', 403, 'Недостаточно прав'))
+        }
+
+        const query = params.request.queries as Record<string, unknown>
+        const status = typeof query.status === 'string' ? query.status : undefined
+        const limit = Number(query.limit ?? 20)
+        const offset = Number(query.offset ?? 0)
+
+        const filtered = verificationRequests.filter(item => !status || item.status === status)
+
+        const page: VerificationRequestPage = {
+          items: filtered.slice(offset, offset + limit),
+          total: filtered.length,
+          limit,
+          offset,
+        }
+
+        return page
+      }, { delay: 80 }),
+
+      rest.post('/api/v1/admin/verification-requests/:id/decision', (params) => {
+        const user = currentUser(params)
+
+        if (!user) {
+          return fail(params, 401, problem('token_invalid', 401, 'Требуется вход'))
+        }
+
+        if (user.role !== 'admin' && user.role !== 'owner') {
+          return fail(params, 403, problem('forbidden_role', 403, 'Недостаточно прав'))
+        }
+
+        const request = verificationRequests.find(item => item.id === params.request.params.id)
+
+        if (!request) {
+          return fail(params, 404, problem('not_found', 404, 'Заявка не найдена'))
+        }
+
+        const body = (params.request.body ?? {}) as { decision?: string; comment?: string; version?: number }
+        const comment = body.comment?.trim() ?? ''
+
+        if (body.decision !== 'approved' && body.decision !== 'rejected') {
+          return fail(params, 422, problem('validation_error', 422, 'Выберите решение'))
+        }
+
+        if (body.decision === 'rejected' && comment.length < 3) {
+          return fail(
+            params,
+            422,
+            problem('validation_error', 422, 'Проверьте поля', undefined, { comment: 'Комментарий обязателен для отказа' }),
+          )
+        }
+
+        if (body.version !== request.version) {
+          return fail(params, 409, problem('stale_version', 409, 'Заявка уже изменилась'))
+        }
+
+        if (request.status !== 'pending') {
+          return fail(params, 409, problem('already_processed', 409, 'Заявка уже обработана'))
+        }
+
+        request.status = body.decision
+        request.admin_comment = comment || null
+        request.reviewed_at = iso(0)
+        request.version += 1
+
+        const owner = seedUsers.find(item => item.id === request.user.id)
+
+        if (owner) {
+          owner.verification_status = body.decision
+        }
+
+        return request
+      }, { delay: 150 }),
+
+      rest.get('/api/v1/admin/tickets', (params) => {
+        const user = currentUser(params)
+
+        if (!user) {
+          return fail(params, 401, problem('token_invalid', 401, 'Требуется вход'))
+        }
+
+        if (user.role !== 'admin' && user.role !== 'owner') {
+          return fail(params, 403, problem('forbidden_role', 403, 'Недостаточно прав'))
+        }
+
+        const query = params.request.queries as Record<string, unknown>
+        const status = typeof query.status === 'string' ? query.status : undefined
+        const limit = Number(query.limit ?? 20)
+        const offset = Number(query.offset ?? 0)
+
+        const filtered = tickets.filter(item => !status || item.status === status)
+
+        const page: TicketPage = {
+          items: filtered.slice(offset, offset + limit),
+          total: filtered.length,
+          limit,
+          offset,
+        }
+
+        return page
+      }, { delay: 80 }),
+
+      rest.patch('/api/v1/admin/tickets/:id', (params) => {
+        const user = currentUser(params)
+
+        if (!user) {
+          return fail(params, 401, problem('token_invalid', 401, 'Требуется вход'))
+        }
+
+        if (user.role !== 'admin' && user.role !== 'owner') {
+          return fail(params, 403, problem('forbidden_role', 403, 'Недостаточно прав'))
+        }
+
+        const ticket = tickets.find(item => item.id === params.request.params.id)
+
+        if (!ticket) {
+          return fail(params, 404, problem('not_found', 404, 'Тикет не найден'))
+        }
+
+        const body = (params.request.body ?? {}) as {
+          status?: string
+          admin_comment?: string
+          version?: number
+        }
+        const comment = body.admin_comment?.trim() ?? ''
+
+        if (body.status !== 'in_progress' && body.status !== 'resolved') {
+          return fail(params, 422, problem('validation_error', 422, 'Недопустимый статус'))
+        }
+
+        if (body.version !== ticket.version) {
+          return fail(params, 409, problem('stale_version', 409, 'Тикет уже изменился'))
+        }
+
+        if (ticket.status === 'resolved') {
+          return fail(params, 409, problem('ticket_already_resolved', 409, 'Тикет уже решён'))
+        }
+
+        if (body.status === 'resolved' && ticket.status !== 'in_progress') {
+          return fail(params, 409, problem('validation_error', 409, 'Сначала возьмите тикет в работу'))
+        }
+
+        if (body.status === 'resolved' && comment.length < 3) {
+          return fail(
+            params,
+            422,
+            problem('validation_error', 422, 'Проверьте поля', undefined, { admin_comment: 'Комментарий обязателен' }),
+          )
+        }
+
+        ticket.status = body.status
+        ticket.admin_comment = comment || ticket.admin_comment
+        ticket.resolved_at = body.status === 'resolved' ? iso(0) : null
+        ticket.version += 1
+
+        return ticket
+      }, { delay: 150 }),
     ],
   },
 )

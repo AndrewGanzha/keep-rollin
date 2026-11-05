@@ -174,6 +174,125 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/rentals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Аренды для staff */
+        get: operations["listAdminRentals"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/rentals/{id}/close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Закрыть аренду и вернуть лот */
+        post: operations["closeAdminRental"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/rentals/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Отменить аренду staff-ом */
+        post: operations["cancelAdminRental"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/verification-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Очередь верификации */
+        get: operations["listVerificationRequests"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/verification-requests/{id}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Решение по заявке верификации */
+        post: operations["decideVerificationRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/tickets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Очередь тикетов */
+        get: operations["listAdminTickets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/tickets/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Изменить статус тикета */
+        patch: operations["updateAdminTicket"];
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -378,6 +497,117 @@ export interface components {
             start_time: string;
             /** Format: date-time */
             end_time: string;
+        };
+        AdminUserRef: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** Format: email */
+            email: string;
+        };
+        AdminRental: {
+            /** Format: uuid */
+            id: string;
+            lot: components["schemas"]["RentalLot"];
+            user: components["schemas"]["AdminUserRef"];
+            /** @enum {string} */
+            status: "booked" | "active" | "overdue" | "completed" | "cancelled";
+            /** Format: date-time */
+            start_time: string;
+            /** Format: date-time */
+            end_time: string;
+            price_minor: number;
+            currency: string;
+            remaining_seconds: number;
+            /** Format: date-time */
+            cancellation_deadline?: string | null;
+            version: number;
+        };
+        AdminRentalPage: {
+            items: components["schemas"]["AdminRental"][];
+            total: number;
+            limit: number;
+            offset: number;
+        };
+        CloseRentalRequest: {
+            comment: string;
+            /** @enum {string} */
+            lot_status: "active" | "maintenance";
+        };
+        CancelAdminRentalRequest: {
+            reason: string;
+        };
+        VerificationPassport: {
+            full_name: string;
+            /** Format: date */
+            birth_date: string;
+            passport_number: string;
+            issued_by: string;
+        };
+        VerificationDocument: {
+            /** @enum {string} */
+            purpose: "verification_passport" | "verification_registration" | "verification_selfie";
+            /** Format: uri */
+            url: string;
+        };
+        VerificationRequest: {
+            /** Format: uuid */
+            id: string;
+            user: components["schemas"]["AdminUserRef"];
+            /** @enum {string} */
+            status: "pending" | "approved" | "rejected";
+            passport: components["schemas"]["VerificationPassport"];
+            documents: components["schemas"]["VerificationDocument"][];
+            admin_comment?: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            reviewed_at?: string | null;
+            version: number;
+        };
+        VerificationRequestPage: {
+            items: components["schemas"]["VerificationRequest"][];
+            total: number;
+            limit: number;
+            offset: number;
+        };
+        VerificationDecisionRequest: {
+            /** @enum {string} */
+            decision: "approved" | "rejected";
+            comment?: string;
+            version: number;
+        };
+        Ticket: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            rental_id: string;
+            lot: components["schemas"]["RentalLot"];
+            user: components["schemas"]["AdminUserRef"];
+            /** @enum {string} */
+            category: "no_power" | "no_drive" | "battery" | "damage" | "other";
+            description: string;
+            photo_urls: string[];
+            /** @enum {string} */
+            status: "submitted" | "in_progress" | "resolved";
+            admin_comment?: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            resolved_at?: string | null;
+            version: number;
+        };
+        TicketPage: {
+            items: components["schemas"]["Ticket"][];
+            total: number;
+            limit: number;
+            offset: number;
+        };
+        TicketPatchRequest: {
+            /** @enum {string} */
+            status: "in_progress" | "resolved";
+            admin_comment?: string;
+            version: number;
         };
     };
     responses: {
@@ -676,6 +906,209 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+        };
+    };
+    listAdminRentals: {
+        parameters: {
+            query?: {
+                status?: "booked" | "active" | "overdue" | "completed" | "cancelled";
+                lot_id?: string;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Страница аренд */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminRentalPage"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    closeAdminRental: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CloseRentalRequest"];
+            };
+        };
+        responses: {
+            /** @description Аренда закрыта */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminRental"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Validation"];
+        };
+    };
+    cancelAdminRental: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CancelAdminRentalRequest"];
+            };
+        };
+        responses: {
+            /** @description Аренда отменена */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminRental"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Validation"];
+        };
+    };
+    listVerificationRequests: {
+        parameters: {
+            query?: {
+                status?: "pending" | "approved" | "rejected";
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Страница заявок */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VerificationRequestPage"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    decideVerificationRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VerificationDecisionRequest"];
+            };
+        };
+        responses: {
+            /** @description Заявка обработана */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VerificationRequest"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Validation"];
+        };
+    };
+    listAdminTickets: {
+        parameters: {
+            query?: {
+                status?: "submitted" | "in_progress" | "resolved";
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Страница тикетов */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TicketPage"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    updateAdminTicket: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TicketPatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Тикет обновлён */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Ticket"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Validation"];
         };
     };
 }

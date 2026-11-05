@@ -45,6 +45,13 @@ const toggleTheme = () => {
         >
           Мои аренды
         </NuxtLink>
+        <NuxtLink
+          v-if="session.isStaff"
+          to="/admin"
+          class="header__link"
+        >
+          Админка
+        </NuxtLink>
       </nav>
 
       <div

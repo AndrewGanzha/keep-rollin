@@ -12,7 +12,7 @@ _Подгруппа **Q1** · 1 задача._
 **Объём:** compose (postgres, minio, mailhog, api, worker, web), `make seed`: 2 категории, 6 лотов, owner/admin/user, заявки, аренды во всех статусах; `pnpm dev:full` поднимает mock-config-server + Nuxt без БД и backend.
 **AC:**
 - [ ] `make up && make seed` даёт рабочий стенд с демо-данными.
-- [ ] `pnpm dev:full` поднимает FE на моке без БД и backend (frontend-first).
+- [x] `pnpm dev:full` поднимает FE на моке без БД и backend (frontend-first).
 - [ ] Smoke-тест логина и публичного каталога зелёный.
 
 ## 6.4.2. Приёмка MVP

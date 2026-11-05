@@ -1,5 +1,18 @@
-export { cancelRentalRequest, createRentalRequest, fetchMyRentals } from './api/rental.api'
+export {
+  cancelAdminRental,
+  cancelRentalRequest,
+  closeAdminRental,
+  createRentalRequest,
+  fetchAdminRentals,
+  fetchMyRentals,
+  type AdminRentalQuery,
+} from './api/rental.api'
 export type {
+  AdminRental,
+  AdminRentalPage,
+  AdminRentalStatus,
+  CancelAdminRentalRequest,
+  CloseRentalRequest,
   CreateRentalRequest,
   Rental,
   RentalPage,

@@ -38,7 +38,8 @@ export default defineNuxtConfig({
   // Override with NUXT_API_PROXY_TARGET on the server (see server/middleware/api-proxy.ts).
   runtimeConfig: {
     apiProxyTarget: '',
-    internalOrigin: 'http://127.0.0.1:3000',
+    // `localhost` также резолвится в ::1, если dev-сервер слушает только IPv6.
+    internalOrigin: 'http://localhost:3000',
   },
 
   nitro: {
