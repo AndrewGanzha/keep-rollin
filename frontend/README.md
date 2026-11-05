@@ -1,0 +1,83 @@
+# Frontend (Nuxt 4 + Vue 3 + PrimeVue)
+
+Приложение каталога аренды: SSR-страницы для гостя, кабинет арендатора, админ-разделы (в работе).
+Разработка идёт **по контракту** (`../contract/openapi.json`), backend не требуется: API отдаёт `mock-config-server`.
+
+## Стек
+
+| Что | Версия / решение |
+| --- | --- |
+| Фреймворк | Nuxt 4, Vue 3.5, TypeScript strict |
+| UI | **только PrimeVue 4.5** (+ `@primevue/themes` Aura, `primelocale/ru.json`) |
+| Состояние | Pinia (сессия, тенант), `useAsyncData` для серверных данных |
+| API-клиент | `openapi-typescript` + `openapi-fetch`, генерация из контракта |
+| Mock | `mock-config-server` (siberiacancode), `mock-server.config.ts` |
+| Тесты | Vitest |
+
+## Команды
+
+```bash
+pnpm install
+pnpm gen:api      # contract/openapi.json → app/shared/api/schema.d.ts
+pnpm dev:full     # mock-config-server (7777) + Nuxt (3000) — основной режим разработки
+pnpm dev          # только Nuxt (если мок уже запущен отдельно)
+pnpm mock         # только мок, с --watch
+pnpm typecheck
+pnpm lint
+pnpm test
+pnpm build
+```
+
+Node ≥ 22 (проект проверен на 24.18). Nuxt проксирует `/api` на `MOCK_ORIGIN` (по умолчанию `http://127.0.0.1:7777`).
+Переключение на реальный backend: убрать `nitro.devProxy`/указать `MOCK_ORIGIN` на API.
+
+## Архитектура: FSD-lite
+
+```
+app/
+  pages/       # только композиция: заголовок + готовые блоки, ≤ ~50 строк
+  widgets/     # самостоятельные блоки экрана (шапка, сетка лотов, список аренд)
+  features/    # пользовательские сценарии: вход, фильтры, бронь, отмена
+  entities/    # домен: lot, category, rental, session, tenant (api + model + ui)
+  shared/      # api-клиент, ошибки, форматтеры, ui-примитивы
+  plugins/     # api, сессия, тенант/брендинг, сервисы PrimeVue
+  middleware/  # auth, guest
+```
+
+Правила импортов (проверяются ESLint, `no-restricted-imports`):
+
+| Слой | Может импортировать |
+| --- | --- |
+| `pages` | `widgets`, `features`, `entities`, `shared` |
+| `widgets` | `features`, `entities`, `shared` |
+| `features` | `entities`, `shared` |
+| `entities` | `shared` |
+| `shared` | только внешние библиотеки |
+
+Каждый слайс отдаёт public API через `index.ts`; внутренние файлы наружу не импортируются.
+
+## Правила (senior-чек-лист)
+
+1. **Страница ничего не знает о данных.** Никаких `$fetch`, `useAsyncData`, фильтрации и валидации в `pages/*` — только вызов композабла фичи и передача результата в виджет.
+2. **Компонент — презентационный.** Props/emits, никаких обращений к API/стору; действия emit’ятся наверх или выносятся в фичу.
+3. **Логика — в композаблах фич.** Один сценарий = один композабл (`useLogin`, `useCreateRental`), побочные эффекты (toast, redirect) — там же.
+4. **Стор — только общее клиентское состояние.** Сессия и тенант; данные страниц в Pinia не складываем.
+5. **После `await` внутри композабла нельзя вызывать Nuxt-композаблы.** Создавайте их синхронно до первого `await` (иначе `NUXT_E1001`).
+6. **UI — только PrimeVue.** Никаких Tailwind/других китов; кастомизация через `--p-*` переменные и `:pt`/scoped CSS.
+7. **Ошибки — по коду.** `ApiError.code` → текст; `detail` пользователю не показываем.
+8. **Контракт — источник типов.** Новое поле/эндпоинт сначала появляется в `contract/openapi.json`, затем `pnpm gen:api`.
+
+## Мок API
+
+`mock-server.config.ts` отвечает на пути контракта и держит состояние в памяти:
+
+- публичный каталог, доступность, вход, сессия, «Мои аренды», создание/отмена брони;
+- ошибки в формате `application/problem+json`: 401, 404, 409 (`slot_taken`, `cancellation_not_allowed`), 422;
+- данные типизированы через `components` из сгенерированной схемы — расхождение с контрактом ловится `typecheck`;
+- состояние сбрасывается перезапуском мока.
+
+Демо-вход: любой email и пароль от 8 символов.
+
+## Тесты
+
+Vitest покрывает чистую логику (`app/shared/lib`, маппинг ошибок). Компонентные/e2e — после стабилизации сценариев.

@@ -1,0 +1,53 @@
+{
+  "name": "keep-rollin-frontend",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.12.3",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "nuxt dev",
+    "build": "nuxt build",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare",
+    "typecheck": "nuxt typecheck",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "mock": "mcs --watch",
+    "dev:full": "concurrently -k -n mock,web -c cyan,green \"pnpm mock\" \"pnpm dev\"",
+    "gen:api": "openapi-typescript ../contract/openapi.json -o app/shared/api/schema.d.ts"
+  },
+  "dependencies": {
+    "@pinia/nuxt": "^1.0.3",
+    "nuxt": "^4.6.4",
+    "openapi-fetch": "^0.17.0",
+    "pinia": "^4.1.0",
+    "primeicons": "^8.0.2",
+    "primevue": "4.5.5",
+    "vue": "^3.5.44",
+    "vue-router": "^5.4.0"
+  },
+  "devDependencies": {
+    "@primevue/core": "4.5.5",
+    "@primevue/nuxt-module": "4.5.5",
+    "@primevue/themes": "4.5.4",
+    "@vue/test-utils": "^2.5.1",
+    "concurrently": "^10.0.6",
+    "eslint": "^10.14.0",
+    "eslint-plugin-vue": "^10.12.0",
+    "mock-config-server": "5.0.0-beta.6",
+    "openapi-typescript": "^7.13.0",
+    "primelocale": "^2.6.2",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.72.1",
+    "vitest": "^5.1.0",
+    "vue-eslint-parser": "^10.4.1",
+    "vue-tsc": "^3.3.14"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  }
+}

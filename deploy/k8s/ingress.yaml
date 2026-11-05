@@ -1,0 +1,31 @@
+# Applied by deploy.sh only when INGRESS_HOST is set. k3s ships Traefik as the
+# default ingress controller. TLS is intentionally not configured: without
+# cert-manager Traefik cannot issue a certificate, and a self-signed secret
+# would break PWA/service-worker installs.
+#
+# Later: install cert-manager, add a ClusterIssuer, then add
+#   tls:
+#     - hosts: [<host>]
+#       secretName: keep-rollin-tls
+# and the cert-manager annotation below.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: web
+  namespace: keep-rollin
+  annotations:
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: __INGRESS_HOST__
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: web
+                port:
+                  name: http

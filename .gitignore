@@ -1,1 +1,3 @@
 .DS_Store
+# Local deploy settings (KUBE_CONTEXT, INGRESS_HOST, ...).
+deploy/deploy.env

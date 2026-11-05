@@ -1,0 +1,88 @@
+name: Build frontend image
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'frontend/**'
+      - 'deploy/**'
+      - '.github/workflows/deploy-frontend.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-frontend
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE_REPO: ghcr.io/andrewganzha/keep-rollin-frontend
+  IMAGE_TAG: ${{ github.sha }}
+  PLATFORM: linux/amd64
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      # k3s listens on 127.0.0.1:6443 and is firewalled externally, so CI uses
+      # the same SSH tunnel as local deploys. The kubeconfig still supplies the
+      # client certificate; its 127.0.0.1 server works through the tunnel.
+      - name: Prepare cluster access
+        env:
+          KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
+          K3S_SSH_TARGET_SECRET: ${{ secrets.K3S_SSH_TARGET }}
+          K3S_SSH_KEY_SECRET: ${{ secrets.K3S_SSH_KEY }}
+          K3S_SSH_KNOWN_HOSTS_SECRET: ${{ secrets.K3S_SSH_KNOWN_HOSTS }}
+        run: |
+          set -eu
+          umask 077
+          dir="$RUNNER_TEMP/keep-rollin"
+          mkdir -p "$dir"
+          if [ -n "$KUBE_CONFIG" ]; then
+            printf '%s' "$KUBE_CONFIG" | base64 -d > "$dir/kubeconfig"
+            echo "KUBECONFIG=$dir/kubeconfig" >> "$GITHUB_ENV"
+          fi
+          if [ -n "$K3S_SSH_KEY_SECRET" ]; then
+            printf '%s\n' "$K3S_SSH_KEY_SECRET" > "$dir/k3s_key"
+            chmod 600 "$dir/k3s_key"
+            echo "K3S_SSH_KEY=$dir/k3s_key" >> "$GITHUB_ENV"
+          fi
+          if [ -n "$K3S_SSH_KNOWN_HOSTS_SECRET" ]; then
+            printf '%s\n' "$K3S_SSH_KNOWN_HOSTS_SECRET" > "$dir/known_hosts"
+            echo "K3S_SSH_KNOWN_HOSTS=$dir/known_hosts" >> "$GITHUB_ENV"
+          fi
+          if [ -n "$K3S_SSH_TARGET_SECRET" ]; then
+            echo "K3S_SSH_TARGET=$K3S_SSH_TARGET_SECRET" >> "$GITHUB_ENV"
+          fi
+
+      - name: Deploy or publish
+        env:
+          INGRESS_HOST: ${{ vars.INGRESS_HOST }}
+        run: |
+          set -eu
+          if [ -z "${KUBECONFIG:-}" ]; then
+            echo 'No KUBE_CONFIG secret: building and pushing the image only.'
+            BUILD_ONLY=1 ./deploy/deploy.sh
+          elif [ -n "${K3S_SSH_TARGET:-}" ]; then
+            echo "Deploying through SSH tunnel to $K3S_SSH_TARGET."
+            IMAGE_TRANSPORT=ssh-import ./deploy/deploy.sh
+          else
+            echo 'No K3S_SSH_TARGET: assuming the cluster can reach the API and registry.'
+            ./deploy/deploy.sh
+          fi
+
+      - name: Remove credentials
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/keep-rollin"
