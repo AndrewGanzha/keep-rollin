@@ -22,7 +22,7 @@ flowchart LR
 | `deploy/k8s/app.yaml` | ConfigMap, Deployment (probes, limits, read-only rootfs), Service |
 | `deploy/k8s/ingress.yaml` | Ingress с плейсхолдером `__INGRESS_HOST__` |
 | `deploy/deploy.sh` | сборка → push → apply → rollout → smoke → откат |
-| `.github/workflows/deploy-frontend.yml` | CI: push в `main` собирает и деплоит |
+| `.github/workflows/deploy-frontend.yml` | CI: push в `master` собирает и деплоит |
 
 ## 1. Один раз: доступ к кластеру
 
