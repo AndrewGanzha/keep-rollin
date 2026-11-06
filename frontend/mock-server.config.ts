@@ -99,9 +99,9 @@ const makeLot = (
 
 const lots: Lot[] = [
   makeLot(101, 'urban-one', 'Urban One', 'Лёгкий городской байк для ежедневных поездок', EBikes, { power: 500, range: 60 }, 'hourly', 45000),
-  makeLot(102, 'urban-two', 'Urban Two', 'Тот же класс, но с багажником и корзиной', EBikes, { power: 500, range: 65 }, 'hourly', 47000),
-  makeLot(103, 'trail-pro', 'Trail Pro', 'Внедорожник с усиленной рамой и амортизацией', EBikes, { power: 750, range: 90 }, 'hourly', 69000),
-  makeLot(104, 'cargo-max', 'Cargo Max', 'Грузовой байк для перевозки до 80 кг', EBikes, { power: 1000, range: 70 }, 'hourly', 89000),
+  makeLot(102, 'urban-two', 'Urban Two', 'Тот же класс, но с багажником и корзиной', EBikes, { power: 500, range: 65 }, 'daily', 130000),
+  makeLot(103, 'trail-pro', 'Trail Pro', 'Внедорожник с усиленной рамой и амортизацией', EBikes, { power: 750, range: 90 }, 'daily', 180000),
+  makeLot(104, 'cargo-max', 'Cargo Max', 'Грузовой байк для перевозки до 80 кг', EBikes, { power: 1000, range: 70 }, 'daily', 240000),
   makeLot(105, 'spare-48v', 'Spare 48V', 'Запасной аккумулятор 48 В, 720 Вт·ч', Batteries, { capacity: 720 }, 'daily', 35000),
   makeLot(106, 'spare-36v', 'Spare 36V', 'Компактный аккумулятор 36 В, 480 Вт·ч', Batteries, { capacity: 480 }, 'daily', 25000, 'maintenance'),
 ]

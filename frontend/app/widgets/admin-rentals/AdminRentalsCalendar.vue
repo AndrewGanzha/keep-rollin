@@ -87,10 +87,10 @@ interface TimedRental {
 }
 
 interface DaySegment extends TimedRental {
-  top: number
-  height: number
-  column: number
-  columns: number
+  left: number
+  width: number
+  lane: number
+  lanes: number
 }
 
 const dayBounds = (day: string): { start: number; end: number } => ({
@@ -130,27 +130,29 @@ const segmentsForDay = (day: string): DaySegment[] => {
   let clusterEnd = 0
 
   const flush = () => {
-    const columnsEnd: number[] = []
+    const lanesEnd: number[] = []
 
     const laidOut = cluster.map((item) => {
-      let column = columnsEnd.findIndex(end => end <= item.start)
+      let lane = lanesEnd.findIndex(end => end <= item.start)
 
-      if (column === -1) {
-        column = columnsEnd.length
-        columnsEnd.push(item.end)
+      if (lane === -1) {
+        lane = lanesEnd.length
+        lanesEnd.push(item.end)
       } else {
-        columnsEnd[column] = item.end
+        lanesEnd[lane] = item.end
       }
 
-      return { ...item, column }
+      return { ...item, lane }
     })
+
+    const dayMs = dayEnd - dayStart
 
     for (const item of laidOut) {
       segments.push({
         ...item,
-        top: (item.start - dayStart) / 60000,
-        height: Math.max((item.end - item.start) / 60000, 24),
-        columns: columnsEnd.length,
+        left: ((item.start - dayStart) / dayMs) * 100,
+        width: Math.max(((item.end - item.start) / dayMs) * 100, 0.6),
+        lanes: lanesEnd.length,
       })
     }
 
@@ -174,12 +176,35 @@ const segmentsForDay = (day: string): DaySegment[] => {
   return segments
 }
 
-const blockStyle = (segment: DaySegment): Record<string, string> => ({
-  top: `${segment.top}px`,
-  height: `${segment.height}px`,
-  left: `calc(${(100 / segment.columns) * segment.column}% + 2px)`,
-  width: `calc(${100 / segment.columns}% - 4px)`,
+const segmentsByDay = computed(() => {
+  const map = new Map<string, DaySegment[]>()
+
+  for (const day of days.value) {
+    map.set(day, segmentsForDay(day))
+  }
+
+  return map
 })
+
+const blockStyle = (segment: DaySegment): Record<string, string> => {
+  const laneHeight = 100 / segment.lanes
+
+  return {
+    left: `${segment.left}%`,
+    width: `calc(${segment.width}% - 4px)`,
+    top: `calc(${laneHeight * segment.lane}% + 2px)`,
+    height: `calc(${laneHeight}% - 4px)`,
+  }
+}
+
+const rowHeight = (day: string): number => {
+  const lanes = Math.max(1, ...(segmentsByDay.value.get(day) ?? []).map(segment => segment.lanes))
+  const base = props.view === 'day' ? 64 : 52
+
+  return Math.max(base, lanes * 30)
+}
+
+const tickLabel = (hour: number): string => (hour % 3 === 0 ? `${String(hour).padStart(2, '0')}:00` : '')
 
 const segmentTime = (segment: DaySegment): string =>
   `${formatTime(new Date(segment.start).toISOString(), props.timeZone)}–${formatTime(new Date(segment.end).toISOString(), props.timeZone)}`
@@ -208,15 +233,13 @@ const scrollToContent = async () => {
     return
   }
 
-  const segments = props.view === 'month'
-    ? []
-    : days.value.flatMap(day => segmentsForDay(day))
+  const segments = [...segmentsByDay.value.values()].flat()
+  const earliest = segments.length > 0
+    ? Math.min(...segments.map(segment => segment.left))
+    : (8 / 24) * 100
+  const hourWidth = (element.scrollWidth - 78) / 24
 
-  const top = segments.length > 0
-    ? Math.min(...segments.map(segment => segment.top))
-    : 8 * 60
-
-  element.scrollTop = Math.max(Math.min(top - 60, 1200), 0)
+  element.scrollLeft = Math.max((earliest / 100) * 24 * hourWidth - hourWidth, 0)
 }
 
 watch(
@@ -339,59 +362,51 @@ const onView = (value: CalendarView) => emit('update:view', value)
 
     <div
       v-else
+      ref="scrollRef"
       class="timeline"
-      :style="{ '--days': days.length }"
     >
       <div class="timeline__inner">
-        <div
-          v-if="view === 'week'"
-          class="timeline__header"
-        >
+        <div class="timeline__header">
           <div class="timeline__gutter" />
-          <div
-            v-for="day in days"
-            :key="`head-${day}`"
-            class="timeline__day-head"
-            :class="{ 'timeline__day-head--today': day === todayKey }"
-          >
-            <span class="muted">{{ weekdayFormatter.format(dayKeyToDate(day)) }}</span>
-            <span class="timeline__date">{{ Number(day.slice(8)) }}</span>
+          <div class="timeline__axis">
+            <div
+              v-for="hour in HOURS"
+              :key="hour"
+              class="timeline__tick"
+            >
+              {{ tickLabel(hour) }}
+            </div>
           </div>
         </div>
 
         <div
-          ref="scrollRef"
-          class="timeline__scroll"
+          v-for="day in days"
+          :key="day"
+          class="timeline__row"
+          :class="{ 'timeline__row--today': day === todayKey }"
         >
-          <div class="timeline__hours">
-            <div
-              v-for="hour in HOURS"
-              :key="hour"
-              class="timeline__hour"
-            >
-              {{ String(hour).padStart(2, '0') }}:00
-            </div>
+          <div class="timeline__day-label">
+            <span class="muted">{{ weekdayFormatter.format(dayKeyToDate(day)) }}</span>
+            <span class="timeline__date">{{ Number(day.slice(8)) }}</span>
           </div>
 
           <div
-            v-for="day in days"
-            :key="day"
-            class="timeline__column"
-            :class="{ 'timeline__column--today': day === todayKey }"
+            class="timeline__track"
+            :style="{ height: `${rowHeight(day)}px` }"
           >
             <div
-              class="timeline__lines"
+              class="timeline__grid"
               aria-hidden="true"
             >
               <div
                 v-for="hour in HOURS"
                 :key="hour"
-                class="timeline__line"
+                class="timeline__grid-cell"
               />
             </div>
 
             <button
-              v-for="segment in segmentsForDay(day)"
+              v-for="segment in (segmentsByDay.get(day) ?? [])"
               :key="segment.rental.id"
               type="button"
               class="timeline__block"
@@ -400,9 +415,7 @@ const onView = (value: CalendarView) => emit('update:view', value)
               :title="blockTitle(segment)"
               @click="emit('select', segment.rental)"
             >
-              <span class="timeline__block-time">
-                {{ segmentTime(segment) }}
-              </span>
+              <span class="timeline__block-time">{{ segmentTime(segment) }}</span>
               <span class="timeline__block-name">{{ segment.rental.lot.name }}</span>
             </button>
           </div>
@@ -559,37 +572,61 @@ const onView = (value: CalendarView) => emit('update:view', value)
 }
 
 .timeline__inner {
-  min-width: 100%;
+  min-width: 820px;
+}
+
+.timeline__header,
+.timeline__row {
+  display: grid;
+  grid-template-columns: 78px 1fr;
 }
 
 .timeline__header {
-  display: grid;
-  grid-template-columns: 52px repeat(var(--days, 7), minmax(110px, 1fr));
   border-bottom: 1px solid var(--p-content-border-color);
 }
 
-.timeline__gutter {
-  background: var(--p-content-background);
+.timeline__row {
+  border-bottom: 1px solid var(--p-content-border-color);
+}
+
+.timeline__row:last-child {
+  border-bottom: none;
+}
+
+.timeline__row--today {
+  background: color-mix(in srgb, var(--p-primary-color) 4%, transparent);
+}
+
+.timeline__gutter,
+.timeline__day-label {
   border-right: 1px solid var(--p-content-border-color);
 }
 
-.timeline__day-head {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  padding: 6px 4px;
-  background: var(--p-content-background);
-  border-right: 1px solid var(--p-content-border-color);
-  font-size: 0.8rem;
+.timeline__axis {
+  display: grid;
+  grid-template-columns: repeat(24, 1fr);
 }
 
-.timeline__day-head:last-child {
+.timeline__tick {
+  padding: 4px;
+  border-right: 1px solid var(--p-content-border-color);
+  color: var(--p-text-muted-color);
+  font-size: 0.7rem;
+  white-space: nowrap;
+}
+
+.timeline__tick:last-child {
   border-right: none;
 }
 
-.timeline__day-head--today {
-  background: var(--p-highlight-background);
+.timeline__day-label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 4px;
+  font-size: 0.75rem;
 }
 
 .timeline__date {
@@ -597,57 +634,32 @@ const onView = (value: CalendarView) => emit('update:view', value)
   font-size: 1rem;
 }
 
-.timeline__scroll {
-  display: grid;
-  grid-template-columns: 52px repeat(var(--days, 7), minmax(110px, 1fr));
-  max-height: 70vh;
-  overflow-y: auto;
-}
-
-.timeline__hours {
-  background: var(--p-content-background);
-  border-right: 1px solid var(--p-content-border-color);
-}
-
-.timeline__hour {
-  height: 60px;
-  padding: 2px 4px;
-  font-size: 0.7rem;
-  color: var(--p-text-muted-color);
-  text-align: right;
-}
-
-.timeline__column {
+.timeline__track {
   position: relative;
-  height: 1440px;
-  border-right: 1px solid var(--p-content-border-color);
 }
 
-.timeline__column:last-child {
-  border-right: none;
-}
-
-.timeline__column--today {
-  background: color-mix(in srgb, var(--p-primary-color) 4%, transparent);
-}
-
-.timeline__lines {
+.timeline__grid {
   position: absolute;
   inset: 0;
+  display: grid;
+  grid-template-columns: repeat(24, 1fr);
 }
 
-.timeline__line {
-  height: 60px;
-  border-bottom: 1px solid var(--p-content-border-color);
+.timeline__grid-cell {
+  border-right: 1px solid var(--p-content-border-color);
+}
+
+.timeline__grid-cell:last-child {
+  border-right: none;
 }
 
 .timeline__block {
   position: absolute;
   z-index: 1;
   display: flex;
-  flex-direction: column;
-  gap: 1px;
-  padding: 3px 5px;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 6px;
   border: none;
   border-left: 3px solid transparent;
   border-radius: 4px;
@@ -656,6 +668,7 @@ const onView = (value: CalendarView) => emit('update:view', value)
   font-size: 0.7rem;
   text-align: left;
   overflow: hidden;
+  white-space: nowrap;
   cursor: pointer;
 }
 
@@ -665,14 +678,12 @@ const onView = (value: CalendarView) => emit('update:view', value)
 
 .timeline__block-time {
   color: var(--p-text-muted-color);
-  white-space: nowrap;
 }
 
 .timeline__block-name {
   font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .timeline__block--booked {

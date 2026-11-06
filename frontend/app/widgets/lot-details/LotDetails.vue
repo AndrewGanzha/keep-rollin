@@ -119,6 +119,14 @@ const busy = computed(() => props.availability?.busy ?? [])
       size="large"
       @click="emit('book')"
     />
+    <small
+      v-if="lot.is_bookable"
+      class="muted"
+    >
+      {{ lot.rental_model === 'hourly'
+        ? 'Обычно от суток; можно выбрать несколько часов'
+        : 'Аренда от 1 дня — день, неделя или месяц' }}
+    </small>
     <Message
       v-else
       severity="warn"
