@@ -2,6 +2,10 @@
   color-scheme: light;
 }
 
+html.app-dark {
+  color-scheme: dark;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -18,6 +22,10 @@ body {
   background: var(--p-surface-50);
   color: var(--p-text-color);
   -webkit-font-smoothing: antialiased;
+}
+
+html.app-dark body {
+  background: var(--p-surface-950);
 }
 
 .app-shell {

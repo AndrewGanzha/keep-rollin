@@ -471,7 +471,7 @@ const onView = (value: CalendarView) => emit('update:view', value)
 }
 
 .month__cell--muted {
-  background: var(--p-surface-50);
+  background: color-mix(in srgb, var(--p-text-muted-color) 6%, var(--p-content-background));
 }
 
 .month__cell--today {

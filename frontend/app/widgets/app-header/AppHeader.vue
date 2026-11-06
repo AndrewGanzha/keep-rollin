@@ -5,7 +5,16 @@ import { LogoutButton } from '~/features/session/logout'
 
 const tenant = useTenant()
 const session = useSessionStore()
-const dark = useState('dark-mode', () => false)
+const themeCookie = useCookie<'light' | 'dark'>('kr_theme', {
+  maxAge: 60 * 60 * 24 * 365,
+  sameSite: 'lax',
+  path: '/',
+})
+const dark = useState('dark-mode', () => themeCookie.value === 'dark')
+
+watch(dark, (value) => {
+  themeCookie.value = value ? 'dark' : 'light'
+})
 
 useHead(() => ({
   htmlAttrs: { class: dark.value ? 'app-dark' : '' },
