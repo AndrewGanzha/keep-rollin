@@ -3,7 +3,7 @@ import type { VerificationStatus } from '~/entities/verification'
 import { useTenant } from '~/entities/tenant'
 import { useVerificationQueue } from '~/features/admin-verification'
 import { ErrorState, PageHeading } from '~/shared/ui'
-import { VerificationQueue } from '~/widgets/admin-verification'
+import { VerificationTable } from '~/widgets/admin-verification'
 
 definePageMeta({ layout: 'admin', middleware: ['auth', 'role'] })
 
@@ -43,7 +43,7 @@ const statusOptions: { label: string; value: VerificationStatus }[] = [
       :error="error"
       @retry="refresh"
     />
-    <VerificationQueue
+    <VerificationTable
       v-else
       :requests="data?.items ?? []"
       :loading="pending"

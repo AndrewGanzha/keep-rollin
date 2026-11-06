@@ -28,6 +28,9 @@ const labels: Record<VerificationStatus, string> = {
   rejected: 'Отклонена',
 }
 
+const severityOf = (status: VerificationStatus) => severity[status]
+const labelOf = (status: VerificationStatus) => labels[status]
+
 const documentLabels: Record<string, string> = {
   verification_passport: 'Паспорт',
   verification_registration: 'Регистрация',
@@ -72,100 +75,114 @@ const submit = () => {
 </script>
 
 <template>
-  <div
-    v-if="loading"
-    class="stack"
+  <DataTable
+    :value="requests"
+    data-key="id"
+    :loading="loading"
+    striped-rows
+    size="small"
+    scrollable
+    class="admin-table"
   >
-    <Skeleton
-      v-for="index in 2"
-      :key="index"
-      height="220px"
-      border-radius="16px"
-    />
-  </div>
+    <template #empty>
+      <EmptyState
+        title="Заявок нет"
+        description="В выбранном фильтре нет заявок на верификацию"
+      />
+    </template>
 
-  <EmptyState
-    v-else-if="requests.length === 0"
-    title="Заявок нет"
-    description="В выбранном фильтре нет заявок на верификацию"
-  />
-
-  <div
-    v-else
-    class="stack"
-  >
-    <Card
-      v-for="item in requests"
-      :key="item.id"
+    <Column
+      header="Заявитель"
+      style="min-width: 180px"
     >
-      <template #title>
-        <div class="row request__title">
-          <span>{{ item.user.name }}</span>
-          <Tag
-            :severity="severity[item.status]"
-            :value="labels[item.status]"
-          />
+      <template #body="{ data }">
+        <div class="cell">
+          <span>{{ data.user.name }}</span>
+          <span class="muted">{{ data.user.email }}</span>
         </div>
       </template>
+    </Column>
 
-      <template #content>
-        <div class="request__grid">
-          <dl class="request__passport">
-            <dt>Email</dt>
-            <dd>{{ item.user.email }}</dd>
-            <dt>ФИО</dt>
-            <dd>{{ item.passport.full_name }}</dd>
-            <dt>Дата рождения</dt>
-            <dd>{{ item.passport.birth_date }}</dd>
-            <dt>Паспорт</dt>
-            <dd>{{ item.passport.passport_number }}</dd>
-            <dt>Выдан</dt>
-            <dd>{{ item.passport.issued_by }}</dd>
-          </dl>
+    <Column
+      header="Паспорт"
+      style="min-width: 180px"
+    >
+      <template #body="{ data }">
+        <div class="cell">
+          <span>{{ data.passport.passport_number }}</span>
+          <span class="muted">{{ data.passport.birth_date }}</span>
+        </div>
+      </template>
+    </Column>
 
-          <div
-            class="stack"
-            style="gap: 6px"
+    <Column
+      header="Документы"
+      style="min-width: 160px"
+    >
+      <template #body="{ data }">
+        <div class="row cell-links">
+          <a
+            v-for="document in data.documents"
+            :key="document.purpose"
+            :href="document.url"
+            target="_blank"
+            rel="noopener noreferrer"
           >
-            <span class="muted">Документы</span>
-            <div class="row">
-              <a
-                v-for="document in item.documents"
-                :key="document.purpose"
-                :href="document.url"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                {{ documentLabels[document.purpose] ?? document.purpose }}
-              </a>
-            </div>
-            <span class="muted">Подана: {{ formatDateTime(item.created_at, timeZone) }}</span>
-            <span
-              v-if="item.reviewed_at"
-              class="muted"
-            >
-              Решение: {{ formatDateTime(item.reviewed_at, timeZone) }}
-            </span>
-            <span
-              v-if="item.admin_comment"
-              class="muted"
-            >
-              Комментарий: {{ item.admin_comment }}
-            </span>
-          </div>
+            {{ documentLabels[document.purpose] ?? document.purpose }}
+          </a>
         </div>
       </template>
+    </Column>
 
-      <template
-        v-if="item.status === 'pending'"
-        #footer
-      >
-        <div class="row">
+    <Column
+      header="Подана"
+      style="min-width: 120px"
+    >
+      <template #body="{ data }">
+        {{ formatDateTime(data.created_at, timeZone) }}
+      </template>
+    </Column>
+
+    <Column
+      header="Статус"
+      style="min-width: 120px"
+    >
+      <template #body="{ data }">
+        <Tag
+          :severity="severityOf(data.status)"
+          :value="labelOf(data.status)"
+        />
+      </template>
+    </Column>
+
+    <Column
+      header="Комментарий"
+      style="min-width: 160px; max-width: 240px"
+    >
+      <template #body="{ data }">
+        <span
+          class="clamp"
+          :title="data.admin_comment ?? ''"
+        >
+          {{ data.admin_comment ?? '—' }}
+        </span>
+      </template>
+    </Column>
+
+    <Column
+      header="Действия"
+      style="min-width: 160px"
+    >
+      <template #body="{ data }">
+        <div
+          v-if="data.status === 'pending'"
+          class="row actions"
+        >
           <Button
             label="Одобрить"
             size="small"
             :disabled="pending"
-            @click="open(item, 'approved')"
+            @click="open(data, 'approved')"
           />
           <Button
             label="Отклонить"
@@ -173,12 +190,16 @@ const submit = () => {
             severity="danger"
             text
             :disabled="pending"
-            @click="open(item, 'rejected')"
+            @click="open(data, 'rejected')"
           />
         </div>
+        <span
+          v-else
+          class="muted"
+        >—</span>
       </template>
-    </Card>
-  </div>
+    </Column>
+  </DataTable>
 
   <Dialog
     v-model:visible="visible"
@@ -193,7 +214,7 @@ const submit = () => {
       <p style="margin: 0">
         {{ target.user.name }} · {{ target.passport.passport_number }}
       </p>
-      <div class="stack request__field">
+      <div class="field">
         <label for="decision-comment">
           Комментарий{{ decision === 'rejected' ? '' : ' (необязательно)' }}
         </label>
@@ -231,37 +252,45 @@ const submit = () => {
 </template>
 
 <style scoped>
-.request__title {
-  justify-content: space-between;
+.admin-table :deep(.p-tag) {
+  white-space: nowrap;
 }
 
-.request__grid {
-  display: grid;
-  gap: 16px;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+.admin-table :deep(.p-datatable-table) {
+  min-width: 1040px;
 }
 
-.request__passport {
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: 6px 12px;
-  margin: 0;
+.cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
-.request__passport dt {
-  color: var(--p-text-muted-color);
+.cell-links {
+  gap: 8px;
+  font-size: 0.85rem;
 }
 
-.request__passport dd {
-  margin: 0;
-  font-weight: 600;
+.clamp {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
-.request__field {
+.actions {
+  gap: 4px;
+  flex-wrap: nowrap;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
   gap: 6px;
 }
 
-.request__field label {
+.field label {
   font-size: 0.9rem;
   font-weight: 600;
 }

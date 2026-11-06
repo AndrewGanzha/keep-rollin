@@ -1,1 +1,1 @@
-export { default as TicketQueue } from './TicketQueue.vue'
+export { default as TicketTable } from './TicketTable.vue'

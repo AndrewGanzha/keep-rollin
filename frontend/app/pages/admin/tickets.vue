@@ -3,7 +3,7 @@ import type { TicketStatus } from '~/entities/ticket'
 import { useTenant } from '~/entities/tenant'
 import { useTicketQueue } from '~/features/admin-tickets'
 import { ErrorState, PageHeading } from '~/shared/ui'
-import { TicketQueue } from '~/widgets/admin-tickets'
+import { TicketTable } from '~/widgets/admin-tickets'
 
 definePageMeta({ layout: 'admin', middleware: ['auth', 'role'] })
 
@@ -43,7 +43,7 @@ const statusOptions: { label: string; value: TicketStatus }[] = [
       :error="error"
       @retry="refresh"
     />
-    <TicketQueue
+    <TicketTable
       v-else
       :tickets="data?.items ?? []"
       :loading="pending"

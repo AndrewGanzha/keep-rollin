@@ -1,1 +1,1 @@
-export { default as VerificationQueue } from './VerificationQueue.vue'
+export { default as VerificationTable } from './VerificationTable.vue'

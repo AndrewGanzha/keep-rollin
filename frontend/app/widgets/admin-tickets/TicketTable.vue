@@ -32,6 +32,12 @@ const categoryLabels: Record<TicketCategory, string> = {
   other: 'Другое',
 }
 
+const categoryLabel = (category: TicketCategory) => categoryLabels[category]
+const severityOf = (status: TicketStatus) => severity[status]
+const statusLabel = (status: TicketStatus) => statusLabels[status]
+
+const expanded = ref<Record<string, boolean>>({})
+
 const target = ref<Ticket | null>(null)
 const nextStatus = ref<TicketPatchRequest['status']>('in_progress')
 const comment = ref('')
@@ -70,99 +76,141 @@ const submit = () => {
 </script>
 
 <template>
-  <div
-    v-if="loading"
-    class="stack"
+  <DataTable
+    v-model:expanded-rows="expanded"
+    :value="tickets"
+    data-key="id"
+    :loading="loading"
+    striped-rows
+    size="small"
+    scrollable
+    class="admin-table"
   >
-    <Skeleton
-      v-for="index in 2"
-      :key="index"
-      height="200px"
-      border-radius="16px"
+    <template #empty>
+      <EmptyState
+        title="Тикетов нет"
+        description="В выбранном фильтре нет обращений"
+      />
+    </template>
+
+    <Column
+      expander
+      style="width: 3rem"
     />
-  </div>
 
-  <EmptyState
-    v-else-if="tickets.length === 0"
-    title="Тикетов нет"
-    description="В выбранном фильтре нет обращений"
-  />
-
-  <div
-    v-else
-    class="stack"
-  >
-    <Card
-      v-for="ticket in tickets"
-      :key="ticket.id"
+    <Column
+      header="Лот"
+      style="min-width: 140px"
     >
-      <template #title>
-        <div class="row ticket__title">
-          <span>{{ ticket.lot.name }} · {{ categoryLabels[ticket.category] }}</span>
-          <Tag
-            :severity="severity[ticket.status]"
-            :value="statusLabels[ticket.status]"
-          />
+      <template #body="{ data }">
+        {{ data.lot.name }}
+      </template>
+    </Column>
+
+    <Column
+      header="Категория"
+      style="min-width: 130px"
+    >
+      <template #body="{ data }">
+        {{ categoryLabel(data.category) }}
+      </template>
+    </Column>
+
+    <Column
+      header="Арендатор"
+      style="min-width: 180px"
+    >
+      <template #body="{ data }">
+        <div class="cell">
+          <span>{{ data.user.name }}</span>
+          <span class="muted">{{ data.user.email }}</span>
         </div>
       </template>
+    </Column>
 
-      <template #content>
-        <div class="stack">
-          <p style="margin: 0">
-            {{ ticket.description }}
-          </p>
-          <div class="row">
-            <a
-              v-for="url in ticket.photo_urls"
-              :key="url"
-              :href="url"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Фото
-            </a>
-          </div>
-          <span class="muted">
-            {{ ticket.user.name }} · {{ ticket.user.email }} · {{ formatDateTime(ticket.created_at, timeZone) }}
-          </span>
-          <span
-            v-if="ticket.admin_comment"
-            class="muted"
-          >
-            Комментарий: {{ ticket.admin_comment }}
-          </span>
-          <span
-            v-if="ticket.resolved_at"
-            class="muted"
-          >
-            Решён: {{ formatDateTime(ticket.resolved_at, timeZone) }}
-          </span>
-        </div>
+    <Column
+      header="Статус"
+      style="min-width: 110px"
+    >
+      <template #body="{ data }">
+        <Tag
+          :severity="severityOf(data.status)"
+          :value="statusLabel(data.status)"
+        />
       </template>
+    </Column>
 
-      <template
-        v-if="ticket.status !== 'resolved'"
-        #footer
-      >
-        <div class="row">
+    <Column
+      header="Создан"
+      style="min-width: 120px"
+    >
+      <template #body="{ data }">
+        {{ formatDateTime(data.created_at, timeZone) }}
+      </template>
+    </Column>
+
+    <Column
+      header="Действия"
+      style="min-width: 130px"
+    >
+      <template #body="{ data }">
+        <div class="row actions">
           <Button
-            v-if="ticket.status === 'submitted'"
+            v-if="data.status === 'submitted'"
             label="В работу"
             size="small"
             :disabled="pending"
-            @click="open(ticket, 'in_progress')"
+            @click="open(data, 'in_progress')"
           />
           <Button
-            v-if="ticket.status === 'in_progress'"
+            v-else-if="data.status === 'in_progress'"
             label="Решить"
             size="small"
             :disabled="pending"
-            @click="open(ticket, 'resolved')"
+            @click="open(data, 'resolved')"
           />
+          <span
+            v-else
+            class="muted"
+          >—</span>
         </div>
       </template>
-    </Card>
-  </div>
+    </Column>
+
+    <template #expansion="{ data }">
+      <div class="stack ticket-detail">
+        <p style="margin: 0">
+          {{ data.description }}
+        </p>
+        <div
+          v-if="data.photo_urls.length > 0"
+          class="row"
+        >
+          <a
+            v-for="url in data.photo_urls"
+            :key="url"
+            :href="url"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Фото
+          </a>
+        </div>
+        <span
+          v-if="data.admin_comment"
+          class="muted"
+        >
+          Комментарий: {{ data.admin_comment }}
+        </span>
+        <span
+          v-if="data.resolved_at"
+          class="muted"
+        >
+          Решён: {{ formatDateTime(data.resolved_at, timeZone) }}
+        </span>
+      </div>
+    </template>
+  </DataTable>
 
   <Dialog
     v-model:visible="visible"
@@ -175,9 +223,9 @@ const submit = () => {
       class="stack"
     >
       <p style="margin: 0">
-        {{ target.lot.name }} · {{ categoryLabels[target.category] }}
+        {{ target.lot.name }} · {{ categoryLabel(target.category) }}
       </p>
-      <div class="stack ticket__field">
+      <div class="field">
         <label for="ticket-comment">
           Комментарий{{ nextStatus === 'resolved' ? '' : ' (необязательно)' }}
         </label>
@@ -214,15 +262,37 @@ const submit = () => {
 </template>
 
 <style scoped>
-.ticket__title {
-  justify-content: space-between;
+.admin-table :deep(.p-tag) {
+  white-space: nowrap;
 }
 
-.ticket__field {
+.admin-table :deep(.p-datatable-table) {
+  min-width: 900px;
+}
+
+.cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.actions {
+  gap: 4px;
+  flex-wrap: nowrap;
+}
+
+.ticket-detail {
+  gap: 8px;
+  padding: 8px 4px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
   gap: 6px;
 }
 
-.ticket__field label {
+.field label {
   font-size: 0.9rem;
   font-weight: 600;
 }
