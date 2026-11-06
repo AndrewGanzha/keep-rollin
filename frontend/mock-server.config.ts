@@ -195,6 +195,50 @@ const rentals: Rental[] = [
     remaining_seconds: 0,
     cancellation_deadline: null,
   },
+  {
+    id: uid(304),
+    lot: rentalLot(lots[3]!),
+    status: 'completed',
+    start_time: iso(-52 * HOUR),
+    end_time: iso(-50 * HOUR),
+    price_minor: 178000,
+    currency: 'RUB',
+    remaining_seconds: 0,
+    cancellation_deadline: null,
+  },
+  {
+    id: uid(305),
+    lot: rentalLot(lots[4]!),
+    status: 'booked',
+    start_time: iso(6 * HOUR),
+    end_time: iso(30 * HOUR),
+    price_minor: 70000,
+    currency: 'RUB',
+    remaining_seconds: 21600,
+    cancellation_deadline: iso(4 * HOUR),
+  },
+  {
+    id: uid(306),
+    lot: rentalLot(lots[3]!),
+    status: 'active',
+    start_time: iso(-26 * HOUR),
+    end_time: iso(-3 * HOUR),
+    price_minor: 356000,
+    currency: 'RUB',
+    remaining_seconds: 0,
+    cancellation_deadline: null,
+  },
+  {
+    id: uid(307),
+    lot: rentalLot(lots[0]!),
+    status: 'completed',
+    start_time: iso(-10 * 24 * HOUR),
+    end_time: iso(-9 * 24 * HOUR),
+    price_minor: 900000,
+    currency: 'RUB',
+    remaining_seconds: 0,
+    cancellation_deadline: null,
+  },
 ]
 
 const userById = (id: string): User => seedUsers.find(user => user.id === id) ?? mockUser
@@ -205,12 +249,20 @@ const rentalOwners = new Map<string, User>([
   [uid(301), userById(uid(903))],
   [uid(302), userById(uid(904))],
   [uid(303), userById(uid(903))],
+  [uid(304), userById(uid(904))],
+  [uid(305), userById(uid(903))],
+  [uid(306), userById(uid(904))],
+  [uid(307), userById(uid(903))],
 ])
 
 const rentalVersions = new Map<string, number>([
   [uid(301), 1],
   [uid(302), 1],
   [uid(303), 1],
+  [uid(304), 1],
+  [uid(305), 1],
+  [uid(306), 1],
+  [uid(307), 1],
 ])
 
 const verificationRequests: VerificationRequest[] = [
@@ -651,13 +703,17 @@ export default mock(
         const query = params.request.queries as Record<string, unknown>
         const status = typeof query.status === 'string' ? query.status : undefined
         const lotId = typeof query.lot_id === 'string' ? query.lot_id : undefined
+        const from = typeof query.from === 'string' ? Date.parse(query.from) : Number.NaN
+        const to = typeof query.to === 'string' ? Date.parse(query.to) : Number.NaN
         const limit = Number(query.limit ?? 20)
         const offset = Number(query.offset ?? 0)
 
         const filtered = rentals
           .filter(rental =>
             (!status || rental.status === status)
-            && (!lotId || rental.lot.id === lotId),
+            && (!lotId || rental.lot.id === lotId)
+            && (!Number.isFinite(from) || Date.parse(rental.end_time) > from)
+            && (!Number.isFinite(to) || Date.parse(rental.start_time) < to),
           )
           .map(toAdminRental)
 

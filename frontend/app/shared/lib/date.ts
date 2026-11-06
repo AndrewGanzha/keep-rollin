@@ -1,4 +1,5 @@
 const dateTimeFormatters = new Map<string, Intl.DateTimeFormat>()
+const timeFormatters = new Map<string, Intl.DateTimeFormat>()
 
 /** ISO → «05.11, 14:30» в таймзоне тенанта. */
 export const formatDateTime = (iso: string, timeZone?: string): string => {
@@ -14,6 +15,23 @@ export const formatDateTime = (iso: string, timeZone?: string): string => {
       timeZone,
     })
     dateTimeFormatters.set(key, formatter)
+  }
+
+  return formatter.format(new Date(iso))
+}
+
+/** ISO → «14:30» в таймзоне тенанта. */
+export const formatTime = (iso: string, timeZone?: string): string => {
+  const key = timeZone ?? 'default'
+  let formatter = timeFormatters.get(key)
+
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat('ru-RU', {
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone,
+    })
+    timeFormatters.set(key, formatter)
   }
 
   return formatter.format(new Date(iso))

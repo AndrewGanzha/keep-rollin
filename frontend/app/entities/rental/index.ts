@@ -18,4 +18,5 @@ export type {
   RentalPage,
   RentalStatus,
 } from './model/rental.types'
+export { rentalStatusLabels, rentalStatusSeverity } from './model/rental.status'
 export { default as RentalCard } from './ui/RentalCard.vue'

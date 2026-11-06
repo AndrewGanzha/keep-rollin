@@ -1,25 +1,10 @@
 <script setup lang="ts">
 import { formatDateTime, formatDuration, formatMoney } from '~/shared/lib'
-import type { Rental, RentalStatus } from '../model/rental.types'
+import type { Rental } from '../model/rental.types'
+import { rentalStatusLabels, rentalStatusSeverity } from '../model/rental.status'
 
 withDefaults(defineProps<{ rental: Rental; timeZone?: string }>(), { timeZone: undefined })
 const emit = defineEmits<{ cancel: [id: string] }>()
-
-const severity: Record<RentalStatus, 'success' | 'info' | 'warn' | 'danger' | 'secondary'> = {
-  booked: 'info',
-  active: 'success',
-  overdue: 'danger',
-  completed: 'secondary',
-  cancelled: 'secondary',
-}
-
-const labels: Record<RentalStatus, string> = {
-  booked: 'Забронировано',
-  active: 'Активна',
-  overdue: 'Просрочена',
-  completed: 'Завершена',
-  cancelled: 'Отменена',
-}
 
 const canCancel = (rental: Rental): boolean =>
   rental.status === 'booked'
@@ -35,8 +20,8 @@ const canCancel = (rental: Rental): boolean =>
       >
         <span>{{ rental.lot.name }}</span>
         <Tag
-          :severity="severity[rental.status]"
-          :value="labels[rental.status]"
+          :severity="rentalStatusSeverity[rental.status]"
+          :value="rentalStatusLabels[rental.status]"
         />
       </div>
     </template>

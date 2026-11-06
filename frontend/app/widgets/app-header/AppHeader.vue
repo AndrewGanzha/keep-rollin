@@ -141,6 +141,14 @@ const toggleTheme = () => {
   .header__inner {
     width: calc(100% - 24px);
     gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .header__nav {
+    order: 3;
+    width: 100%;
+    flex: none;
+    overflow-x: auto;
   }
 
   .header__user {

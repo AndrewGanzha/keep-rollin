@@ -35,6 +35,8 @@ export const cancelRentalRequest = async (api: ApiClient, id: string): Promise<R
 export interface AdminRentalQuery {
   status?: AdminRentalStatus
   lot_id?: string
+  from?: string
+  to?: string
   limit?: number
   offset?: number
 }

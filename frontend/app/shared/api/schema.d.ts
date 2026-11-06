@@ -913,6 +913,8 @@ export interface operations {
             query?: {
                 status?: "booked" | "active" | "overdue" | "completed" | "cancelled";
                 lot_id?: string;
+                from?: string;
+                to?: string;
                 limit?: number;
                 offset?: number;
             };
