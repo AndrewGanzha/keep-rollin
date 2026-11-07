@@ -48,11 +48,18 @@ const toggleTheme = () => {
           class="header__link"
         >Каталог</NuxtLink>
         <NuxtLink
-          v-if="session.isAuthenticated"
+          v-if="session.isAuthenticated && !session.isStaff"
           to="/account/rentals"
           class="header__link"
         >
           Мои аренды
+        </NuxtLink>
+        <NuxtLink
+          v-if="session.isAuthenticated && !session.isStaff"
+          to="/account/tickets"
+          class="header__link"
+        >
+          Мои обращения
         </NuxtLink>
         <NuxtLink
           v-if="session.isStaff"

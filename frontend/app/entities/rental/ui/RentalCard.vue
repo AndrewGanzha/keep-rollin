@@ -4,11 +4,13 @@ import type { Rental } from '../model/rental.types'
 import { rentalStatusLabels, rentalStatusSeverity } from '../model/rental.status'
 
 withDefaults(defineProps<{ rental: Rental; timeZone?: string }>(), { timeZone: undefined })
-const emit = defineEmits<{ cancel: [id: string] }>()
+const emit = defineEmits<{ cancel: [id: string]; report: [id: string] }>()
 
 const canCancel = (rental: Rental): boolean =>
   rental.status === 'booked'
   && (!rental.cancellation_deadline || new Date(rental.cancellation_deadline) > new Date())
+
+const canReport = (rental: Rental): boolean => rental.status === 'active'
 </script>
 
 <template>
@@ -43,24 +45,39 @@ const canCancel = (rental: Rental): boolean =>
     </template>
 
     <template #footer>
-      <Button
-        v-if="canCancel(rental)"
-        label="Отменить"
-        severity="danger"
-        text
-        size="small"
-        @click="emit('cancel', rental.id)"
-      />
-      <NuxtLink
-        v-else
-        :to="`/lots/${rental.lot.slug}`"
+      <div
+        class="row"
+        style="justify-content: space-between"
       >
-        <Button
-          label="К лоту"
-          size="small"
-          outlined
-        />
-      </NuxtLink>
+        <div class="row">
+          <Button
+            v-if="canReport(rental)"
+            label="Сообщить о неполадке"
+            severity="warn"
+            size="small"
+            outlined
+            @click="emit('report', rental.id)"
+          />
+          <Button
+            v-if="canCancel(rental)"
+            label="Отменить"
+            severity="danger"
+            text
+            size="small"
+            @click="emit('cancel', rental.id)"
+          />
+        </div>
+        <NuxtLink
+          v-if="!canCancel(rental) || canReport(rental)"
+          :to="`/lots/${rental.lot.slug}`"
+        >
+          <Button
+            label="К лоту"
+            size="small"
+            outlined
+          />
+        </NuxtLink>
+      </div>
     </template>
   </Card>
 </template>
