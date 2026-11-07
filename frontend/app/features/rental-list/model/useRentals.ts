@@ -1,15 +1,10 @@
-import { fetchMyRentals, type RentalStatus } from '~/entities/rental'
+import { fetchMyRentals } from '~/entities/rental'
 import { useApi } from '~/shared/api'
 
 export const useRentals = async () => {
   const api = useApi()
-  const status = ref<RentalStatus | undefined>()
 
-  const request = useAsyncData(
-    'my-rentals',
-    () => fetchMyRentals(api, status.value),
-    { watch: [status] },
-  )
+  const request = useAsyncData('my-rentals', () => fetchMyRentals(api))
   await request
 
   return {
@@ -17,6 +12,5 @@ export const useRentals = async () => {
     pending: request.pending,
     error: request.error,
     refresh: request.refresh,
-    status,
   }
 }
