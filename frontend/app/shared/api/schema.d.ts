@@ -174,6 +174,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/rentals/{id}/tickets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Сообщить о неполадке по активной аренде */
+        post: operations["createRentalTicket"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/tickets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Мои обращения о неполадках */
+        get: operations["listMyTickets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/rentals": {
         parameters: {
             query?: never;
@@ -498,6 +532,12 @@ export interface components {
             /** Format: date-time */
             end_time: string;
         };
+        CreateTicketRequest: {
+            /** @enum {string} */
+            category: "no_power" | "no_drive" | "battery" | "damage" | "other";
+            description: string;
+            photo_urls?: string[];
+        };
         AdminUserRef: {
             /** Format: uuid */
             id: string;
@@ -649,6 +689,15 @@ export interface components {
         };
         /** @description Ошибка валидации */
         Validation: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description Превышен лимит обращений */
+        TooManyRequests: {
             headers: {
                 [name: string]: unknown;
             };
@@ -906,6 +955,63 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+        };
+    };
+    createRentalTicket: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateTicketRequest"];
+            };
+        };
+        responses: {
+            /** @description Тикет создан */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Ticket"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Validation"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    listMyTickets: {
+        parameters: {
+            query?: {
+                status?: "submitted" | "in_progress" | "resolved";
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Страница тикетов */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TicketPage"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
         };
     };
     listAdminRentals: {

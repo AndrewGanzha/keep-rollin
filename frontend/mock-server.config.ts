@@ -246,13 +246,13 @@ const userById = (id: string): User => seedUsers.find(user => user.id === id) ??
 const userRef = (user: User): AdminUserRef => ({ id: user.id, name: user.name, email: user.email })
 
 const rentalOwners = new Map<string, User>([
-  [uid(301), userById(uid(903))],
-  [uid(302), userById(uid(904))],
+  [uid(301), userById(uid(900))],
+  [uid(302), userById(uid(900))],
   [uid(303), userById(uid(903))],
   [uid(304), userById(uid(904))],
   [uid(305), userById(uid(903))],
   [uid(306), userById(uid(904))],
-  [uid(307), userById(uid(903))],
+  [uid(307), userById(uid(900))],
 ])
 
 const rentalVersions = new Map<string, number>([
@@ -352,12 +352,14 @@ const verificationRequests: VerificationRequest[] = [
   },
 ]
 
+let ticketSeq = 700
+
 const tickets: Ticket[] = [
   {
     id: uid(601),
     rental_id: uid(301),
     lot: rentalLot(lots[0]!),
-    user: userRef(userById(uid(903))),
+    user: userRef(userById(uid(900))),
     category: 'no_power',
     description: 'Батарея не включается после зарядки, индикатор мигает красным',
     photo_urls: ['https://example.com/tickets/601-1.jpg'],
@@ -371,7 +373,7 @@ const tickets: Ticket[] = [
     id: uid(602),
     rental_id: uid(302),
     lot: rentalLot(lots[2]!),
-    user: userRef(userById(uid(904))),
+    user: userRef(userById(uid(900))),
     category: 'battery',
     description: 'Аккумулятор держит заряд примерно вдвое меньше заявленного',
     photo_urls: [],
@@ -384,8 +386,8 @@ const tickets: Ticket[] = [
   {
     id: uid(603),
     rental_id: uid(301),
-    lot: rentalLot(lots[1]!),
-    user: userRef(userById(uid(903))),
+    lot: rentalLot(lots[0]!),
+    user: userRef(userById(uid(900))),
     category: 'damage',
     description: 'На раме обнаружена трещина возле крепления двигателя',
     photo_urls: ['https://example.com/tickets/603-1.jpg', 'https://example.com/tickets/603-2.jpg'],
@@ -589,6 +591,7 @@ export default mock(
         const query = params.request.queries as Record<string, unknown>
         const status = typeof query.status === 'string' ? query.status : undefined
         const filtered = rentals
+          .filter(rental => rentalOwners.get(rental.id)?.id === user.id)
           .filter(rental => !status || rental.status === status)
           .map(withRemaining)
 
@@ -688,6 +691,109 @@ export default mock(
 
         return withRemaining(rental)
       }, { delay: 120 }),
+
+      rest.post('/api/v1/me/rentals/:id/tickets', (params) => {
+        const user = currentUser(params)
+
+        if (!user) {
+          return fail(params, 401, problem('token_invalid', 401, 'Требуется вход'))
+        }
+
+        const rental = rentals.find(item => item.id === params.request.params.id)
+
+        if (!rental) {
+          return fail(params, 404, problem('not_found', 404, 'Бронь не найдена'))
+        }
+
+        if (rentalOwners.get(rental.id)?.id !== user.id) {
+          return fail(params, 403, problem('not_your_rental', 403, 'Это не ваша аренда'))
+        }
+
+        if (rental.status !== 'active') {
+          return fail(params, 409, problem('ticket_not_allowed', 409, 'Сообщить о неполадке можно только по активной аренде'))
+        }
+
+        const body = (params.request.body ?? {}) as {
+          category?: string
+          description?: string
+          photo_urls?: string[]
+        }
+        const categories: Ticket['category'][] = ['no_power', 'no_drive', 'battery', 'damage', 'other']
+        const description = body.description?.trim() ?? ''
+
+        if (!body.category || !categories.includes(body.category as Ticket['category'])) {
+          return fail(
+            params,
+            422,
+            problem('validation_error', 422, 'Проверьте поля', undefined, { category: 'Выберите категорию' }),
+          )
+        }
+
+        if (description.length < 10 || description.length > 1000) {
+          return fail(
+            params,
+            422,
+            problem('validation_error', 422, 'Проверьте поля', undefined, { description: 'Описание от 10 до 1000 символов' }),
+          )
+        }
+
+        const since = Date.now() - 24 * HOUR
+        const createdToday = tickets.filter(ticket =>
+          ticket.rental_id === rental.id && ticket.user.id === user.id && Date.parse(ticket.created_at) > since,
+        ).length
+
+        if (createdToday >= 5) {
+          return fail(params, 429, problem('ticket_limit', 429, 'Лимит обращений: не более 5 в сутки по одной аренде'))
+        }
+
+        const ticket: Ticket = {
+          id: uid(ticketSeq++),
+          rental_id: rental.id,
+          lot: rental.lot,
+          user: userRef(user),
+          category: body.category as Ticket['category'],
+          description,
+          photo_urls: Array.isArray(body.photo_urls)
+            ? body.photo_urls.filter((url): url is string => typeof url === 'string').slice(0, 3)
+            : [],
+          status: 'submitted',
+          admin_comment: null,
+          created_at: iso(0),
+          resolved_at: null,
+          version: 1,
+        }
+
+        tickets.unshift(ticket)
+        params.setStatusCode(201)
+
+        return ticket
+      }, { delay: 150 }),
+
+      rest.get('/api/v1/me/tickets', (params) => {
+        const user = currentUser(params)
+
+        if (!user) {
+          return fail(params, 401, problem('token_invalid', 401, 'Требуется вход'))
+        }
+
+        const query = params.request.queries as Record<string, unknown>
+        const status = typeof query.status === 'string' ? query.status : undefined
+        const limit = Number(query.limit ?? 20)
+        const offset = Number(query.offset ?? 0)
+
+        const filtered = tickets.filter(ticket =>
+          ticket.user.id === user.id && (!status || ticket.status === status),
+        )
+
+        const page: TicketPage = {
+          items: filtered.slice(offset, offset + limit),
+          total: filtered.length,
+          limit,
+          offset,
+        }
+
+        return page
+      }, { delay: 80 }),
 
       rest.get('/api/v1/admin/rentals', (params) => {
         const user = currentUser(params)

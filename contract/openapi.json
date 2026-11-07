@@ -201,6 +201,55 @@
         }
       }
     },
+    "/api/v1/me/rentals/{id}/tickets": {
+      "post": {
+        "operationId": "createRentalTicket",
+        "tags": ["tickets"],
+        "summary": "Сообщить о неполадке по активной аренде",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateTicketRequest" } } }
+        },
+        "responses": {
+          "201": {
+            "description": "Тикет создан",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Ticket" } } }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "422": { "$ref": "#/components/responses/Validation" },
+          "429": { "$ref": "#/components/responses/TooManyRequests" }
+        }
+      }
+    },
+    "/api/v1/me/tickets": {
+      "get": {
+        "operationId": "listMyTickets",
+        "tags": ["tickets"],
+        "summary": "Мои обращения о неполадках",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": { "type": "string", "enum": ["submitted", "in_progress", "resolved"] }
+          },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 } },
+          { "name": "offset", "in": "query", "schema": { "type": "integer", "minimum": 0, "default": 0 } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Страница тикетов",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TicketPage" } } }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
     "/api/v1/admin/rentals": {
       "get": {
         "operationId": "listAdminRentals",
@@ -402,6 +451,10 @@
       },
       "Validation": {
         "description": "Ошибка валидации",
+        "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } } }
+      },
+      "TooManyRequests": {
+        "description": "Превышен лимит обращений",
         "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } } }
       }
     },
@@ -638,6 +691,19 @@
           "lot_id": { "type": "string", "format": "uuid" },
           "start_time": { "type": "string", "format": "date-time" },
           "end_time": { "type": "string", "format": "date-time" }
+        }
+      },
+      "CreateTicketRequest": {
+        "type": "object",
+        "required": ["category", "description"],
+        "properties": {
+          "category": { "type": "string", "enum": ["no_power", "no_drive", "battery", "damage", "other"] },
+          "description": { "type": "string", "minLength": 10, "maxLength": 1000 },
+          "photo_urls": {
+            "type": "array",
+            "maxItems": 3,
+            "items": { "type": "string", "format": "uri" }
+          }
         }
       },
       "AdminUserRef": {
