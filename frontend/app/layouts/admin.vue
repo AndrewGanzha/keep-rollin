@@ -10,9 +10,11 @@ import { AppHeader } from '~/widgets/app-header'
       aria-label="Админ-раздел"
     >
       <div class="admin-nav__inner">
+        <NuxtLink to="/admin/lots">Лоты</NuxtLink>
         <NuxtLink to="/admin/rentals">Аренды</NuxtLink>
         <NuxtLink to="/admin/verification">Верификация</NuxtLink>
         <NuxtLink to="/admin/tickets">Тикеты</NuxtLink>
+        <NuxtLink to="/admin/analytics">Аналитика</NuxtLink>
       </div>
     </nav>
     <main class="app-main">

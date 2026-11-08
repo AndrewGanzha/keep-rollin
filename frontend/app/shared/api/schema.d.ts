@@ -208,6 +208,92 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/analytics/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** KPI за период */
+        get: operations["getAnalyticsSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/analytics/revenue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Выручка с группировкой */
+        get: operations["getAnalyticsRevenue"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/analytics/lots/{lot_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Доходность лота за период */
+        get: operations["getAnalyticsLot"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/lots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Лоты для staff, включая неопубликованные */
+        get: operations["listAdminLots"];
+        put?: never;
+        /** Создать лот */
+        post: operations["createLot"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/lots/{id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Сменить статус лота */
+        post: operations["setLotStatus"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/rentals": {
         parameters: {
             query?: never;
@@ -531,6 +617,76 @@ export interface components {
             start_time: string;
             /** Format: date-time */
             end_time: string;
+        };
+        AnalyticsSummary: {
+            /** Format: date-time */
+            from: string;
+            /** Format: date-time */
+            to: string;
+            revenue_minor: number;
+            rentals_count: number;
+            cancelled_count: number;
+            overdue_count: number;
+            avg_rental_minor: number;
+            utilization_pct: number;
+        };
+        AnalyticsBucket: {
+            key: string;
+            label: string;
+            rentals_count: number;
+            cancelled_count: number;
+            revenue_minor: number;
+            utilization_pct: number;
+        };
+        AnalyticsRevenue: {
+            /** @enum {string} */
+            group_by: "lot" | "category" | "day";
+            buckets: components["schemas"]["AnalyticsBucket"][];
+        };
+        AnalyticsRental: {
+            /** Format: uuid */
+            id: string;
+            /** Format: date-time */
+            start_time: string;
+            /** Format: date-time */
+            end_time: string;
+            /** @enum {string} */
+            status: "booked" | "active" | "overdue" | "completed" | "cancelled";
+            price_minor: number;
+            currency: string;
+            user: components["schemas"]["AdminUserRef"];
+        };
+        AnalyticsLotDetail: {
+            lot: components["schemas"]["Lot"];
+            /** Format: date-time */
+            from: string;
+            /** Format: date-time */
+            to: string;
+            summary: components["schemas"]["AnalyticsSummary"];
+            daily: components["schemas"]["AnalyticsBucket"][];
+            rentals: components["schemas"]["AnalyticsRental"][];
+        };
+        CreateLotRequest: {
+            name: string;
+            /** Format: uuid */
+            category_id: string;
+            description?: string;
+            /** @enum {string} */
+            rental_model: "hourly" | "daily" | "custom";
+            price_minor: number;
+            characteristics: {
+                [key: string]: string | number;
+            };
+            photos?: string[];
+            /**
+             * @default active
+             * @enum {string}
+             */
+            status: "active" | "archived" | "maintenance";
+        };
+        LotStatusRequest: {
+            /** @enum {string} */
+            status: "active" | "archived" | "maintenance";
         };
         CreateTicketRequest: {
             /** @enum {string} */
@@ -1012,6 +1168,174 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+        };
+    };
+    getAnalyticsSummary: {
+        parameters: {
+            query: {
+                from: string;
+                to: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description KPI */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalyticsSummary"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["Validation"];
+        };
+    };
+    getAnalyticsRevenue: {
+        parameters: {
+            query: {
+                from: string;
+                to: string;
+                group_by: "lot" | "category" | "day";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Выручка */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalyticsRevenue"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["Validation"];
+        };
+    };
+    getAnalyticsLot: {
+        parameters: {
+            query: {
+                from: string;
+                to: string;
+            };
+            header?: never;
+            path: {
+                lot_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Детализация по лоту */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalyticsLotDetail"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["Validation"];
+        };
+    };
+    listAdminLots: {
+        parameters: {
+            query?: {
+                category_id?: string;
+                status?: "active" | "archived" | "maintenance" | "overdue";
+                q?: string;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Страница лотов */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LotPage"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    createLot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateLotRequest"];
+            };
+        };
+        responses: {
+            /** @description Лот создан */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Lot"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["Validation"];
+        };
+    };
+    setLotStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LotStatusRequest"];
+            };
+        };
+        responses: {
+            /** @description Статус обновлён */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Lot"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Validation"];
         };
     };
     listAdminRentals: {

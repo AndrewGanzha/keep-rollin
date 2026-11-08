@@ -1,3 +1,20 @@
-export { fetchAvailability, fetchLot, fetchLots, type LotListQuery } from './api/lot.api'
-export type { Availability, BusyInterval, Lot, LotPage } from './model/lot.types'
+export {
+  createLot,
+  fetchAdminLots,
+  fetchAvailability,
+  fetchLot,
+  fetchLots,
+  setLotStatus,
+  type AdminLotQuery,
+  type LotListQuery,
+} from './api/lot.api'
+export type {
+  Availability,
+  BusyInterval,
+  CreateLotRequest,
+  Lot,
+  LotPage,
+  LotStatus,
+  LotStatusRequest,
+} from './model/lot.types'
 export { default as LotCard } from './ui/LotCard.vue'

@@ -250,6 +250,150 @@
         }
       }
     },
+    "/api/v1/admin/analytics/summary": {
+      "get": {
+        "operationId": "getAnalyticsSummary",
+        "tags": ["admin"],
+        "summary": "KPI за период",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "from", "in": "query", "required": true, "schema": { "type": "string", "format": "date-time" } },
+          { "name": "to", "in": "query", "required": true, "schema": { "type": "string", "format": "date-time" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "KPI",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AnalyticsSummary" } } }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "422": { "$ref": "#/components/responses/Validation" }
+        }
+      }
+    },
+    "/api/v1/admin/analytics/revenue": {
+      "get": {
+        "operationId": "getAnalyticsRevenue",
+        "tags": ["admin"],
+        "summary": "Выручка с группировкой",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "from", "in": "query", "required": true, "schema": { "type": "string", "format": "date-time" } },
+          { "name": "to", "in": "query", "required": true, "schema": { "type": "string", "format": "date-time" } },
+          {
+            "name": "group_by",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string", "enum": ["lot", "category", "day"] }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Выручка",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AnalyticsRevenue" } } }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "422": { "$ref": "#/components/responses/Validation" }
+        }
+      }
+    },
+    "/api/v1/admin/analytics/lots/{lot_id}": {
+      "get": {
+        "operationId": "getAnalyticsLot",
+        "tags": ["admin"],
+        "summary": "Доходность лота за период",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "lot_id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } },
+          { "name": "from", "in": "query", "required": true, "schema": { "type": "string", "format": "date-time" } },
+          { "name": "to", "in": "query", "required": true, "schema": { "type": "string", "format": "date-time" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Детализация по лоту",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AnalyticsLotDetail" } } }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "422": { "$ref": "#/components/responses/Validation" }
+        }
+      }
+    },
+    "/api/v1/admin/lots": {
+      "get": {
+        "operationId": "listAdminLots",
+        "tags": ["admin"],
+        "summary": "Лоты для staff, включая неопубликованные",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "category_id", "in": "query", "schema": { "type": "string", "format": "uuid" } },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["active", "archived", "maintenance", "overdue"]
+            }
+          },
+          { "name": "q", "in": "query", "schema": { "type": "string" } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 } },
+          { "name": "offset", "in": "query", "schema": { "type": "integer", "minimum": 0, "default": 0 } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Страница лотов",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LotPage" } } }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      },
+      "post": {
+        "operationId": "createLot",
+        "tags": ["admin"],
+        "summary": "Создать лот",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateLotRequest" } } }
+        },
+        "responses": {
+          "201": {
+            "description": "Лот создан",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Lot" } } }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "422": { "$ref": "#/components/responses/Validation" }
+        }
+      }
+    },
+    "/api/v1/admin/lots/{id}/status": {
+      "post": {
+        "operationId": "setLotStatus",
+        "tags": ["admin"],
+        "summary": "Сменить статус лота",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LotStatusRequest" } } }
+        },
+        "responses": {
+          "200": {
+            "description": "Статус обновлён",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Lot" } } }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "422": { "$ref": "#/components/responses/Validation" }
+        }
+      }
+    },
     "/api/v1/admin/rentals": {
       "get": {
         "operationId": "listAdminRentals",
@@ -691,6 +835,98 @@
           "lot_id": { "type": "string", "format": "uuid" },
           "start_time": { "type": "string", "format": "date-time" },
           "end_time": { "type": "string", "format": "date-time" }
+        }
+      },
+      "AnalyticsSummary": {
+        "type": "object",
+        "required": [
+          "from",
+          "to",
+          "revenue_minor",
+          "rentals_count",
+          "cancelled_count",
+          "overdue_count",
+          "avg_rental_minor",
+          "utilization_pct"
+        ],
+        "properties": {
+          "from": { "type": "string", "format": "date-time" },
+          "to": { "type": "string", "format": "date-time" },
+          "revenue_minor": { "type": "integer" },
+          "rentals_count": { "type": "integer" },
+          "cancelled_count": { "type": "integer" },
+          "overdue_count": { "type": "integer" },
+          "avg_rental_minor": { "type": "integer" },
+          "utilization_pct": { "type": "number" }
+        }
+      },
+      "AnalyticsBucket": {
+        "type": "object",
+        "required": ["key", "label", "rentals_count", "cancelled_count", "revenue_minor", "utilization_pct"],
+        "properties": {
+          "key": { "type": "string" },
+          "label": { "type": "string" },
+          "rentals_count": { "type": "integer" },
+          "cancelled_count": { "type": "integer" },
+          "revenue_minor": { "type": "integer" },
+          "utilization_pct": { "type": "number" }
+        }
+      },
+      "AnalyticsRevenue": {
+        "type": "object",
+        "required": ["group_by", "buckets"],
+        "properties": {
+          "group_by": { "type": "string", "enum": ["lot", "category", "day"] },
+          "buckets": { "type": "array", "items": { "$ref": "#/components/schemas/AnalyticsBucket" } }
+        }
+      },
+      "AnalyticsRental": {
+        "type": "object",
+        "required": ["id", "start_time", "end_time", "status", "price_minor", "currency", "user"],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "start_time": { "type": "string", "format": "date-time" },
+          "end_time": { "type": "string", "format": "date-time" },
+          "status": { "type": "string", "enum": ["booked", "active", "overdue", "completed", "cancelled"] },
+          "price_minor": { "type": "integer" },
+          "currency": { "type": "string" },
+          "user": { "$ref": "#/components/schemas/AdminUserRef" }
+        }
+      },
+      "AnalyticsLotDetail": {
+        "type": "object",
+        "required": ["lot", "from", "to", "summary", "daily", "rentals"],
+        "properties": {
+          "lot": { "$ref": "#/components/schemas/Lot" },
+          "from": { "type": "string", "format": "date-time" },
+          "to": { "type": "string", "format": "date-time" },
+          "summary": { "$ref": "#/components/schemas/AnalyticsSummary" },
+          "daily": { "type": "array", "items": { "$ref": "#/components/schemas/AnalyticsBucket" } },
+          "rentals": { "type": "array", "items": { "$ref": "#/components/schemas/AnalyticsRental" } }
+        }
+      },
+      "CreateLotRequest": {
+        "type": "object",
+        "required": ["name", "category_id", "rental_model", "price_minor", "characteristics"],
+        "properties": {
+          "name": { "type": "string", "minLength": 2, "maxLength": 120 },
+          "category_id": { "type": "string", "format": "uuid" },
+          "description": { "type": "string", "maxLength": 1000 },
+          "rental_model": { "type": "string", "enum": ["hourly", "daily", "custom"] },
+          "price_minor": { "type": "integer", "minimum": 1 },
+          "characteristics": {
+            "type": "object",
+            "additionalProperties": { "type": ["string", "number"] }
+          },
+          "photos": { "type": "array", "items": { "type": "string", "format": "uri" } },
+          "status": { "type": "string", "enum": ["active", "archived", "maintenance"], "default": "active" }
+        }
+      },
+      "LotStatusRequest": {
+        "type": "object",
+        "required": ["status"],
+        "properties": {
+          "status": { "type": "string", "enum": ["active", "archived", "maintenance"] }
         }
       },
       "CreateTicketRequest": {
