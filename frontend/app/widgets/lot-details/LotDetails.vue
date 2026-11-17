@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import type { Characteristic } from '~/entities/category'
-import type { Availability, Lot } from '~/entities/lot'
+import { priceFromLabel, priceFromNote, type Availability, type Lot } from '~/entities/lot'
 import { useTenant } from '~/entities/tenant'
-import { formatDateTime, formatMoney } from '~/shared/lib'
+import { formatDateTime } from '~/shared/lib'
+import { EmptyState } from '~/shared/ui'
 
 const props = withDefaults(
   defineProps<{ lot: Lot; availability?: Availability | null; labels?: Record<string, Characteristic> }>(),
@@ -12,6 +13,18 @@ const emit = defineEmits<{ book: [] }>()
 
 const tenant = useTenant()
 const timeZone = computed(() => tenant.value?.timezone)
+
+const price = computed(() => priceFromLabel(props.lot))
+const priceNote = computed(() => priceFromNote(props.lot))
+const durationHint = computed(() => {
+  const minUnits = props.lot.allowed_durations[0] ?? 1
+
+  if (props.lot.rental_unit === 'hour') {
+    return `Аренда от ${minUnits} ${minUnits === 1 ? 'часа' : 'часов'}`
+  }
+
+  return `Аренда от ${minUnits} ${minUnits === 1 ? 'дня' : 'суток'}`
+})
 
 const characteristics = computed(() =>
   Object.entries(props.lot.characteristics).map(([code, value]) => {
@@ -60,13 +73,13 @@ const busy = computed(() => props.availability?.busy ?? [])
         class="stack"
         style="gap: 8px; align-items: flex-end"
       >
-        <span class="lot__price">{{ formatMoney(lot.price_minor, lot.currency) }}</span>
-        <span
-          class="muted"
-          style="font-size: 0.85rem"
+        <span class="lot__price">{{ price }}</span>
+        <small
+          v-if="priceNote"
+          class="muted lot__note"
         >
-          {{ lot.rental_model === 'hourly' ? 'за час' : 'за сутки' }}
-        </span>
+          {{ priceNote }}
+        </small>
       </div>
     </div>
 
@@ -114,19 +127,22 @@ const busy = computed(() => props.availability?.busy ?? [])
     </Card>
 
     <Button
-      v-if="lot.is_bookable"
+      v-if="lot.is_bookable && lot.variants.length > 0"
       label="Забронировать"
       size="large"
       @click="emit('book')"
     />
     <small
-      v-if="lot.is_bookable"
+      v-if="lot.is_bookable && lot.variants.length > 0"
       class="muted"
     >
-      {{ lot.rental_model === 'hourly'
-        ? 'Обычно от суток; можно выбрать несколько часов'
-        : 'Аренда от 1 дня — день, неделя или месяц' }}
+      {{ durationHint }}. Точную цену покажет расчёт при выборе варианта.
     </small>
+    <EmptyState
+      v-else-if="lot.variants.length === 0"
+      title="Цена не задана"
+      description="Владелец ещё не настроил тарифы для этого лота"
+    />
     <Message
       v-else
       severity="warn"

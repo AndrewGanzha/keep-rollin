@@ -1,12 +1,36 @@
 import { mock, rest } from 'mock-config-server'
+import { addDays, dayKeyOf, zonedDayStartIso } from './app/shared/lib/calendar'
 import type { components } from './app/shared/api/schema'
+import { peakUsage, type BatteryCommit } from './mock/capacity'
+import {
+  computePrice,
+  minAllowedUnits,
+  priceForRange,
+  priceFromOf,
+  PricingError,
+  UNIT_MS,
+  validateAllowedDurations,
+  validateVariants,
+  type PriceTier,
+  type RangePrice,
+  type RentalUnit,
+} from './mock/pricing'
 
 type Tenant = components['schemas']['Tenant']
 type Category = components['schemas']['Category']
 type Lot = components['schemas']['Lot']
 type LotPage = components['schemas']['LotPage']
+type LotVariant = components['schemas']['LotVariant']
+type LotVariantInput = components['schemas']['LotVariantInput']
+type Quote = components['schemas']['Quote']
+type UpdateLotRequest = components['schemas']['UpdateLotRequest']
+type LotBlock = components['schemas']['LotBlock']
+type CreateLotBlockRequest = components['schemas']['CreateLotBlockRequest']
+type AdminSchedule = components['schemas']['AdminSchedule']
+type ScheduleRentalInterval = components['schemas']['ScheduleRentalInterval']
+type ScheduleBlockInterval = components['schemas']['ScheduleBlockInterval']
+type BatteryStock = components['schemas']['BatteryStock']
 type Availability = components['schemas']['Availability']
-type BusyInterval = components['schemas']['BusyInterval']
 type Problem = components['schemas']['Problem']
 type User = components['schemas']['User']
 type Session = components['schemas']['Session']
@@ -27,6 +51,10 @@ type VerificationRequest = components['schemas']['VerificationRequest']
 type VerificationRequestPage = components['schemas']['VerificationRequestPage']
 type Ticket = components['schemas']['Ticket']
 type TicketPage = components['schemas']['TicketPage']
+type UpdateBatteryStockRequest = components['schemas']['UpdateBatteryStockRequest']
+
+/** Лот в состоянии мока: `price_from` всегда вычисляется при выдаче. */
+type MockLot = Omit<Lot, 'price_from'>
 
 const HOUR = 60 * 60 * 1000
 const uid = (n: number): string => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`
@@ -92,6 +120,23 @@ const categories: Category[] = [
 const EBikes = categories[0]!.id
 const Batteries = categories[1]!.id
 
+const priceTier = (minUnits: number, priceMinor: number): PriceTier => ({
+  min_units: minUnits,
+  price_per_unit_minor: priceMinor,
+})
+
+const makeVariant = (
+  id: number,
+  batteryCount: number,
+  priceTiers: PriceTier[],
+  isActive = true,
+): LotVariant => ({
+  id: uid(id),
+  battery_count: batteryCount,
+  is_active: isActive,
+  price_tiers: priceTiers,
+})
+
 const makeLot = (
   n: number,
   slug: string,
@@ -99,10 +144,12 @@ const makeLot = (
   description: string,
   categoryId: string,
   characteristics: Record<string, string | number>,
-  rentalModel: Lot['rental_model'],
-  priceMinor: number,
+  rentalUnit: RentalUnit,
+  batteryType: string | null,
+  allowedDurations: number[],
+  variants: LotVariant[],
   status: Lot['status'] = 'active',
-): Lot => ({
+): MockLot => ({
   id: uid(n),
   slug,
   name,
@@ -110,26 +157,208 @@ const makeLot = (
   category_id: categoryId,
   photos: [],
   characteristics,
-  rental_model: rentalModel,
-  price_minor: priceMinor,
+  rental_unit: rentalUnit,
+  battery_type: batteryType,
+  variants,
+  allowed_durations: allowedDurations,
   currency: 'RUB',
   status,
   is_bookable: status === 'active',
+  version: 1,
 })
 
-const lots: Lot[] = [
-  makeLot(101, 'urban-one', 'Urban One', 'Лёгкий городской байк для ежедневных поездок', EBikes, { power: 500, range: 60 }, 'hourly', 45000),
-  makeLot(102, 'urban-two', 'Urban Two', 'Тот же класс, но с багажником и корзиной', EBikes, { power: 500, range: 65 }, 'daily', 130000),
-  makeLot(103, 'trail-pro', 'Trail Pro', 'Внедорожник с усиленной рамой и амортизацией', EBikes, { power: 750, range: 90 }, 'daily', 180000),
-  makeLot(104, 'cargo-max', 'Cargo Max', 'Грузовой байк для перевозки до 80 кг', EBikes, { power: 1000, range: 70 }, 'daily', 240000),
-  makeLot(105, 'spare-48v', 'Spare 48V', 'Запасной аккумулятор 48 В, 720 Вт·ч', Batteries, { capacity: 720 }, 'daily', 35000),
-  makeLot(106, 'spare-36v', 'Spare 36V', 'Компактный аккумулятор 36 В, 480 Вт·ч', Batteries, { capacity: 480 }, 'daily', 25000, 'maintenance'),
+const lots: MockLot[] = [
+  makeLot(
+    101,
+    'urban-one',
+    'Urban One',
+    'Лёгкий городской байк для ежедневных поездок',
+    EBikes,
+    { power: 500, range: 60 },
+    'day',
+    '48v',
+    [1, 3, 7, 30],
+    [
+      makeVariant(1001, 1, [priceTier(1, 130000), priceTier(7, 40000), priceTier(30, 40000)]),
+      makeVariant(1002, 2, [priceTier(1, 150000), priceTier(7, 50000), priceTier(30, 40000)]),
+    ],
+  ),
+  makeLot(
+    102,
+    'urban-two',
+    'Urban Two',
+    'Тот же класс, но с багажником и корзиной',
+    EBikes,
+    { power: 500, range: 65 },
+    'day',
+    '48v',
+    [1, 7, 30],
+    [makeVariant(1003, 1, [priceTier(1, 130000), priceTier(7, 40000), priceTier(30, 40000)])],
+  ),
+  makeLot(
+    103,
+    'trail-pro',
+    'Trail Pro',
+    'Внедорожник с усиленной рамой и амортизацией',
+    EBikes,
+    { power: 750, range: 90 },
+    'day',
+    '48v',
+    [1, 3, 7],
+    [makeVariant(1004, 1, [priceTier(1, 180000), priceTier(3, 150000), priceTier(7, 130000)])],
+  ),
+  makeLot(
+    104,
+    'cargo-max',
+    'Cargo Max',
+    'Грузовой байк для перевозки до 80 кг',
+    EBikes,
+    { power: 1000, range: 70 },
+    'day',
+    '48v',
+    [1, 3, 7, 30],
+    [
+      makeVariant(1005, 1, [priceTier(1, 240000), priceTier(7, 200000), priceTier(30, 180000)]),
+      makeVariant(1006, 2, [priceTier(1, 290000), priceTier(7, 240000), priceTier(30, 220000)]),
+    ],
+  ),
+  makeLot(
+    105,
+    'spare-48v',
+    'Spare 48V',
+    'Запасной аккумулятор 48 В, 720 Вт·ч',
+    Batteries,
+    { capacity: 720 },
+    'day',
+    null,
+    [1, 7, 30],
+    [makeVariant(1007, 0, [priceTier(1, 35000), priceTier(7, 30000), priceTier(30, 25000)])],
+  ),
+  makeLot(
+    106,
+    'spare-36v',
+    'Spare 36V',
+    'Компактный аккумулятор 36 В, 480 Вт·ч',
+    Batteries,
+    { capacity: 480 },
+    'day',
+    null,
+    [1],
+    [makeVariant(1008, 0, [priceTier(1, 25000)])],
+    'maintenance',
+  ),
 ]
 
-const blocks: Record<string, BusyInterval[]> = {
-  [lots[0]!.id]: [{ start: iso(2 * HOUR), end: iso(6 * HOUR), kind: 'busy' }],
-  [lots[2]!.id]: [{ start: iso(26 * HOUR), end: iso(30 * HOUR), kind: 'busy' }],
+let lotVariantSeq = 2001
+
+/** Цена «от» и подпись в каталоге считаются сервером при каждой выдаче (D-22). */
+const toLot = (lot: MockLot): Lot => ({
+  ...lot,
+  price_from: priceFromOf(lot.variants, lot.rental_unit),
+})
+
+interface LotFieldsInput {
+  name: string
+  categoryId: string | null
+  characteristics: Record<string, string | number> | undefined
+  rentalUnit: string | undefined
+  allowedDurations: unknown
+  variants: LotVariantInput[] | undefined
+  batteryType: string | null
+  photos: string[]
 }
+
+/** Общие проверки POST и PATCH лота: P-1…P-6 плюс обязательные характеристики. */
+const lotFields = (input: LotFieldsInput): Record<string, string> => {
+  const fields: Record<string, string> = {}
+  const category = categories.find(item => item.id === input.categoryId)
+
+  if (input.name.trim().length < 2) {
+    fields.name = 'Минимум 2 символа'
+  }
+
+  if (!category) {
+    fields.category_id = 'Выберите категорию'
+  }
+
+  if (input.rentalUnit !== 'day' && input.rentalUnit !== 'hour') {
+    fields.rental_unit = 'Выберите единицу срока'
+  }
+
+  const allowedError = validateAllowedDurations(input.allowedDurations)
+
+  if (allowedError) {
+    fields.allowed_durations = allowedError
+  } else {
+    Object.assign(
+      fields,
+      validateVariants(input.variants, input.allowedDurations as number[], input.batteryType),
+    )
+  }
+
+  if (category) {
+    const characteristics = input.characteristics ?? {}
+    const missing = category.characteristics.filter(item =>
+      item.is_required
+      && (characteristics[item.code] === undefined || characteristics[item.code] === ''),
+    )
+
+    if (missing.length > 0) {
+      fields.characteristics = `Заполните: ${missing.map(item => item.name).join(', ')}`
+    }
+  }
+
+  const invalidPhoto = input.photos.find((url) => {
+    try {
+      const parsed = new URL(url)
+
+      return parsed.protocol !== 'http:' && parsed.protocol !== 'https:'
+    } catch {
+      return true
+    }
+  })
+
+  if (invalidPhoto) {
+    fields.photos = `Ссылка должна быть http(s)-адресом: ${invalidPhoto}`
+  }
+
+  return fields
+}
+
+const tenantToday = dayKeyOf(new Date(), tenant.timezone)
+const tenantDayStart = (day: string): string => zonedDayStartIso(day, tenant.timezone)
+let blockSeq = 810
+
+const blocks: LotBlock[] = [
+  {
+    id: uid(801),
+    lot_id: lots[0]!.id,
+    start_time: tenantDayStart(addDays(tenantToday, 2)),
+    end_time: tenantDayStart(addDays(tenantToday, 4)),
+    reason: 'Техобслуживание',
+    created_by: uid(902),
+    created_at: iso(-HOUR),
+  },
+  {
+    id: uid(802),
+    lot_id: lots[2]!.id,
+    start_time: tenantDayStart(addDays(tenantToday, 1)),
+    end_time: tenantDayStart(addDays(tenantToday, 2)),
+    reason: 'Плановый осмотр',
+    created_by: uid(902),
+    created_at: iso(-2 * HOUR),
+  },
+]
+
+/**
+ * Остатки АКБ (D-23). 48V = 3 при одном двухаккумуляторном лоте в брони:
+ * вторая пара не проходит (пик 4 > 3), одиночная АКБ ещё влезает.
+ * `peak_committed` считается при выдаче и в состоянии не хранится.
+ */
+const batteryStock: BatteryStock[] = [
+  { battery_type: '48v', name: '48V 720 Вт·ч', quantity: 3, peak_committed: 0 },
+  { battery_type: '36v', name: '36V 480 Вт·ч', quantity: 4, peak_committed: 0 },
+]
 
 const mockUser: User = {
   id: uid(900),
@@ -174,7 +403,7 @@ const seedUsers: User[] = [
 
 const tokens = new Map<string, User>()
 
-const rentalLot = (lot: Lot): Rental['lot'] => ({
+const rentalLot = (lot: Pick<Lot, 'id' | 'slug' | 'name' | 'photos'>): Rental['lot'] => ({
   id: lot.id,
   slug: lot.slug,
   name: lot.name,
@@ -259,6 +488,17 @@ const rentals: Rental[] = [
     remaining_seconds: 0,
     cancellation_deadline: null,
   },
+  {
+    id: uid(308),
+    lot: rentalLot(lots[3]!),
+    status: 'booked',
+    start_time: tenantDayStart(addDays(tenantToday, 10)),
+    end_time: tenantDayStart(addDays(tenantToday, 14)),
+    price_minor: 1160000,
+    currency: 'RUB',
+    remaining_seconds: 0,
+    cancellation_deadline: null,
+  },
 ]
 
 const userById = (id: string): User => seedUsers.find(user => user.id === id) ?? mockUser
@@ -284,6 +524,55 @@ const rentalVersions = new Map<string, number>([
   [uid(306), 1],
   [uid(307), 1],
 ])
+
+const rentalBatteries = new Map<string, number>([
+  // Демо-пара 48V: лот cargo-max забронирован «с двумя» (D-23).
+  [uid(308), 2],
+])
+
+/** Занятость пула считаем по броням и активным арендам; остальным seed-арендам достаётся 1 АКБ. */
+const batteryCommits = (): BatteryCommit[] =>
+  rentals.flatMap((rental) => {
+    if (rental.status !== 'booked' && rental.status !== 'active') {
+      return []
+    }
+
+    const lot = lots.find(item => item.id === rental.lot.id)
+    const count = rentalBatteries.get(rental.id) ?? 1
+
+    return lot?.battery_type && count > 0
+      ? [{
+          battery_type: lot.battery_type,
+          count,
+          start_ms: Date.parse(rental.start_time),
+          end_ms: Date.parse(rental.end_time),
+        }]
+      : []
+  })
+
+const peakCommitted = (batteryType: string): number => peakUsage(batteryCommits(), batteryType)
+
+/** Пик с кандидатом не должен превышать остаток (D-23). */
+const capacityFits = (
+  batteryType: string | null,
+  count: number,
+  startMs: number,
+  endMs: number,
+): boolean => {
+  if (!batteryType || count <= 0) {
+    return true
+  }
+
+  const stock = batteryStock.find(item => item.battery_type === batteryType)
+
+  if (!stock) {
+    return false
+  }
+
+  const extra: BatteryCommit = { battery_type: batteryType, count, start_ms: startMs, end_ms: endMs }
+
+  return peakUsage(batteryCommits(), batteryType, extra) <= stock.quantity
+}
 
 const verificationRequests: VerificationRequest[] = [
   {
@@ -475,20 +764,28 @@ const toAdminRental = (rental: Rental): AdminRental => ({
   version: rentalVersions.get(rental.id) ?? 1,
 })
 
-const priceFor = (lot: Lot, startMs: number, endMs: number): number => {
-  const minutes = Math.ceil((endMs - startMs) / 60000)
-  const units = lot.rental_model === 'daily' ? Math.ceil(minutes / 1440) : Math.ceil(minutes / 60)
-
-  return Math.max(units, 1) * lot.price_minor
-}
+/** Слот занят арендой или блокировкой — для quote и POST /rentals. */
+const bookingsOverlap = (lotId: string, startMs: number, endMs: number): boolean =>
+  rentals.some(rental =>
+    rental.lot.id === lotId
+    && ['booked', 'active', 'overdue'].includes(rental.status)
+    && Date.parse(rental.start_time) < endMs
+    && Date.parse(rental.end_time) > startMs,
+  ) || blocks.some(block =>
+    block.lot_id === lotId
+    && Date.parse(block.start_time) < endMs
+    && Date.parse(block.end_time) > startMs,
+  )
 
 lots.forEach((lot, lotIndex) => {
   for (let index = 1; index <= 8; index += 1) {
     const startMs = Date.now() - (index * 11 + lotIndex * 2) * 24 * HOUR - (index % 5) * HOUR
-    const hours = lot.rental_model === 'hourly' ? 2 + (index % 4) * 2 : (1 + (index % 3)) * 24
-    const endMs = startMs + hours * HOUR
+    const baseUnits = lot.rental_unit === 'hour' ? 2 + (index % 4) * 2 : 1 + (index % 3)
+    const units = Math.max(baseUnits, minAllowedUnits(lot.allowed_durations))
+    const endMs = startMs + units * UNIT_MS[lot.rental_unit]
     const status: Rental['status'] = index === 3 && lotIndex % 2 === 0 ? 'cancelled' : 'completed'
     const id = uid(400 + lotIndex * 10 + index)
+    const variant = lot.variants[0]!
 
     rentals.push({
       id,
@@ -496,13 +793,14 @@ lots.forEach((lot, lotIndex) => {
       status,
       start_time: new Date(startMs).toISOString(),
       end_time: new Date(endMs).toISOString(),
-      price_minor: priceFor(lot, startMs, endMs),
+      price_minor: computePrice(variant.price_tiers, units).totalMinor,
       currency: tenant.currency,
       remaining_seconds: 0,
       cancellation_deadline: null,
     })
     rentalOwners.set(id, userById(lotIndex % 2 === 0 ? uid(903) : uid(904)))
     rentalVersions.set(id, 1)
+    rentalBatteries.set(id, variant.battery_count)
   }
 })
 
@@ -678,7 +976,7 @@ export default mock(
         )
 
         const page: LotPage = {
-          items: filtered.slice(offset, offset + limit),
+          items: filtered.slice(offset, offset + limit).map(toLot),
           total: filtered.length,
           limit,
           offset,
@@ -690,8 +988,79 @@ export default mock(
       rest.get('/api/v1/public/lots/:slug', (params) => {
         const lot = lots.find(item => item.slug === params.request.params.slug)
 
-        return lot ?? fail(params, 404, problem('not_found', 404, 'Лот не найден'))
+        return lot ? toLot(lot) : fail(params, 404, problem('not_found', 404, 'Лот не найден'))
       }),
+
+      rest.get('/api/v1/public/lots/:slug/quote', (params) => {
+        const lot = lots.find(item => item.slug === params.request.params.slug)
+
+        if (!lot) {
+          return fail(params, 404, problem('not_found', 404, 'Лот не найден'))
+        }
+
+        const query = params.request.queries as Record<string, unknown>
+        const startMs = Date.parse(String(query.start ?? ''))
+        const endMs = Date.parse(String(query.end ?? ''))
+
+        if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
+          return fail(
+            params,
+            422,
+            problem('validation_error', 422, 'Проверьте интервал', undefined, {
+              start: 'Конец должен быть позже начала',
+            }),
+          )
+        }
+
+        const units = Math.ceil((endMs - startMs) / UNIT_MS[lot.rental_unit])
+        const minUnits = minAllowedUnits(lot.allowed_durations)
+
+        if (units < minUnits) {
+          return fail(
+            params,
+            422,
+            problem(
+              'rental_period_not_allowed',
+              422,
+              'Слишком короткий срок',
+              `Минимальный срок аренды — ${minUnits} ${lot.rental_unit === 'day' ? 'сут.' : 'ч'}`,
+            ),
+          )
+        }
+
+        const quote: Quote = {
+          lot_id: lot.id,
+          start: new Date(startMs).toISOString(),
+          end: new Date(endMs).toISOString(),
+          units,
+          rental_unit: lot.rental_unit,
+          variants: lot.variants
+            .filter(variant => variant.is_active)
+            .map((variant) => {
+              const price = computePrice(variant.price_tiers, units)
+              const slotTaken = bookingsOverlap(lot.id, startMs, endMs)
+              const capacityOk = capacityFits(lot.battery_type, variant.battery_count, startMs, endMs)
+
+              return {
+                variant_id: variant.id,
+                battery_count: variant.battery_count,
+                price_total_minor: price.totalMinor,
+                currency: lot.currency,
+                tier_min_units: price.tierMinUnits,
+                available: !slotTaken && capacityOk,
+                unavailable_reason: slotTaken
+                  ? 'slot_taken'
+                  : capacityOk
+                    ? null
+                    : 'battery_unavailable',
+              }
+            }),
+        }
+
+        params.setHeader('Cache-Control', 'no-store')
+
+        return quote
+      }, { delay: 120 }),
 
       rest.get('/api/v1/public/lots/:slug/availability', (params) => {
         const lot = lots.find(item => item.slug === params.request.params.slug)
@@ -707,7 +1076,9 @@ export default mock(
         const toMs = Date.parse(to)
 
         const busy = [
-          ...(blocks[lot.id] ?? []),
+          ...blocks
+            .filter(block => block.lot_id === lot.id)
+            .map(block => ({ start: block.start_time, end: block.end_time, kind: 'block' as const })),
           ...rentals
             .filter(rental => rental.lot.id === lot.id && ['booked', 'active', 'overdue'].includes(rental.status))
             .map(rental => ({ start: rental.start_time, end: rental.end_time, kind: 'busy' as const })),
@@ -807,8 +1178,14 @@ export default mock(
 
         const body = (params.request.body ?? {}) as Partial<CreateRentalRequest>
 
-        if (!body.lot_id || !body.start_time || !body.end_time) {
-          return fail(params, 422, problem('validation_error', 422, 'Нужны лот и интервал'))
+        if (!body.lot_id || !body.variant_id || !body.start_time || !body.end_time) {
+          return fail(
+            params,
+            422,
+            problem('validation_error', 422, 'Нужны лот, вариант и интервал', undefined, {
+              variant_id: 'Выберите вариант',
+            }),
+          )
         }
 
         const lot = lots.find(item => item.id === body.lot_id)
@@ -821,6 +1198,18 @@ export default mock(
           return fail(params, 409, problem('lot_unavailable', 409, 'Лот недоступен для брони'))
         }
 
+        const variant = lot.variants.find(item => item.id === body.variant_id && item.is_active)
+
+        if (!variant) {
+          return fail(
+            params,
+            422,
+            problem('validation_error', 422, 'Проверьте поля', undefined, {
+              variant_id: 'Вариант недоступен',
+            }),
+          )
+        }
+
         const startMs = Date.parse(body.start_time)
         const endMs = Date.parse(body.end_time)
 
@@ -828,15 +1217,33 @@ export default mock(
           return fail(params, 422, problem('validation_error', 422, 'Конец должен быть позже начала'))
         }
 
-        const overlap = rentals.some(rental =>
-          rental.lot.id === lot.id
-          && ['booked', 'active', 'overdue'].includes(rental.status)
-          && Date.parse(rental.start_time) < endMs
-          && Date.parse(rental.end_time) > startMs,
-        )
+        let price: RangePrice
 
-        if (overlap) {
+        try {
+          price = priceForRange(variant.price_tiers, lot.allowed_durations, lot.rental_unit, startMs, endMs)
+        } catch (caught) {
+          if (caught instanceof PricingError) {
+            return fail(params, 422, problem(caught.code, 422, caught.message, undefined, caught.fields))
+          }
+
+          throw caught
+        }
+
+        if (bookingsOverlap(lot.id, startMs, endMs)) {
           return fail(params, 409, problem('slot_taken', 409, 'Слот занят', 'Лот занят в выбранном интервале'))
+        }
+
+        if (!capacityFits(lot.battery_type, variant.battery_count, startMs, endMs)) {
+          return fail(
+            params,
+            409,
+            problem(
+              'battery_unavailable',
+              409,
+              'Аккумуляторов не хватает',
+              'Свободных аккумуляторов на эти даты нет',
+            ),
+          )
         }
 
         const rental: Rental = {
@@ -845,7 +1252,7 @@ export default mock(
           status: 'booked',
           start_time: new Date(startMs).toISOString(),
           end_time: new Date(endMs).toISOString(),
-          price_minor: priceFor(lot, startMs, endMs),
+          price_minor: price.totalMinor,
           currency: lot.currency,
           remaining_seconds: Math.round((endMs - Date.now()) / 1000),
           cancellation_deadline: iso(24 * HOUR),
@@ -854,6 +1261,7 @@ export default mock(
         rentals.unshift(rental)
         rentalOwners.set(rental.id, user)
         rentalVersions.set(rental.id, 1)
+        rentalBatteries.set(rental.id, variant.battery_count)
         params.setStatusCode(201)
 
         return rental
@@ -1073,7 +1481,7 @@ export default mock(
           .sort((left, right) => right.start_time.localeCompare(left.start_time))
 
         const detail: AnalyticsLotDetail = {
-          lot,
+          lot: toLot(lot),
           from: new Date(range.fromMs).toISOString(),
           to: new Date(range.toMs).toISOString(),
           summary: analyticsSummary(range.fromMs, range.toMs, lot.id),
@@ -1117,7 +1525,7 @@ export default mock(
         )
 
         const page: LotPage = {
-          items: filtered.slice(offset, offset + limit),
+          items: filtered.slice(offset, offset + limit).map(toLot),
           total: filtered.length,
           limit,
           offset,
@@ -1139,56 +1547,23 @@ export default mock(
 
         const body = (params.request.body ?? {}) as Partial<CreateLotRequest>
         const name = body.name?.trim() ?? ''
+        const batteryType = body.battery_type ?? null
+        const photos = Array.isArray(body.photos)
+          ? body.photos.filter(url => typeof url === 'string' && url.trim().length > 0)
+          : []
+        const fields = lotFields({
+          name,
+          categoryId: body.category_id ?? null,
+          characteristics: body.characteristics,
+          rentalUnit: body.rental_unit,
+          allowedDurations: body.allowed_durations,
+          variants: body.variants,
+          batteryType,
+          photos,
+        })
 
-        if (name.length < 2) {
-          return fail(
-            params,
-            422,
-            problem('validation_error', 422, 'Проверьте поля', undefined, { name: 'Минимум 2 символа' }),
-          )
-        }
-
-        const category = categories.find(item => item.id === body.category_id)
-
-        if (!category) {
-          return fail(
-            params,
-            422,
-            problem('validation_error', 422, 'Проверьте поля', undefined, { category_id: 'Выберите категорию' }),
-          )
-        }
-
-        const price = Number(body.price_minor)
-
-        if (!Number.isInteger(price) || price < 1) {
-          return fail(
-            params,
-            422,
-            problem('validation_error', 422, 'Проверьте поля', undefined, { price_minor: 'Укажите цену' }),
-          )
-        }
-
-        if (!body.rental_model || !['hourly', 'daily', 'custom'].includes(body.rental_model)) {
-          return fail(
-            params,
-            422,
-            problem('validation_error', 422, 'Проверьте поля', undefined, { rental_model: 'Выберите модель аренды' }),
-          )
-        }
-
-        const characteristics = (body.characteristics ?? {}) as Record<string, string | number>
-        const missing = category.characteristics.filter(item =>
-          item.is_required && (characteristics[item.code] === undefined || characteristics[item.code] === ''),
-        )
-
-        if (missing.length > 0) {
-          return fail(
-            params,
-            422,
-            problem('validation_error', 422, 'Проверьте характеристики', undefined, {
-              characteristics: `Заполните: ${missing.map(item => item.name).join(', ')}`,
-            }),
-          )
+        if (Object.keys(fields).length > 0) {
+          return fail(params, 422, problem('validation_error', 422, 'Проверьте поля', undefined, fields))
         }
 
         const status = body.status === 'archived' || body.status === 'maintenance' ? body.status : 'active'
@@ -1201,27 +1576,120 @@ export default mock(
           slug = `${baseSlug}-${suffix}`
         }
 
-        const lot: Lot = {
+        const lot: MockLot = {
           id: uid(110 + lots.length),
           slug,
           name,
           description: body.description?.trim() ?? '',
-          category_id: category.id,
-          photos: Array.isArray(body.photos)
-            ? body.photos.filter(url => typeof url === 'string' && url.trim().length > 0)
-            : [],
-          characteristics,
-          rental_model: body.rental_model,
-          price_minor: price,
+          category_id: body.category_id!,
+          photos,
+          characteristics: body.characteristics ?? {},
+          rental_unit: body.rental_unit as RentalUnit,
+          battery_type: batteryType,
+          variants: (body.variants ?? []).map(variant => ({
+            id: uid(lotVariantSeq++),
+            battery_count: variant.battery_count,
+            is_active: variant.is_active ?? true,
+            price_tiers: variant.price_tiers,
+          })),
+          allowed_durations: body.allowed_durations ?? [],
           currency: tenant.currency,
           status,
           is_bookable: status === 'active',
+          version: 1,
         }
 
         lots.unshift(lot)
         params.setStatusCode(201)
 
-        return lot
+        return toLot(lot)
+      }, { delay: 150 }),
+
+      rest.patch('/api/v1/admin/lots/:id', (params) => {
+        const user = currentUser(params)
+
+        if (!user) {
+          return fail(params, 401, problem('token_invalid', 401, 'Требуется вход'))
+        }
+
+        if (user.role !== 'admin' && user.role !== 'owner') {
+          return fail(params, 403, problem('forbidden_role', 403, 'Недостаточно прав'))
+        }
+
+        const lot = lots.find(item => item.id === params.request.params.id)
+
+        if (!lot) {
+          return fail(params, 404, problem('not_found', 404, 'Лот не найден'))
+        }
+
+        const body = (params.request.body ?? {}) as Partial<UpdateLotRequest>
+
+        if (typeof body.version !== 'number' || !Number.isInteger(body.version)) {
+          return fail(
+            params,
+            422,
+            problem('validation_error', 422, 'Проверьте поля', undefined, { version: 'Укажите версию лота' }),
+          )
+        }
+
+        if (body.version !== lot.version) {
+          return fail(
+            params,
+            409,
+            problem('stale_version', 409, 'Лот изменён', 'Лот изменён другим администратором'),
+          )
+        }
+
+        const name = body.name?.trim() ?? lot.name
+        const characteristics = body.characteristics ?? lot.characteristics
+        const batteryType = body.battery_type !== undefined ? body.battery_type : lot.battery_type
+        const allowedDurations = body.allowed_durations ?? lot.allowed_durations
+        const photos = Array.isArray(body.photos)
+          ? body.photos.filter(url => typeof url === 'string' && url.trim().length > 0)
+          : lot.photos
+        const mergedVariants: LotVariantInput[] = body.variants ?? lot.variants.map(variant => ({
+          battery_count: variant.battery_count,
+          is_active: variant.is_active,
+          price_tiers: variant.price_tiers,
+        }))
+        const fields = lotFields({
+          name,
+          categoryId: body.category_id ?? lot.category_id,
+          characteristics,
+          rentalUnit: body.rental_unit ?? lot.rental_unit,
+          allowedDurations,
+          variants: mergedVariants,
+          batteryType,
+          photos,
+        })
+
+        if (Object.keys(fields).length > 0) {
+          return fail(params, 422, problem('validation_error', 422, 'Проверьте поля', undefined, fields))
+        }
+
+        lot.name = name
+        lot.category_id = body.category_id ?? lot.category_id
+        lot.description = body.description !== undefined ? body.description.trim() : lot.description
+        lot.photos = photos
+        lot.characteristics = characteristics
+        lot.rental_unit = (body.rental_unit ?? lot.rental_unit) as RentalUnit
+        lot.battery_type = batteryType
+        lot.allowed_durations = allowedDurations
+        lot.variants = mergedVariants.map((variant, index) => ({
+          id: lot.variants[index]?.id ?? uid(lotVariantSeq++),
+          battery_count: variant.battery_count,
+          is_active: variant.is_active ?? true,
+          price_tiers: variant.price_tiers,
+        }))
+
+        if (body.status) {
+          lot.status = body.status
+          lot.is_bookable = body.status === 'active'
+        }
+
+        lot.version += 1
+
+        return toLot(lot)
       }, { delay: 150 }),
 
       rest.post('/api/v1/admin/lots/:id/status', (params) => {
@@ -1266,8 +1734,291 @@ export default mock(
 
         lot.status = status
         lot.is_bookable = status === 'active'
+        lot.version += 1
 
-        return lot
+        return toLot(lot)
+      }, { delay: 120 }),
+
+      rest.post('/api/v1/admin/lots/:id/blocks', (params) => {
+        const user = currentUser(params)
+
+        if (!user) {
+          return fail(params, 401, problem('token_invalid', 401, 'Требуется вход'))
+        }
+
+        if (user.role !== 'admin' && user.role !== 'owner') {
+          return fail(params, 403, problem('forbidden_role', 403, 'Недостаточно прав'))
+        }
+
+        const lot = lots.find(item => item.id === params.request.params.id)
+
+        if (!lot) {
+          return fail(params, 404, problem('not_found', 404, 'Лот не найден'))
+        }
+
+        const body = (params.request.body ?? {}) as Partial<CreateLotBlockRequest>
+        const reason = body.reason?.trim() ?? ''
+
+        if (reason.length < 3 || reason.length > 200) {
+          return fail(
+            params,
+            422,
+            problem('validation_error', 422, 'Проверьте поля', undefined, {
+              reason: 'Причина от 3 до 200 символов',
+            }),
+          )
+        }
+
+        const startMs = Date.parse(body.start_time ?? '')
+        const endMs = Date.parse(body.end_time ?? '')
+
+        if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) {
+          return fail(
+            params,
+            422,
+            problem('validation_error', 422, 'Проверьте поля', undefined, {
+              start_time: 'Укажите период',
+            }),
+          )
+        }
+
+        const startIso = tenantDayStart(dayKeyOf(new Date(startMs), tenant.timezone))
+        const endIso = tenantDayStart(dayKeyOf(new Date(endMs), tenant.timezone))
+        const start = Date.parse(startIso)
+        const end = Date.parse(endIso)
+
+        if (end <= start) {
+          return fail(
+            params,
+            422,
+            problem('validation_error', 422, 'Проверьте поля', undefined, {
+              end_time: 'Конец должен быть позже начала',
+            }),
+          )
+        }
+
+        const rentalConflict = rentals.some(rental =>
+          rental.lot.id === lot.id
+          && ['booked', 'active'].includes(rental.status)
+          && Date.parse(rental.start_time) < end
+          && Date.parse(rental.end_time) > start,
+        )
+        const blockConflict = blocks.some(block =>
+          block.lot_id === lot.id
+          && Date.parse(block.start_time) < end
+          && Date.parse(block.end_time) > start,
+        )
+
+        if (rentalConflict || blockConflict) {
+          return fail(params, 409, problem('slot_taken', 409, 'Слот занят', 'В эти дни лот занят'))
+        }
+
+        const block: LotBlock = {
+          id: uid(blockSeq++),
+          lot_id: lot.id,
+          start_time: startIso,
+          end_time: endIso,
+          reason,
+          created_by: user.id,
+          created_at: iso(0),
+        }
+
+        blocks.push(block)
+        params.setStatusCode(201)
+
+        return block
+      }, { delay: 120 }),
+
+      rest.delete('/api/v1/admin/lots/:id/blocks/:block_id', (params) => {
+        const user = currentUser(params)
+
+        if (!user) {
+          return fail(params, 401, problem('token_invalid', 401, 'Требуется вход'))
+        }
+
+        if (user.role !== 'admin' && user.role !== 'owner') {
+          return fail(params, 403, problem('forbidden_role', 403, 'Недостаточно прав'))
+        }
+
+        const lot = lots.find(item => item.id === params.request.params.id)
+
+        if (!lot) {
+          return fail(params, 404, problem('not_found', 404, 'Лот не найден'))
+        }
+
+        const index = blocks.findIndex(block =>
+          block.id === params.request.params.block_id && block.lot_id === lot.id,
+        )
+
+        if (index === -1) {
+          return fail(params, 404, problem('not_found', 404, 'Блокировка не найдена'))
+        }
+
+        blocks.splice(index, 1)
+        params.setStatusCode(204)
+
+        return null
+      }, { delay: 80 }),
+
+      rest.get('/api/v1/admin/schedule', (params) => {
+        const user = currentUser(params)
+
+        if (!user) {
+          return fail(params, 401, problem('token_invalid', 401, 'Требуется вход'))
+        }
+
+        if (user.role !== 'admin' && user.role !== 'owner') {
+          return fail(params, 403, problem('forbidden_role', 403, 'Недостаточно прав'))
+        }
+
+        const query = params.request.queries as Record<string, unknown>
+        const from = typeof query.from === 'string' ? query.from : ''
+        const to = typeof query.to === 'string' ? query.to : ''
+        const datePattern = /^\d{4}-\d{2}-\d{2}$/
+        const fromMs = Date.parse(`${from}T00:00:00Z`)
+        const toMs = Date.parse(`${to}T00:00:00Z`)
+
+        if (
+          !datePattern.test(from)
+          || !datePattern.test(to)
+          || !Number.isFinite(fromMs)
+          || !Number.isFinite(toMs)
+          || toMs <= fromMs
+          || toMs - fromMs > 90 * 24 * HOUR
+        ) {
+          return fail(params, 422, problem('validation_error', 422, 'Окно не должно превышать 90 дней'))
+        }
+
+        const rangeStart = Date.parse(tenantDayStart(from))
+        const rangeEnd = Date.parse(tenantDayStart(to))
+        const category = typeof query.category_id === 'string' ? query.category_id : undefined
+        const scopedLots = lots.filter(lot => !category || lot.category_id === category)
+        const lotIds = new Set(scopedLots.map(lot => lot.id))
+
+        const intervals: (ScheduleRentalInterval | ScheduleBlockInterval)[] = [
+          ...rentals
+            .filter(rental =>
+              rental.status !== 'cancelled'
+              && lotIds.has(rental.lot.id)
+              && Date.parse(rental.start_time) < rangeEnd
+              && Date.parse(rental.end_time) > rangeStart,
+            )
+            .map(rental => ({
+              id: rental.id,
+              lot_id: rental.lot.id,
+              kind: 'rental' as const,
+              start_time: rental.start_time,
+              end_time: rental.end_time,
+              rental_id: rental.id,
+              status: rental.status,
+              battery_count: rentalBatteries.get(rental.id) ?? 1,
+              user_name: (rentalOwners.get(rental.id) ?? mockUser).name,
+            })),
+          ...blocks
+            .filter(block =>
+              lotIds.has(block.lot_id)
+              && Date.parse(block.start_time) < rangeEnd
+              && Date.parse(block.end_time) > rangeStart,
+            )
+            .map(block => ({
+              id: block.id,
+              lot_id: block.lot_id,
+              kind: 'block' as const,
+              start_time: block.start_time,
+              end_time: block.end_time,
+              block_id: block.id,
+              reason: block.reason,
+            })),
+        ].sort((left, right) => left.start_time.localeCompare(right.start_time))
+
+        const schedule: AdminSchedule = {
+          lots: scopedLots.map(lot => ({
+            id: lot.id,
+            name: lot.name,
+            category_id: lot.category_id,
+            status: lot.status,
+            battery_type: lot.battery_type,
+            rental_unit: lot.rental_unit,
+          })),
+          intervals,
+          battery_stock: batteryStock.map(item => ({
+            ...item,
+            peak_committed: peakCommitted(item.battery_type),
+          })),
+        }
+
+        params.setHeader('Cache-Control', 'no-store')
+
+        return schedule
+      }, { delay: 120 }),
+
+      rest.get('/api/v1/admin/batteries', (params) => {
+        const user = currentUser(params)
+
+        if (!user) {
+          return fail(params, 401, problem('token_invalid', 401, 'Требуется вход'))
+        }
+
+        if (user.role !== 'owner') {
+          return fail(params, 403, problem('forbidden_role', 403, 'Раздел доступен только владельцу'))
+        }
+
+        params.setHeader('Cache-Control', 'no-store')
+
+        return batteryStock.map(item => ({
+          ...item,
+          peak_committed: peakCommitted(item.battery_type),
+        }))
+      }, { delay: 80 }),
+
+      rest.patch('/api/v1/admin/batteries/:battery_type', (params) => {
+        const user = currentUser(params)
+
+        if (!user) {
+          return fail(params, 401, problem('token_invalid', 401, 'Требуется вход'))
+        }
+
+        if (user.role !== 'owner') {
+          return fail(params, 403, problem('forbidden_role', 403, 'Раздел доступен только владельцу'))
+        }
+
+        const stock = batteryStock.find(item => item.battery_type === params.request.params.battery_type)
+
+        if (!stock) {
+          return fail(params, 404, problem('not_found', 404, 'Тип аккумулятора не найден'))
+        }
+
+        const body = (params.request.body ?? {}) as Partial<UpdateBatteryStockRequest>
+        const quantity = body.quantity
+        const peak = peakCommitted(stock.battery_type)
+
+        if (typeof quantity !== 'number' || !Number.isInteger(quantity) || quantity < 0) {
+          return fail(
+            params,
+            422,
+            problem('validation_error', 422, 'Проверьте поля', undefined, {
+              quantity: 'Целое число от 0',
+            }),
+          )
+        }
+
+        if (quantity < peak) {
+          return fail(
+            params,
+            409,
+            problem(
+              'stock_below_committed',
+              409,
+              'Нельзя уменьшить остаток',
+              `Нельзя уменьшить: ${peak} шт. уже забронированы`,
+              { quantity: `Занято ${peak} шт. — уменьшить нельзя` },
+            ),
+          )
+        }
+
+        stock.quantity = quantity
+
+        return { ...stock, peak_committed: peak }
       }, { delay: 120 }),
 
       rest.get('/api/v1/admin/rentals', (params) => {

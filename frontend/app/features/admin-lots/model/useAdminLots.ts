@@ -3,6 +3,7 @@ import {
   createLot,
   fetchAdminLots,
   setLotStatus,
+  updateLot,
   type CreateLotRequest,
   type Lot,
   type LotStatus,
@@ -25,23 +26,48 @@ export const useAdminLots = async () => {
 
   await Promise.all([request, categoriesRequest])
 
-  const creating = ref(false)
+  const saving = ref(false)
   const updating = ref(false)
+  const fields = ref<Record<string, string>>({})
 
-  const create = async (payload: CreateLotRequest): Promise<Lot | null> => {
-    creating.value = true
+  /** Создание или правка лота; `version` для PATCH берётся из переданного лота. */
+  const save = async (payload: CreateLotRequest, lot?: Lot | null): Promise<Lot | null> => {
+    saving.value = true
+    fields.value = {}
 
     try {
-      const lot = await createLot(api, payload)
-      toast.add({ severity: 'success', summary: `Лот «${lot.name}» создан`, life: 3000 })
+      const saved = lot
+        ? await updateLot(api, lot.id, { ...payload, version: lot.version })
+        : await createLot(api, payload)
+
+      toast.add({
+        severity: 'success',
+        summary: lot ? `Лот «${saved.name}» обновлён` : `Лот «${saved.name}» создан`,
+        life: 3000,
+      })
       await request.refresh()
-      return lot
+      return saved
     } catch (caught) {
-      const message = caught instanceof ApiError ? caught.message : 'Не удалось создать лот'
-      toast.add({ severity: 'error', summary: message, life: 4000 })
+      if (caught instanceof ApiError) {
+        fields.value = caught.fields
+
+        if (caught.code === 'stale_version') {
+          toast.add({
+            severity: 'warn',
+            summary: 'Лот изменён другим администратором — данные обновлены',
+            life: 5000,
+          })
+          await request.refresh()
+        } else {
+          toast.add({ severity: 'error', summary: caught.message, life: 4000 })
+        }
+      } else {
+        toast.add({ severity: 'error', summary: 'Не удалось сохранить лот', life: 4000 })
+      }
+
       return null
     } finally {
-      creating.value = false
+      saving.value = false
     }
   }
 
@@ -72,8 +98,9 @@ export const useAdminLots = async () => {
     refresh: request.refresh,
     status,
     categories: categoriesRequest.data,
-    creating,
-    create,
+    fields,
+    saving,
+    save,
     updating,
     updateStatus,
   }

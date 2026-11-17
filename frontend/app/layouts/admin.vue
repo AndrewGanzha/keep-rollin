@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import { useSessionStore } from '~/entities/session'
 import { AppHeader } from '~/widgets/app-header'
+
+const session = useSessionStore()
 </script>
 
 <template>
@@ -15,6 +18,12 @@ import { AppHeader } from '~/widgets/app-header'
         <NuxtLink to="/admin/verification">Верификация</NuxtLink>
         <NuxtLink to="/admin/tickets">Тикеты</NuxtLink>
         <NuxtLink to="/admin/analytics">Аналитика</NuxtLink>
+        <NuxtLink
+          v-if="session.role === 'owner'"
+          to="/admin/batteries"
+        >
+          Аккумуляторы
+        </NuxtLink>
       </div>
     </nav>
     <main class="app-main">

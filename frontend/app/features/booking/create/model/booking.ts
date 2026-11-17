@@ -1,33 +1,52 @@
-import type { Lot } from '~/entities/lot'
-
-export type RentalUnit = 'hour' | 'day'
+import type { RentalUnit } from '~/entities/lot'
 
 export interface DurationOption {
   label: string
   value: number
 }
 
-/** Часовая аренда — исключение, по умолчанию лот бронируют посуточно. */
-export const unitOf = (model: Lot['rental_model']): RentalUnit =>
-  model === 'hourly' ? 'hour' : 'day'
+const dayLabel = (units: number): string => {
+  if (units === 1) {
+    return '1 день'
+  }
 
-export const durationOptions = (unit: RentalUnit): DurationOption[] => unit === 'hour'
-  ? [
-      { label: '1 час', value: 1 },
-      { label: '2 часа', value: 2 },
-      { label: '4 часа', value: 4 },
-      { label: '8 часов', value: 8 },
-      { label: 'Сутки', value: 24 },
-      { label: 'Неделя', value: 168 },
-      { label: 'Свой срок', value: 0 },
-    ]
-  : [
-      { label: '1 день', value: 1 },
-      { label: '3 дня', value: 3 },
-      { label: 'Неделя', value: 7 },
-      { label: 'Месяц', value: 30 },
-      { label: 'Свой срок', value: 0 },
-    ]
+  if (units === 3) {
+    return '3 дня'
+  }
+
+  if (units === 7) {
+    return 'Неделя'
+  }
+
+  if (units === 30) {
+    return 'Месяц'
+  }
+
+  return `${units} дн.`
+}
+
+const hourLabel = (units: number): string => {
+  if (units === 24) {
+    return 'Сутки'
+  }
+
+  if (units === 7 * 24) {
+    return 'Неделя'
+  }
+
+  return `${units} ч`
+}
+
+/** Пресеты срока — ровно `allowed_durations` лота (D-25), плюс «Свой срок». */
+export const durationOptions = (unit: RentalUnit, allowedDurations: number[]): DurationOption[] => [
+  ...[...allowedDurations]
+    .sort((left, right) => left - right)
+    .map(units => ({
+      label: unit === 'hour' ? hourLabel(units) : dayLabel(units),
+      value: units,
+    })),
+  { label: 'Свой срок', value: 0 },
+]
 
 export const addUnits = (start: Date, units: number, unit: RentalUnit): Date => {
   const ms = unit === 'hour' ? units * 60 * 60 * 1000 : units * 24 * 60 * 60 * 1000
@@ -35,4 +54,16 @@ export const addUnits = (start: Date, units: number, unit: RentalUnit): Date => 
   return new Date(start.getTime() + ms)
 }
 
-export const estimatePrice = (lot: Lot, units: number): number => lot.price_minor * units
+/** «3 дня», «7 суток», «2 часа» — для итога в диалоге брони. */
+export const durationText = (units: number, unit: RentalUnit): string => {
+  const mod10 = units % 10
+  const mod100 = units % 100
+  const isOne = mod10 === 1 && mod100 !== 11
+  const isFew = mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)
+
+  if (unit === 'hour') {
+    return `${units} ${isOne ? 'час' : isFew ? 'часа' : 'часов'}`
+  }
+
+  return `${units} ${isOne ? 'день' : isFew ? 'дня' : 'суток'}`
+}

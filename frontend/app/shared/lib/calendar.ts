@@ -84,6 +84,21 @@ export const shiftMonth = (dayKey: string, amount: number): string => {
     .slice(0, 10)
 }
 
+/** Дни календарного месяца, в котором лежит `anchor`, — строки ганта. */
+export const monthDays = (anchor: string): string[] => {
+  const first = shiftMonth(anchor, 0)
+  const next = shiftMonth(anchor, 1)
+  const days: string[] = []
+  let day = first
+
+  while (day < next) {
+    days.push(day)
+    day = addDays(day, 1)
+  }
+
+  return days
+}
+
 /** 42 дня сетки месяца, начиная с понедельника. */
 export const monthGrid = (dayKey: string): string[] => {
   const date = dayKeyToDate(dayKey)
@@ -109,6 +124,16 @@ export const zonedDayStartIso = (dayKey: string, timeZone?: string): string => {
 
   return new Date(instant).toISOString()
 }
+
+/** Интервал `[начало первого дня, начало дня после последнего)` в TZ тенанта (D-24). */
+export const blockRangeIso = (
+  fromDay: string,
+  toDay: string,
+  timeZone?: string,
+): { start: string; end: string } => ({
+  start: zonedDayStartIso(fromDay, timeZone),
+  end: zonedDayStartIso(addDays(toDay, 1), timeZone),
+})
 
 export const daysForView = (view: CalendarView, anchor: string): string[] => {
   if (view === 'day') {

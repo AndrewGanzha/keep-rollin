@@ -6,6 +6,8 @@ import type {
   LotPage,
   LotStatus,
   LotStatusRequest,
+  Quote,
+  UpdateLotRequest,
 } from '../model/lot.types'
 
 export interface LotListQuery {
@@ -33,6 +35,20 @@ export const fetchAvailability = async (
     }),
   )
 
+export const fetchQuote = async (
+  api: ApiClient,
+  slug: string,
+  start: string,
+  end: string,
+  signal?: AbortSignal,
+): Promise<Quote> =>
+  unwrap(
+    await api.GET('/api/v1/public/lots/{slug}/quote', {
+      params: { path: { slug }, query: { start, end } },
+      signal,
+    }),
+  )
+
 export interface AdminLotQuery {
   category_id?: string
   status?: LotStatus
@@ -52,6 +68,18 @@ export const createLot = async (
   payload: CreateLotRequest,
 ): Promise<Lot> =>
   unwrap(await api.POST('/api/v1/admin/lots', { body: payload }))
+
+export const updateLot = async (
+  api: ApiClient,
+  id: string,
+  payload: UpdateLotRequest,
+): Promise<Lot> =>
+  unwrap(
+    await api.PATCH('/api/v1/admin/lots/{id}', {
+      params: { path: { id } },
+      body: payload,
+    }),
+  )
 
 export const setLotStatus = async (
   api: ApiClient,

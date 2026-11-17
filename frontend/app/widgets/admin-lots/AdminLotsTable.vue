@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import type { Category } from '~/entities/category'
-import type { Lot, LotStatus } from '~/entities/lot'
-import { formatMoney } from '~/shared/lib'
+import { priceFromLabel, priceFromNote, variantLabel, type Lot, type LotStatus } from '~/entities/lot'
 import { EmptyState } from '~/shared/ui'
 
 const props = withDefaults(
@@ -9,7 +8,7 @@ const props = withDefaults(
   { loading: false },
 )
 
-const emit = defineEmits<{ 'change-status': [lot: Lot] }>()
+const emit = defineEmits<{ edit: [lot: Lot]; 'change-status': [lot: Lot] }>()
 
 const severity: Record<LotStatus, 'success' | 'warn' | 'danger' | 'secondary'> = {
   active: 'success',
@@ -25,16 +24,8 @@ const statusLabels: Record<LotStatus, string> = {
   archived: 'Архив',
 }
 
-const modelLabels: Record<Lot['rental_model'], string> = {
-  hourly: 'По часам',
-  daily: 'Посуточно',
-  custom: 'Индивидуально',
-}
-
 const categoryName = (id: string): string =>
   props.categories.find((item: Category) => item.id === id)?.name ?? id
-
-const modelLabel = (value: Lot['rental_model']): string => modelLabels[value]
 
 const statusSeverity = (value: LotStatus) => severity[value]
 const statusLabel = (value: LotStatus) => statusLabels[value]
@@ -79,20 +70,35 @@ const statusLabel = (value: LotStatus) => statusLabels[value]
     </Column>
 
     <Column
-      header="Модель"
-      style="min-width: 130px"
+      header="Срок"
+      style="min-width: 110px"
     >
       <template #body="{ data }">
-        {{ modelLabel(data.rental_model) }}
+        {{ data.rental_unit === 'hour' ? 'По часам' : 'Посуточно' }}
       </template>
     </Column>
 
     <Column
       header="Цена"
+      style="min-width: 170px"
+    >
+      <template #body="{ data }">
+        <div class="cell">
+          <span>{{ priceFromLabel(data) }}</span>
+          <span
+            v-if="priceFromNote(data)"
+            class="muted"
+          >{{ priceFromNote(data) }}</span>
+        </div>
+      </template>
+    </Column>
+
+    <Column
+      header="Варианты"
       style="min-width: 120px"
     >
       <template #body="{ data }">
-        {{ formatMoney(data.price_minor, data.currency) }}
+        {{ data.variants.map((variant: { battery_count: number }) => variantLabel(variant.battery_count)).join(' / ') }}
       </template>
     </Column>
 
@@ -110,15 +116,23 @@ const statusLabel = (value: LotStatus) => statusLabels[value]
 
     <Column
       header="Действия"
-      style="min-width: 120px"
+      style="min-width: 200px"
     >
       <template #body="{ data }">
-        <Button
-          label="Статус"
-          size="small"
-          outlined
-          @click="emit('change-status', data)"
-        />
+        <div class="row actions">
+          <Button
+            label="Изменить"
+            size="small"
+            outlined
+            @click="emit('edit', data)"
+          />
+          <Button
+            label="Статус"
+            size="small"
+            text
+            @click="emit('change-status', data)"
+          />
+        </div>
       </template>
     </Column>
   </DataTable>
@@ -130,12 +144,17 @@ const statusLabel = (value: LotStatus) => statusLabels[value]
 }
 
 .admin-table :deep(.p-datatable-table) {
-  min-width: 760px;
+  min-width: 920px;
 }
 
 .cell {
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+.actions {
+  flex-wrap: wrap;
+  gap: 4px;
 }
 </style>

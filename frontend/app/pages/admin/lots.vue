@@ -15,12 +15,14 @@ const {
   error,
   refresh,
   status,
-  creating,
-  create,
+  fields,
+  saving,
+  save,
   updating,
   updateStatus,
 } = await useAdminLots()
 const dialogOpen = ref(false)
+const editTarget = ref<Lot | null>(null)
 const statusTarget = ref<Lot | null>(null)
 
 const statusOptions: { label: string; value: LotStatus }[] = [
@@ -30,8 +32,18 @@ const statusOptions: { label: string; value: LotStatus }[] = [
   { label: 'Архив', value: 'archived' },
 ]
 
-const onCreate = async (payload: CreateLotRequest) => {
-  const lot = await create(payload)
+const openCreate = () => {
+  editTarget.value = null
+  dialogOpen.value = true
+}
+
+const openEdit = (lot: Lot) => {
+  editTarget.value = lot
+  dialogOpen.value = true
+}
+
+const onSave = async (payload: CreateLotRequest) => {
+  const lot = await save(payload, editTarget.value)
 
   if (lot) {
     dialogOpen.value = false
@@ -49,14 +61,14 @@ const onStatus = async (lot: Lot, next: LotStatusRequest['status']) => {
   <div class="stack">
     <PageHeading
       title="Лоты"
-      subtitle="Каталог: добавление и статусы"
+      subtitle="Каталог: тарифы, варианты и статусы"
     />
 
     <div class="row">
       <Button
         label="Добавить лот"
         icon="pi pi-plus"
-        @click="dialogOpen = true"
+        @click="openCreate"
       />
       <Select
         v-model="status"
@@ -79,6 +91,7 @@ const onStatus = async (lot: Lot, next: LotStatusRequest['status']) => {
         :lots="data?.items ?? []"
         :categories="categories ?? []"
         :loading="pending"
+        @edit="openEdit"
         @change-status="statusTarget = $event"
       />
 
@@ -92,8 +105,10 @@ const onStatus = async (lot: Lot, next: LotStatusRequest['status']) => {
       <LotFormDialog
         v-model:visible="dialogOpen"
         :categories="categories ?? []"
-        :pending="creating"
-        @submit="onCreate"
+        :lot="editTarget"
+        :errors="fields"
+        :pending="saving"
+        @submit="onSave"
       />
     </template>
   </div>

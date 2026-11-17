@@ -89,6 +89,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/public/lots/{slug}/quote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Цена и доступность вариантов лота на интервал
+         * @description Цену считает только сервер по алгоритму D-20 (`contract/pricing.md`): тир по сроку + round-up до более длинного пакета. Ответ `no-store`: зависит от интервала и остатков АКБ. Точное количество аккумуляторов не раскрывается — только `available`.
+         */
+        get: operations["getLotQuote"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/login": {
         parameters: {
             query?: never;
@@ -277,6 +297,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/lots/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Изменить лот, варианты, тарифы и сроки
+         * @description Частичное обновление: любое подмножество полей `CreateLotRequest` плюс обязательный `version` (D-09). Правка тарифов не меняет цену уже созданных аренд.
+         */
+        patch: operations["updateLot"];
+        trace?: never;
+    };
     "/api/v1/admin/lots/{id}/status": {
         parameters: {
             query?: never;
@@ -292,6 +332,106 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/lots/{id}/blocks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Заблокировать дни лота
+         * @description Границы выравниваются по началу суток в TZ тенанта, интервал `[start_time, end_time)` (D-24). Пересечение с арендой в статусе `booked`/`active` → 409 `slot_taken`. Блок не расходует АКБ.
+         */
+        post: operations["createLotBlock"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/lots/{id}/blocks/{block_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Снять блокировку лота
+         * @description Удаление сразу освобождает дни для новых броней и публичной доступности.
+         */
+        delete: operations["deleteLotBlock"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/schedule": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Гант «лоты × дни»: аренды, блоки и остатки АКБ
+         * @description Лоты возвращаются все, включая те, у которых нет событий (иначе гант теряет строки). Окно не шире 90 дней, иначе 422. Ответ `no-store`.
+         */
+        get: operations["getAdminSchedule"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/batteries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Остатки аккумуляторов тенанта
+         * @description Пул АКБ по типам. `peak_committed` — максимум одновременной занятости по активным и будущим арендам (D-23).
+         */
+        get: operations["listBatteryStock"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/batteries/{battery_type}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Изменить количество аккумуляторов типа
+         * @description `quantity` не может быть меньше `peak_committed` по активным и будущим броням → 409 `stock_below_committed`.
+         */
+        patch: operations["updateBatteryStock"];
         trace?: never;
     };
     "/api/v1/admin/rentals": {
@@ -504,21 +644,201 @@ export interface components {
             characteristics: {
                 [key: string]: string | number;
             };
-            /** @enum {string} */
-            rental_model: "hourly" | "daily" | "custom";
-            /** @example 45000 */
-            price_minor: number;
+            /**
+             * @description Единица срока аренды (D-19)
+             * @enum {string}
+             */
+            rental_unit: "day" | "hour";
+            /**
+             * @description Тип АКБ из пула `battery_stock`; null — лот без АКБ
+             * @example 48v
+             */
+            battery_type: string | null;
+            /** @description Варианты комплектации; `battery_count` уникален в пределах лота (D-19) */
+            variants: components["schemas"]["LotVariant"][];
+            /** @description Разрешённые сроки в единицах `rental_unit`, по возрастанию (D-25) */
+            allowed_durations: number[];
+            /** @description Минимум по активным вариантам и тирам; считает сервер. null — нет активных вариантов (D-22) */
+            price_from: components["schemas"]["PriceFrom"] | null;
             /** @example RUB */
             currency: string;
             /** @enum {string} */
             status: "active" | "archived" | "maintenance" | "overdue";
             is_bookable: boolean;
+            /** @description Версия записи для PATCH (D-09) */
+            version: number;
+        };
+        LotVariant: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * @description Сколько АКБ занимает вариант; 0 — лот без АКБ
+             * @example 1
+             */
+            battery_count: number;
+            is_active: boolean;
+            /** @description Отсортированы по `min_units`; первая граница = `min(allowed_durations)`; цена за единицу не возрастает */
+            price_tiers: components["schemas"]["PriceTier"][];
+        };
+        LotVariantInput: {
+            battery_count: number;
+            /** @description По умолчанию `true` */
+            is_active?: boolean;
+            price_tiers: components["schemas"]["PriceTier"][];
+        };
+        PriceTier: {
+            /**
+             * @description С какого срока в единицах `rental_unit` действует цена
+             * @example 7
+             */
+            min_units: number;
+            /**
+             * @description Цена за единицу в минорных единицах валюты тенанта
+             * @example 40000
+             */
+            price_per_unit_minor: number;
+        };
+        PriceFrom: {
+            /** @example 40000 */
+            amount_minor: number;
+            /**
+             * @description Совпадает с `rental_unit` лота
+             * @enum {string}
+             */
+            per: "day" | "hour";
+            /** @example 7 */
+            at_units: number;
+            /** @example 1 */
+            battery_count: number;
+        };
+        Quote: {
+            /** Format: uuid */
+            lot_id: string;
+            /** Format: date-time */
+            start: string;
+            /** Format: date-time */
+            end: string;
+            /** @description Округлённая вверх длительность в единицах `rental_unit` */
+            units: number;
+            /** @enum {string} */
+            rental_unit: "day" | "hour";
+            variants: components["schemas"]["QuoteVariant"][];
+        };
+        QuoteVariant: {
+            /** Format: uuid */
+            variant_id: string;
+            battery_count: number;
+            /** @description Итог за весь интервал по алгоритму D-20 */
+            price_total_minor: number;
+            currency: string;
+            /** @description `min_units` сработавшего тира (с учётом round-up) */
+            tier_min_units: number;
+            available: boolean;
+            /** @description Причина недоступности варианта; точное количество АКБ не раскрывается */
+            unavailable_reason: ("slot_taken" | "rental_period_not_allowed" | "battery_unavailable") | null;
         };
         LotPage: {
             items: components["schemas"]["Lot"][];
             total: number;
             limit: number;
             offset: number;
+        };
+        LotBlock: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            lot_id: string;
+            /**
+             * Format: date-time
+             * @description Начало суток в TZ тенанта
+             */
+            start_time: string;
+            /**
+             * Format: date-time
+             * @description Конец интервала, не включается (D-05, D-24)
+             */
+            end_time: string;
+            reason: string;
+            /** Format: uuid */
+            created_by: string;
+            /** Format: date-time */
+            created_at: string;
+        };
+        CreateLotBlockRequest: {
+            /** Format: date-time */
+            start_time: string;
+            /** Format: date-time */
+            end_time: string;
+            /** @example Техобслуживание */
+            reason: string;
+        };
+        ScheduleLot: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** Format: uuid */
+            category_id: string;
+            /** @enum {string} */
+            status: "active" | "archived" | "maintenance" | "overdue";
+            battery_type: string | null;
+            /** @enum {string} */
+            rental_unit: "day" | "hour";
+        };
+        ScheduleRentalInterval: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            lot_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "rental";
+            /** Format: date-time */
+            start_time: string;
+            /** Format: date-time */
+            end_time: string;
+            /** Format: uuid */
+            rental_id: string;
+            /** @enum {string} */
+            status: "booked" | "active" | "overdue" | "completed" | "cancelled";
+            battery_count: number;
+            user_name: string;
+        };
+        ScheduleBlockInterval: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            lot_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "block";
+            /** Format: date-time */
+            start_time: string;
+            /** Format: date-time */
+            end_time: string;
+            /** Format: uuid */
+            block_id: string;
+            reason: string;
+        };
+        AdminSchedule: {
+            lots: components["schemas"]["ScheduleLot"][];
+            intervals: (components["schemas"]["ScheduleRentalInterval"] | components["schemas"]["ScheduleBlockInterval"])[];
+            battery_stock: components["schemas"]["BatteryStock"][];
+        };
+        BatteryStock: {
+            /** @example 48v */
+            battery_type: string;
+            /** @example 48V 720 Вт·ч */
+            name: string;
+            quantity: number;
+            /** @description Максимум одновременной занятости по активным и будущим арендам (D-23) */
+            peak_committed: number;
+        };
+        UpdateBatteryStockRequest: {
+            quantity: number;
         };
         BusyInterval: {
             /** Format: date-time */
@@ -613,6 +933,11 @@ export interface components {
         CreateRentalRequest: {
             /** Format: uuid */
             lot_id: string;
+            /**
+             * Format: uuid
+             * @description Вариант лота; цена и `battery_count` берутся из него
+             */
+            variant_id: string;
             /** Format: date-time */
             start_time: string;
             /** Format: date-time */
@@ -672,17 +997,41 @@ export interface components {
             category_id: string;
             description?: string;
             /** @enum {string} */
-            rental_model: "hourly" | "daily" | "custom";
-            price_minor: number;
+            rental_unit: "day" | "hour";
+            /** @description Обязателен, если хотя бы один вариант имеет `battery_count > 0` */
+            battery_type?: string | null;
+            /** @description `battery_count` уникален; `price_tiers` отсортированы, первая граница = `min(allowed_durations)`, цена за единицу не возрастает */
+            variants: components["schemas"]["LotVariantInput"][];
+            /** @description По возрастанию, без дублей; `allowed_durations[0] === variants[*].price_tiers[0].min_units` */
+            allowed_durations: number[];
             characteristics: {
                 [key: string]: string | number;
             };
             photos?: string[];
             /**
-             * @default active
+             * @description По умолчанию `active`
              * @enum {string}
              */
-            status: "active" | "archived" | "maintenance";
+            status?: "active" | "archived" | "maintenance";
+        };
+        UpdateLotRequest: {
+            /** @description Текущая версия лота; несовпадение → 409 `stale_version` */
+            version: number;
+            name?: string;
+            /** Format: uuid */
+            category_id?: string;
+            description?: string;
+            /** @enum {string} */
+            rental_unit?: "day" | "hour";
+            battery_type?: string | null;
+            variants?: components["schemas"]["LotVariantInput"][];
+            allowed_durations?: number[];
+            characteristics?: {
+                [key: string]: string | number;
+            };
+            photos?: string[];
+            /** @enum {string} */
+            status?: "active" | "archived" | "maintenance";
         };
         LotStatusRequest: {
             /** @enum {string} */
@@ -852,6 +1201,60 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
+        /** @description Версия записи устарела (`stale_version`) */
+        StaleVersion: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "type": "urn:keeprollin:error:stale_version",
+                 *       "title": "Версия устарела",
+                 *       "status": 409,
+                 *       "code": "stale_version",
+                 *       "detail": "Лот изменён другим администратором"
+                 *     }
+                 */
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description Интервал занят (`slot_taken`) */
+        SlotTaken: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "type": "urn:keeprollin:error:slot_taken",
+                 *       "title": "Слот занят",
+                 *       "status": 409,
+                 *       "code": "slot_taken",
+                 *       "detail": "В эти дни лот занят"
+                 *     }
+                 */
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description Нельзя уменьшить остаток ниже занятого (`stock_below_committed`) */
+        StockBelowCommitted: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "type": "urn:keeprollin:error:stock_below_committed",
+                 *       "title": "Остаток занят",
+                 *       "status": 409,
+                 *       "code": "stock_below_committed",
+                 *       "detail": "Нельзя уменьшить: 12 шт. уже забронированы"
+                 *     }
+                 */
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
         /** @description Превышен лимит обращений */
         TooManyRequests: {
             headers: {
@@ -980,6 +1383,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Availability"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["Validation"];
+        };
+    };
+    getLotQuote: {
+        parameters: {
+            query: {
+                start: string;
+                end: string;
+            };
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Цены по всем вариантам лота; срок меньше минимального даёт 422 `rental_period_not_allowed` */
+            200: {
+                headers: {
+                    /** @example no-store */
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Quote"];
                 };
             };
             404: components["responses"]["NotFound"];
@@ -1307,6 +1739,37 @@ export interface operations {
             422: components["responses"]["Validation"];
         };
     };
+    updateLot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateLotRequest"];
+            };
+        };
+        responses: {
+            /** @description Обновлённый лот (с новым `version`) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Lot"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["StaleVersion"];
+            422: components["responses"]["Validation"];
+        };
+    };
     setLotStatus: {
         parameters: {
             query?: never;
@@ -1335,6 +1798,143 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            422: components["responses"]["Validation"];
+        };
+    };
+    createLotBlock: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateLotBlockRequest"];
+            };
+        };
+        responses: {
+            /** @description Блок создан */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LotBlock"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["SlotTaken"];
+            422: components["responses"]["Validation"];
+        };
+    };
+    deleteLotBlock: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                block_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Блок удалён */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getAdminSchedule: {
+        parameters: {
+            query: {
+                from: string;
+                to: string;
+                category_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Строки лотов, интервалы аренд и блоков, остатки АКБ */
+            200: {
+                headers: {
+                    /** @example no-store */
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminSchedule"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["Validation"];
+        };
+    };
+    listBatteryStock: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Остатки по типам */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BatteryStock"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    updateBatteryStock: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                battery_type: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateBatteryStockRequest"];
+            };
+        };
+        responses: {
+            /** @description Остаток обновлён */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BatteryStock"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["StockBelowCommitted"];
             422: components["responses"]["Validation"];
         };
     };

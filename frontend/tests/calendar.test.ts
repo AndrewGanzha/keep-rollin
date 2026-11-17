@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
   addDays,
+  blockRangeIso,
   calendarRange,
   dayKeyOf,
+  monthDays,
   monthGrid,
   shiftMonth,
   startOfWeek,
@@ -48,5 +50,28 @@ describe('calendar helpers', () => {
     expect(range.days).toHaveLength(42)
     expect(range.from).toBe('2026-10-25T21:00:00.000Z')
     expect(range.to).toBe('2026-12-06T21:00:00.000Z')
+  })
+
+  it('lists exactly the days of the gant month', () => {
+    expect(monthDays('2026-11-13')).toHaveLength(30)
+    expect(monthDays('2026-02-10')).toHaveLength(28)
+    expect(monthDays('2028-02-10')).toHaveLength(29)
+    expect(monthDays('2026-11-13')[0]).toBe('2026-11-01')
+    expect(monthDays('2026-11-13').at(-1)).toBe('2026-11-30')
+  })
+
+  it('turns a block day range into tenant midnights, end exclusive', () => {
+    expect(blockRangeIso('2026-11-20', '2026-11-22', 'Europe/Moscow')).toEqual({
+      start: '2026-11-19T21:00:00.000Z',
+      end: '2026-11-22T21:00:00.000Z',
+    })
+  })
+
+  it('keeps block boundaries on local midnight across DST', () => {
+    const range = blockRangeIso('2026-03-28', '2026-03-29', 'Europe/Berlin')
+
+    expect(range.start).toBe('2026-03-27T23:00:00.000Z')
+    expect(range.end).toBe('2026-03-29T22:00:00.000Z')
+    expect(Date.parse(range.end) - Date.parse(range.start)).toBe(47 * 60 * 60 * 1000)
   })
 })

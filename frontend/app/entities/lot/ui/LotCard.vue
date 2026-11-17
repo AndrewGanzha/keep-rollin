@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import type { Characteristic } from '~/entities/category'
 import type { Lot } from '../model/lot.types'
-import { formatMoney } from '~/shared/lib'
+import { priceFromLabel, priceFromNote } from '../model/price'
 
 const props = defineProps<{ lot: Lot; labels?: Record<string, Characteristic> }>()
+
+const note = computed(() => priceFromNote(props.lot))
 
 const features = computed(() =>
   Object.entries(props.lot.characteristics)
@@ -61,10 +63,16 @@ const features = computed(() =>
 
     <template #footer>
       <div
-        class="row"
-        style="justify-content: space-between"
+        class="row lot-card__pricing"
+        style="justify-content: space-between; align-items: flex-end; gap: 12px"
       >
-        <span class="lot-card__price">{{ formatMoney(lot.price_minor, lot.currency) }}</span>
+        <div class="lot-card__price-block">
+          <span class="lot-card__price">{{ priceFromLabel(lot) }}</span>
+          <small
+            v-if="note"
+            class="lot-card__note muted"
+          >{{ note }}</small>
+        </div>
         <NuxtLink :to="`/lots/${lot.slug}`">
           <Button
             label="Подробнее"
@@ -111,5 +119,21 @@ const features = computed(() =>
 
 .lot-card__price {
   font-weight: 700;
+}
+
+.lot-card__price-block {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.lot-card__note {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  font-size: 0.8rem;
+  line-height: 1.25;
 }
 </style>
