@@ -101,17 +101,20 @@
 - **UC-1.1** Создать категорию товаров
 - **UC-1.2** Редактировать / архивировать категорию
 - **UC-1.3** Задать произвольные характеристики категории (название, тип, единица, обязательность)
-- **UC-1.4** Создать лот: экземпляр + значения характеристик + модель аренды + цена + фото + описание
+- **UC-1.4** Создать лот: экземпляр + значения характеристик + единица аренды (`day`/`hour`) + варианты
+  (`battery_count` + тарифные тиры) + разрешённые сроки + тип АКБ + фото + описание
 - **UC-1.5** Редактировать лот / сменить статус (активен / архив / на обслуживании / просрочен)
 - **UC-1.6** Массовое создание однотипных лотов
 - **UC-1.7** Задать правила отмены брони
+- **UC-1.8** Задать остатки аккумуляторов по типам (пул тенанта) и видеть занятый пик
 
 ### 5.2. Календарь и расписание (Владелец / Админ)
 
-- **UC-2.1** Просмотр календаря занятости (mobile-first): свободен / забронирован / в аренде / на обслуживании / просрочен
+- **UC-2.1** Просмотр календаря занятости (mobile-first): свободен / забронирован / в аренде / на обслуживании / просрочен;
+  основной вид — гант «лоты × дни месяца», часовой таймлайн — вторичный
 - **UC-2.2** Просмотр доступности модели («3 из 4 свободны, ближайшее окно 14:00–18:00»)
 - **UC-2.3** Фильтрация по категории / лоту / периоду / статусу
-- **UC-2.4** Ручная блокировка лота
+- **UC-2.4** Ручная блокировка лота на целые сутки в TZ тенанта (с причиной; пересечение с арендой запрещено)
 - **UC-2.5** Адаптивный вид для смартфона (свайп по датам, компактные карточки)
 
 ### 5.3. Аналитика (Владелец / Админ)
@@ -304,12 +307,16 @@
 
 **Основной поток:**
 
-1. Пользователь выбирает лот и период в карточке.
-2. Система проверяет пересечения с существующими бронями (`SELECT ... FOR UPDATE` на лот).
-3. Система рассчитывает стоимость (цена × кол-во часов/дней).
+1. Пользователь выбирает лот, вариант («1 АКБ» / «2 АКБ») и период в карточке.
+2. Система проверяет период: `units ≥ min(lot.allowed_durations)` → иначе `422 rental_period_not_allowed`;
+   пересечения с арендами и блокировками (`SELECT ... FOR UPDATE` на лот) → иначе `409 slot_taken`;
+   ёмкость пула АКБ по типу на этот интервал → иначе `409 battery_unavailable` (порядок проверок именно такой).
+3. Система рассчитывает стоимость сервером: тир варианта по сроку с round-up до более длинного пакета (D-20);
+   клиент цену не передаёт, витрина показывает «от» по минимальному тарифу (D-22).
 4. Пользователь подтверждает.
-5. Система создаёт бронь: `id`, `user_id`, `lot_id`, `start_time`, `end_time`, `price`, `status=booked`.
-6. Лот блокируется на период в календаре.
+5. Система создаёт бронь: `id`, `user_id`, `lot_id`, `variant_id`, `start_time`, `end_time`, `price`, `status=booked`;
+   цена замораживается и не меняется при последующей правке тарифов.
+6. Лот блокируется на период в календаре, `battery_count` варианта занимает пул АКБ.
 7. Отправляется подтверждение (email + push).
 8. Пользователь видит бронь в «Мои аренды».
 
@@ -318,6 +325,9 @@
 - **A1.** Пересечение с другой бронью → 409, предложение выбрать другое окно.
 - **A2.** Лот переведён в «на обслуживании» между шагами 1 и 2 → 409, лот скрывается.
 - **A3.** Пользователь не принял оферту → редирект на принятие.
+- **A4.** Свободных АКБ на интервал не хватает → 409 `battery_unavailable`; в диалоге вариант помечен причиной,
+  предложен вариант с меньшим `battery_count`.
+- **A5.** Срок короче минимального для лота → 422 `rental_period_not_allowed` с подсказкой минимума.
 
 **Исключения:**
 
@@ -539,12 +549,25 @@ characteristic
 
 lot
   id, tenant_id, category_id, name, description, photo_urls (jsonb),
-  characteristics (jsonb), rental_model (hourly/daily/custom), price,
-  status (active/archived/maintenance/overdue), created_at
+  characteristics (jsonb), rental_unit (day/hour), battery_type (48v/36v/null),
+  allowed_durations (jsonb: [1, 3, 7, 30]),
+  status (active/archived/maintenance/overdue), version, created_at
+
+lot_variant
+  id, lot_id, battery_count, is_active
+
+lot_price_tier
+  id, variant_id, min_units, price_per_unit_minor
+
+lot_block
+  id, tenant_id, lot_id, start_time, end_time (не включается), reason, created_by, created_at
+
+battery_stock
+  id, tenant_id, battery_type, name, quantity
 
 rental
-  id, tenant_id, user_id, lot_id, start_time, end_time, price,
-  status (booked/active/overdue/completed/cancelled), created_at, closed_at
+  id, tenant_id, user_id, lot_id, variant_id, battery_count, start_time, end_time,
+  price, status (booked/active/overdue/completed/cancelled), created_at, closed_at
 
 ticket
   id, tenant_id, rental_id, lot_id, user_id, category (enum), description,
@@ -565,10 +588,11 @@ audit_log
 
 ### 8.2. Связи (ключевые)
 
-- `tenant` 1—N `user`, `category`, `lot`, `rental`, `ticket`
+- `tenant` 1—N `user`, `category`, `lot`, `rental`, `ticket`, `battery_stock`
 - `category` 1—N `characteristic`, 1—N `lot`
 - `user` 1—N `verification_request`, `rental`, `ticket`, `offer_acceptance`, `push_subscription`
-- `lot` 1—N `rental`, `ticket`
+- `lot` 1—N `rental`, `ticket`, 1—N `lot_variant`, 1—N `lot_block`
+- `lot_variant` 1—N `lot_price_tier`, 1—N `rental`
 - `rental` 1—N `ticket`
 - `offer_version` 1—N `offer_acceptance`
 
@@ -710,6 +734,10 @@ audit_log
 ## 12. Бэклог (после MVP)
 
 ### 12.1. Функциональность
+
+> Перенесено в MVP по CR-01 (`docs/changes/cr-01/README.md`): тарифные тиры и round-up (D-20), цена «от» (D-22),
+> варианты лота с 1/2 АКБ, разрешённые сроки, остатки АКБ и проверка ёмкости (D-23), блокировки дней (D-24),
+> гант «лоты × дни». Здесь остаются только скидки и промокоды — сами тарифы уже в MVP.
 
 - 💳 **Онлайн-оплата и депозиты** — эквайринг, возврат, штрафы за просрочку/повреждения.
 - ⏱ **Продление аренды** — если лот свободен после текущего окна, предложить продлить.

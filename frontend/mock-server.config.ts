@@ -193,7 +193,10 @@ const lots: MockLot[] = [
     'day',
     '48v',
     [1, 7, 30],
-    [makeVariant(1003, 1, [priceTier(1, 130000), priceTier(7, 40000), priceTier(30, 40000)])],
+    [
+      makeVariant(1003, 1, [priceTier(1, 130000), priceTier(7, 40000), priceTier(30, 40000)]),
+      makeVariant(1009, 2, [priceTier(1, 150000), priceTier(7, 50000), priceTier(30, 45000)]),
+    ],
   ),
   makeLot(
     103,

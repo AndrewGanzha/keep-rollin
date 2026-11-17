@@ -259,7 +259,7 @@ ALTER TABLE occupancy ADD CONSTRAINT occupancy_no_overlap
 | `ticket.category` | `no_power`, `no_drive`, `battery`, `damage`, `other`                  |
 | `occupancy.kind` | `booking`, `block`, `maintenance`                                      |
 | `offer_version.status` | `draft`, `active`, `archived`                                   |
-| `rental_model` | `hourly`, `daily`, `custom`                                              |
+| `rental_unit` | `day`, `hour` (заменяет `rental_model`, D-19)                          |
 | `file.purpose` | `lot_photo`, `ticket_photo`, `verification_passport`, `verification_registration`, `verification_selfie` |
 | `characteristic.type` | `number`, `text`, `select`                                        |
 | `notification.status` | `pending`, `sent`, `failed`                                       |

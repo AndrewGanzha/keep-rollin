@@ -27,6 +27,7 @@ const variant = (batteryCount: number, tiers: PriceTier[], isActive = true) => (
 })
 
 describe('D-20: тир и round-up', () => {
+  // Векторы — `contract/pricing.md` §4 (1 АКБ / 2 АКБ, суточный лот urban-one).
   const vectors: [number, number, number][] = [
     [1, 130000, 150000],
     [2, 260000, 300000],
