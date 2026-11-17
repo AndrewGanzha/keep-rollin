@@ -1,3 +1,6 @@
 .DS_Store
 # Local deploy settings (KUBE_CONTEXT, INGRESS_HOST, ...).
 deploy/deploy.env
+
+# Транскрипт голосовых заказчика — источник CR-01, в git не кладём.
+tasks.md

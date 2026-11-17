@@ -20,6 +20,7 @@
 | [`docs/tasks/backend.md`](docs/tasks/backend.md) | §6.2 backend — 54 задачи (B1…B11) |
 | [`docs/tasks/frontend.md`](docs/tasks/frontend.md) | §6.3 frontend — 44 задачи (F1…F11) |
 | [`docs/tasks/qa.md`](docs/tasks/qa.md) | §6.4 окружение и приёмка — QA-00, QA-01 |
+| [`docs/changes/README.md`](docs/changes/README.md) | CR-01: правки заказчика — тарифы «от», варианты 1/2 АКБ, остатки АКБ, блокировки, гант «лоты × дни» |
 | [`docs/delivery.md`](docs/delivery.md) | §9 решения по открытым вопросам ТЗ, §10 риски, §11 трассировка UC → задачи |
 | [`deploy/README.md`](deploy/README.md) | Деплой Nuxt-фронтенда в k3s: образ, манифесты, `deploy.sh`, CI и откат |
 

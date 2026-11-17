@@ -97,6 +97,30 @@
         }
       }
     },
+    "/api/v1/public/lots/{slug}/quote": {
+      "get": {
+        "operationId": "getLotQuote",
+        "tags": ["public"],
+        "summary": "Цена и доступность вариантов лота на интервал",
+        "description": "Цену считает только сервер по алгоритму D-20 (`contract/pricing.md`): тир по сроку + round-up до более длинного пакета. Ответ `no-store`: зависит от интервала и остатков АКБ. Точное количество аккумуляторов не раскрывается — только `available`.",
+        "parameters": [
+          { "name": "slug", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "start", "in": "query", "required": true, "schema": { "type": "string", "format": "date-time" } },
+          { "name": "end", "in": "query", "required": true, "schema": { "type": "string", "format": "date-time" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Цены по всем вариантам лота; срок меньше минимального даёт 422 `rental_period_not_allowed`",
+            "headers": {
+              "Cache-Control": { "schema": { "type": "string" }, "example": "no-store" }
+            },
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Quote" } } }
+          },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "422": { "$ref": "#/components/responses/Validation" }
+        }
+      }
+    },
     "/api/v1/auth/login": {
       "post": {
         "operationId": "login",
@@ -370,6 +394,31 @@
         }
       }
     },
+    "/api/v1/admin/lots/{id}": {
+      "patch": {
+        "operationId": "updateLot",
+        "tags": ["admin"],
+        "summary": "Изменить лот, варианты, тарифы и сроки",
+        "description": "Частичное обновление: любое подмножество полей `CreateLotRequest` плюс обязательный `version` (D-09). Правка тарифов не меняет цену уже созданных аренд.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UpdateLotRequest" } } }
+        },
+        "responses": {
+          "200": {
+            "description": "Обновлённый лот (с новым `version`)",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Lot" } } }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/StaleVersion" },
+          "422": { "$ref": "#/components/responses/Validation" }
+        }
+      }
+    },
     "/api/v1/admin/lots/{id}/status": {
       "post": {
         "operationId": "setLotStatus",
@@ -390,6 +439,124 @@
           "403": { "$ref": "#/components/responses/Forbidden" },
           "404": { "$ref": "#/components/responses/NotFound" },
           "409": { "$ref": "#/components/responses/Conflict" },
+          "422": { "$ref": "#/components/responses/Validation" }
+        }
+      }
+    },
+    "/api/v1/admin/lots/{id}/blocks": {
+      "post": {
+        "operationId": "createLotBlock",
+        "tags": ["admin"],
+        "summary": "Заблокировать дни лота",
+        "description": "Границы выравниваются по началу суток в TZ тенанта, интервал `[start_time, end_time)` (D-24). Пересечение с арендой в статусе `booked`/`active` → 409 `slot_taken`. Блок не расходует АКБ.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateLotBlockRequest" } } }
+        },
+        "responses": {
+          "201": {
+            "description": "Блок создан",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LotBlock" } } }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/SlotTaken" },
+          "422": { "$ref": "#/components/responses/Validation" }
+        }
+      }
+    },
+    "/api/v1/admin/lots/{id}/blocks/{block_id}": {
+      "delete": {
+        "operationId": "deleteLotBlock",
+        "tags": ["admin"],
+        "summary": "Снять блокировку лота",
+        "description": "Удаление сразу освобождает дни для новых броней и публичной доступности.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } },
+          { "name": "block_id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": {
+          "204": { "description": "Блок удалён" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/api/v1/admin/schedule": {
+      "get": {
+        "operationId": "getAdminSchedule",
+        "tags": ["admin"],
+        "summary": "Гант «лоты × дни»: аренды, блоки и остатки АКБ",
+        "description": "Лоты возвращаются все, включая те, у которых нет событий (иначе гант теряет строки). Окно не шире 90 дней, иначе 422. Ответ `no-store`.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "from", "in": "query", "required": true, "schema": { "type": "string", "format": "date" } },
+          { "name": "to", "in": "query", "required": true, "schema": { "type": "string", "format": "date" } },
+          { "name": "category_id", "in": "query", "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Строки лотов, интервалы аренд и блоков, остатки АКБ",
+            "headers": {
+              "Cache-Control": { "schema": { "type": "string" }, "example": "no-store" }
+            },
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AdminSchedule" } } }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "422": { "$ref": "#/components/responses/Validation" }
+        }
+      }
+    },
+    "/api/v1/admin/batteries": {
+      "get": {
+        "operationId": "listBatteryStock",
+        "tags": ["admin"],
+        "summary": "Остатки аккумуляторов тенанта",
+        "description": "Пул АКБ по типам. `peak_committed` — максимум одновременной занятости по активным и будущим арендам (D-23).",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Остатки по типам",
+            "content": {
+              "application/json": {
+                "schema": { "type": "array", "items": { "$ref": "#/components/schemas/BatteryStock" } }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
+    "/api/v1/admin/batteries/{battery_type}": {
+      "patch": {
+        "operationId": "updateBatteryStock",
+        "tags": ["admin"],
+        "summary": "Изменить количество аккумуляторов типа",
+        "description": "`quantity` не может быть меньше `peak_committed` по активным и будущим броням → 409 `stock_below_committed`.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "battery_type", "in": "path", "required": true, "schema": { "type": "string", "examples": ["48v"] } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UpdateBatteryStockRequest" } } }
+        },
+        "responses": {
+          "200": {
+            "description": "Остаток обновлён",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/BatteryStock" } } }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/StockBelowCommitted" },
           "422": { "$ref": "#/components/responses/Validation" }
         }
       }
@@ -597,6 +764,51 @@
         "description": "Ошибка валидации",
         "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } } }
       },
+      "StaleVersion": {
+        "description": "Версия записи устарела (`stale_version`)",
+        "content": {
+          "application/problem+json": {
+            "schema": { "$ref": "#/components/schemas/Problem" },
+            "example": {
+              "type": "urn:keeprollin:error:stale_version",
+              "title": "Версия устарела",
+              "status": 409,
+              "code": "stale_version",
+              "detail": "Лот изменён другим администратором"
+            }
+          }
+        }
+      },
+      "SlotTaken": {
+        "description": "Интервал занят (`slot_taken`)",
+        "content": {
+          "application/problem+json": {
+            "schema": { "$ref": "#/components/schemas/Problem" },
+            "example": {
+              "type": "urn:keeprollin:error:slot_taken",
+              "title": "Слот занят",
+              "status": 409,
+              "code": "slot_taken",
+              "detail": "В эти дни лот занят"
+            }
+          }
+        }
+      },
+      "StockBelowCommitted": {
+        "description": "Нельзя уменьшить остаток ниже занятого (`stock_below_committed`)",
+        "content": {
+          "application/problem+json": {
+            "schema": { "$ref": "#/components/schemas/Problem" },
+            "example": {
+              "type": "urn:keeprollin:error:stock_below_committed",
+              "title": "Остаток занят",
+              "status": 409,
+              "code": "stock_below_committed",
+              "detail": "Нельзя уменьшить: 12 шт. уже забронированы"
+            }
+          }
+        }
+      },
       "TooManyRequests": {
         "description": "Превышен лимит обращений",
         "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } } }
@@ -685,11 +897,15 @@
           "category_id",
           "photos",
           "characteristics",
-          "rental_model",
-          "price_minor",
+          "rental_unit",
+          "battery_type",
+          "variants",
+          "allowed_durations",
+          "price_from",
           "currency",
           "status",
-          "is_bookable"
+          "is_bookable",
+          "version"
         ],
         "properties": {
           "id": { "type": "string", "format": "uuid" },
@@ -699,11 +915,140 @@
           "category_id": { "type": "string", "format": "uuid" },
           "photos": { "type": "array", "items": { "type": "string", "format": "uri" } },
           "characteristics": { "type": "object", "additionalProperties": { "type": ["string", "number"] } },
-          "rental_model": { "type": "string", "enum": ["hourly", "daily", "custom"] },
-          "price_minor": { "type": "integer", "minimum": 1, "examples": [45000] },
+          "rental_unit": {
+            "type": "string",
+            "enum": ["day", "hour"],
+            "description": "Единица срока аренды (D-19)"
+          },
+          "battery_type": {
+            "type": ["string", "null"],
+            "examples": ["48v"],
+            "description": "Тип АКБ из пула `battery_stock`; null — лот без АКБ"
+          },
+          "variants": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "$ref": "#/components/schemas/LotVariant" },
+            "description": "Варианты комплектации; `battery_count` уникален в пределах лота (D-19)"
+          },
+          "allowed_durations": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "type": "integer", "minimum": 1, "maximum": 365 },
+            "description": "Разрешённые сроки в единицах `rental_unit`, по возрастанию (D-25)"
+          },
+          "price_from": {
+            "anyOf": [{ "$ref": "#/components/schemas/PriceFrom" }, { "type": "null" }],
+            "description": "Минимум по активным вариантам и тирам; считает сервер. null — нет активных вариантов (D-22)"
+          },
           "currency": { "type": "string", "examples": ["RUB"] },
           "status": { "type": "string", "enum": ["active", "archived", "maintenance", "overdue"] },
-          "is_bookable": { "type": "boolean" }
+          "is_bookable": { "type": "boolean" },
+          "version": { "type": "integer", "minimum": 1, "description": "Версия записи для PATCH (D-09)" }
+        }
+      },
+      "LotVariant": {
+        "type": "object",
+        "required": ["id", "battery_count", "is_active", "price_tiers"],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "battery_count": {
+            "type": "integer",
+            "minimum": 0,
+            "examples": [1],
+            "description": "Сколько АКБ занимает вариант; 0 — лот без АКБ"
+          },
+          "is_active": { "type": "boolean" },
+          "price_tiers": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "$ref": "#/components/schemas/PriceTier" },
+            "description": "Отсортированы по `min_units`; первая граница = `min(allowed_durations)`; цена за единицу не возрастает"
+          }
+        }
+      },
+      "LotVariantInput": {
+        "type": "object",
+        "required": ["battery_count", "price_tiers"],
+        "properties": {
+          "battery_count": { "type": "integer", "minimum": 0 },
+          "is_active": { "type": "boolean", "description": "По умолчанию `true`" },
+          "price_tiers": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "$ref": "#/components/schemas/PriceTier" }
+          }
+        }
+      },
+      "PriceTier": {
+        "type": "object",
+        "required": ["min_units", "price_per_unit_minor"],
+        "properties": {
+          "min_units": {
+            "type": "integer",
+            "minimum": 1,
+            "examples": [7],
+            "description": "С какого срока в единицах `rental_unit` действует цена"
+          },
+          "price_per_unit_minor": {
+            "type": "integer",
+            "minimum": 1,
+            "examples": [40000],
+            "description": "Цена за единицу в минорных единицах валюты тенанта"
+          }
+        }
+      },
+      "PriceFrom": {
+        "type": "object",
+        "required": ["amount_minor", "per", "at_units", "battery_count"],
+        "properties": {
+          "amount_minor": { "type": "integer", "minimum": 1, "examples": [40000] },
+          "per": { "type": "string", "enum": ["day", "hour"], "description": "Совпадает с `rental_unit` лота" },
+          "at_units": { "type": "integer", "minimum": 1, "examples": [7] },
+          "battery_count": { "type": "integer", "minimum": 0, "examples": [1] }
+        }
+      },
+      "Quote": {
+        "type": "object",
+        "required": ["lot_id", "start", "end", "units", "rental_unit", "variants"],
+        "properties": {
+          "lot_id": { "type": "string", "format": "uuid" },
+          "start": { "type": "string", "format": "date-time" },
+          "end": { "type": "string", "format": "date-time" },
+          "units": { "type": "integer", "minimum": 1, "description": "Округлённая вверх длительность в единицах `rental_unit`" },
+          "rental_unit": { "type": "string", "enum": ["day", "hour"] },
+          "variants": { "type": "array", "items": { "$ref": "#/components/schemas/QuoteVariant" } }
+        }
+      },
+      "QuoteVariant": {
+        "type": "object",
+        "required": [
+          "variant_id",
+          "battery_count",
+          "price_total_minor",
+          "currency",
+          "tier_min_units",
+          "available",
+          "unavailable_reason"
+        ],
+        "properties": {
+          "variant_id": { "type": "string", "format": "uuid" },
+          "battery_count": { "type": "integer", "minimum": 0 },
+          "price_total_minor": { "type": "integer", "minimum": 1, "description": "Итог за весь интервал по алгоритму D-20" },
+          "currency": { "type": "string" },
+          "tier_min_units": { "type": "integer", "minimum": 1, "description": "`min_units` сработавшего тира (с учётом round-up)" },
+          "available": { "type": "boolean" },
+          "unavailable_reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": ["slot_taken", "rental_period_not_allowed", "battery_unavailable"]
+              },
+              { "type": "null" }
+            ],
+            "description": "Причина недоступности варианта; точное количество АКБ не раскрывается"
+          }
         }
       },
       "LotPage": {
@@ -715,6 +1060,121 @@
           "limit": { "type": "integer" },
           "offset": { "type": "integer" }
         }
+      },
+      "LotBlock": {
+        "type": "object",
+        "required": ["id", "lot_id", "start_time", "end_time", "reason", "created_by", "created_at"],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "lot_id": { "type": "string", "format": "uuid" },
+          "start_time": { "type": "string", "format": "date-time", "description": "Начало суток в TZ тенанта" },
+          "end_time": { "type": "string", "format": "date-time", "description": "Конец интервала, не включается (D-05, D-24)" },
+          "reason": { "type": "string", "minLength": 3, "maxLength": 200 },
+          "created_by": { "type": "string", "format": "uuid" },
+          "created_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "CreateLotBlockRequest": {
+        "type": "object",
+        "required": ["start_time", "end_time", "reason"],
+        "properties": {
+          "start_time": { "type": "string", "format": "date-time" },
+          "end_time": { "type": "string", "format": "date-time" },
+          "reason": { "type": "string", "minLength": 3, "maxLength": 200, "examples": ["Техобслуживание"] }
+        }
+      },
+      "ScheduleLot": {
+        "type": "object",
+        "required": ["id", "name", "category_id", "status", "battery_type", "rental_unit"],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "name": { "type": "string" },
+          "category_id": { "type": "string", "format": "uuid" },
+          "status": { "type": "string", "enum": ["active", "archived", "maintenance", "overdue"] },
+          "battery_type": { "type": ["string", "null"] },
+          "rental_unit": { "type": "string", "enum": ["day", "hour"] }
+        }
+      },
+      "ScheduleRentalInterval": {
+        "type": "object",
+        "required": [
+          "id",
+          "lot_id",
+          "kind",
+          "start_time",
+          "end_time",
+          "rental_id",
+          "status",
+          "battery_count",
+          "user_name"
+        ],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "lot_id": { "type": "string", "format": "uuid" },
+          "kind": { "type": "string", "const": "rental" },
+          "start_time": { "type": "string", "format": "date-time" },
+          "end_time": { "type": "string", "format": "date-time" },
+          "rental_id": { "type": "string", "format": "uuid" },
+          "status": { "type": "string", "enum": ["booked", "active", "overdue", "completed", "cancelled"] },
+          "battery_count": { "type": "integer", "minimum": 0 },
+          "user_name": { "type": "string" }
+        }
+      },
+      "ScheduleBlockInterval": {
+        "type": "object",
+        "required": ["id", "lot_id", "kind", "start_time", "end_time", "block_id", "reason"],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "lot_id": { "type": "string", "format": "uuid" },
+          "kind": { "type": "string", "const": "block" },
+          "start_time": { "type": "string", "format": "date-time" },
+          "end_time": { "type": "string", "format": "date-time" },
+          "block_id": { "type": "string", "format": "uuid" },
+          "reason": { "type": "string" }
+        }
+      },
+      "AdminSchedule": {
+        "type": "object",
+        "required": ["lots", "intervals", "battery_stock"],
+        "properties": {
+          "lots": { "type": "array", "items": { "$ref": "#/components/schemas/ScheduleLot" } },
+          "intervals": {
+            "type": "array",
+            "items": {
+              "oneOf": [
+                { "$ref": "#/components/schemas/ScheduleRentalInterval" },
+                { "$ref": "#/components/schemas/ScheduleBlockInterval" }
+              ],
+              "discriminator": {
+                "propertyName": "kind",
+                "mapping": {
+                  "rental": "#/components/schemas/ScheduleRentalInterval",
+                  "block": "#/components/schemas/ScheduleBlockInterval"
+                }
+              }
+            }
+          },
+          "battery_stock": { "type": "array", "items": { "$ref": "#/components/schemas/BatteryStock" } }
+        }
+      },
+      "BatteryStock": {
+        "type": "object",
+        "required": ["battery_type", "name", "quantity", "peak_committed"],
+        "properties": {
+          "battery_type": { "type": "string", "examples": ["48v"] },
+          "name": { "type": "string", "examples": ["48V 720 Вт·ч"] },
+          "quantity": { "type": "integer", "minimum": 0 },
+          "peak_committed": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Максимум одновременной занятости по активным и будущим арендам (D-23)"
+          }
+        }
+      },
+      "UpdateBatteryStockRequest": {
+        "type": "object",
+        "required": ["quantity"],
+        "properties": { "quantity": { "type": "integer", "minimum": 0 } }
       },
       "BusyInterval": {
         "type": "object",
@@ -830,9 +1290,10 @@
       },
       "CreateRentalRequest": {
         "type": "object",
-        "required": ["lot_id", "start_time", "end_time"],
+        "required": ["lot_id", "variant_id", "start_time", "end_time"],
         "properties": {
           "lot_id": { "type": "string", "format": "uuid" },
+          "variant_id": { "type": "string", "format": "uuid", "description": "Вариант лота; цена и `battery_count` берутся из него" },
           "start_time": { "type": "string", "format": "date-time" },
           "end_time": { "type": "string", "format": "date-time" }
         }
@@ -907,19 +1368,68 @@
       },
       "CreateLotRequest": {
         "type": "object",
-        "required": ["name", "category_id", "rental_model", "price_minor", "characteristics"],
+        "required": ["name", "category_id", "rental_unit", "variants", "allowed_durations", "characteristics"],
         "properties": {
           "name": { "type": "string", "minLength": 2, "maxLength": 120 },
           "category_id": { "type": "string", "format": "uuid" },
           "description": { "type": "string", "maxLength": 1000 },
-          "rental_model": { "type": "string", "enum": ["hourly", "daily", "custom"] },
-          "price_minor": { "type": "integer", "minimum": 1 },
+          "rental_unit": { "type": "string", "enum": ["day", "hour"] },
+          "battery_type": {
+            "type": ["string", "null"],
+            "description": "Обязателен, если хотя бы один вариант имеет `battery_count > 0`"
+          },
+          "variants": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "$ref": "#/components/schemas/LotVariantInput" },
+            "description": "`battery_count` уникален; `price_tiers` отсортированы, первая граница = `min(allowed_durations)`, цена за единицу не возрастает"
+          },
+          "allowed_durations": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "type": "integer", "minimum": 1, "maximum": 365 },
+            "description": "По возрастанию, без дублей; `allowed_durations[0] === variants[*].price_tiers[0].min_units`"
+          },
           "characteristics": {
             "type": "object",
             "additionalProperties": { "type": ["string", "number"] }
           },
           "photos": { "type": "array", "items": { "type": "string", "format": "uri" } },
-          "status": { "type": "string", "enum": ["active", "archived", "maintenance"], "default": "active" }
+          "status": {
+            "type": "string",
+            "enum": ["active", "archived", "maintenance"],
+            "description": "По умолчанию `active`"
+          }
+        }
+      },
+      "UpdateLotRequest": {
+        "type": "object",
+        "required": ["version"],
+        "properties": {
+          "version": { "type": "integer", "minimum": 1, "description": "Текущая версия лота; несовпадение → 409 `stale_version`" },
+          "name": { "type": "string", "minLength": 2, "maxLength": 120 },
+          "category_id": { "type": "string", "format": "uuid" },
+          "description": { "type": "string", "maxLength": 1000 },
+          "rental_unit": { "type": "string", "enum": ["day", "hour"] },
+          "battery_type": { "type": ["string", "null"] },
+          "variants": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "$ref": "#/components/schemas/LotVariantInput" }
+          },
+          "allowed_durations": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "type": "integer", "minimum": 1, "maximum": 365 }
+          },
+          "characteristics": {
+            "type": "object",
+            "additionalProperties": { "type": ["string", "number"] }
+          },
+          "photos": { "type": "array", "items": { "type": "string", "format": "uri" } },
+          "status": { "type": "string", "enum": ["active", "archived", "maintenance"] }
         }
       },
       "LotStatusRequest": {
