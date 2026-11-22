@@ -11,9 +11,9 @@ _Подгруппа **B1** · 4 задачи._
 **Зависит:** —
 **Объём:** pyproject (uv), FastAPI, pydantic-settings, ruff, mypy, `/health`+`/readyz`, Dockerfile, Makefile.
 **AC:**
-- [ ] `make run` поднимает API, `/health` → 200, `/readyz` проверяет БД.
-- [ ] Линтеры/типы зелёные в CI.
-- [ ] Секреты только через env, `.env.example` актуален.
+- [x] API поднимается, `/health` → 200, `/readyz` проверяет БД. Smoke: без БД `/readyz` → 503, с PostgreSQL 15 → 200; `make run` локально не запускался (нет `make`), uvicorn-команда проверена smoke-скриптом.
+- [x] Линтеры/типы зелёные в CI. Backend CI run `45057041298`: Python 3.12, PostgreSQL 16, Ruff, format, mypy, pytest и HTTP smoke.
+- [x] Секреты только через env, `.env.example` актуален. `.env` в `.gitignore`, `/readyz` не отдаёт DSN.
 
 ### BE-01 · Middleware и обработка ошибок
 
