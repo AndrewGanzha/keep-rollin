@@ -42,7 +42,10 @@ jobs:
 
     env:
       DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/keep_rollin
+      DATABASE_ROLE: keep_rollin_app
       DATABASE_TIMEOUT_SECONDS: '2'
+      PLATFORM_DOMAIN: platform.test
+      ALLOW_TENANT_HEADER: 'true'
 
     steps:
       - uses: actions/checkout@v4
@@ -64,6 +67,14 @@ jobs:
         working-directory: backend
         run: uv lock --check
 
+      - name: Apply migrations
+        working-directory: backend
+        run: uv run --locked alembic upgrade head
+
+      - name: Migration check
+        working-directory: backend
+        run: uv run --locked python scripts/check_migrations.py
+
       - name: Ruff check
         working-directory: backend
         run: uv run --locked ruff check .
@@ -76,9 +87,9 @@ jobs:
         working-directory: backend
         run: uv run --locked mypy app tests
 
-      - name: Pytest
+      - name: Pytest with coverage
         working-directory: backend
-        run: uv run --locked pytest
+        run: uv run --locked pytest --cov=app --cov-report=term-missing --cov-fail-under=80
 
       - name: Health and readiness smoke
         working-directory: backend

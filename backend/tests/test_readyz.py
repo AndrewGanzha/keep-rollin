@@ -21,10 +21,10 @@ def test_readyz_is_ok_when_database_is_ready(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    async def fake_database_ready(dsn: str | None, timeout_seconds: float) -> bool:
+    async def fake_engine_ready(engine: object, timeout_seconds: float) -> bool:
         return True
 
-    monkeypatch.setattr(health_module, "database_ready", fake_database_ready)
+    monkeypatch.setattr(health_module, "engine_ready", fake_engine_ready)
 
     response = client.get("/readyz")
 

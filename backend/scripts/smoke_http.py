@@ -33,6 +33,7 @@ def running_server(database_url: str | None, timeout_seconds: float) -> Iterator
         host="127.0.0.1",
         port=port,
         log_level="warning",
+        access_log=False,
     )
     server = uvicorn.Server(config)
     thread = threading.Thread(target=server.run, daemon=True)

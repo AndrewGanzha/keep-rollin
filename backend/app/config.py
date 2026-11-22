@@ -18,7 +18,10 @@ class Settings(BaseSettings):
     app_version: str = "0.1.0"
     app_env: Literal["local", "test", "production"] = "local"
     database_url: str | None = Field(default=None, repr=False)
+    database_role: str = Field(default="keep_rollin_app", pattern=r"^[a-z_][a-z0-9_]*$")
     database_timeout_seconds: float = Field(default=2.0, gt=0, le=30)
+    platform_domain: str = "platform.test"
+    allow_tenant_header: bool = False
 
 
 @lru_cache

@@ -4,7 +4,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from app.db import database_ready
+from app.db import engine_ready
 
 router = APIRouter(tags=["infra"])
 
@@ -37,7 +37,10 @@ async def health() -> HealthResponse:
 async def readyz(request: Request) -> JSONResponse:
     """Report readiness after a real, bounded database check."""
     settings = request.app.state.settings
-    ready = await database_ready(settings.database_url, settings.database_timeout_seconds)
+    ready = await engine_ready(
+        getattr(request.app.state, "engine", None),
+        settings.database_timeout_seconds,
+    )
     payload = ReadinessResponse(
         status="ok" if ready else "unavailable",
         checks=ReadinessChecks(database="ok" if ready else "unavailable"),

@@ -12,4 +12,5 @@ backend/.pytest_cache/
 backend/.mypy_cache/
 backend/.ruff_cache/
 backend/**/__pycache__/
+.coverage
 *.py[cod]
