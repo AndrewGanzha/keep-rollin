@@ -85,11 +85,11 @@ jobs:
 
       - name: Mypy
         working-directory: backend
-        run: uv run --locked mypy app tests
+        run: uv run --locked mypy app src tests
 
       - name: Pytest with coverage
         working-directory: backend
-        run: uv run --locked pytest --cov=app --cov-report=term-missing --cov-fail-under=80
+        run: uv run --locked pytest --cov=app --cov=src --cov-report=term-missing --cov-fail-under=80
 
       - name: Health and readiness smoke
         working-directory: backend

@@ -85,6 +85,39 @@ uv run --locked python scripts/smoke_http.py --expect-ready
 если установлен `make` и `uv` есть в `PATH`. Цели coverage/integration требуют
 `DATABASE_URL`.
 
+## Каталог: слои
+
+Публичный каталог добавлен по принципам backend-шаблона:
+
+```text
+src/
+  domain/           # Category, Characteristic, Lot, LotVariant, value objects
+  application/      # DTOs, repository ports, query handlers
+  infrastructure/
+    postgres/       # SQLAlchemy records и repository implementations
+app/api/            # тонкие HTTP-роутеры и FastAPI-wiring
+```
+
+Правила:
+
+- `domain` не импортирует FastAPI, SQLAlchemy или `app`;
+- repository ports возвращают domain entities;
+- DTO собираются через `from_domain(...)`;
+- роутеры не содержат SQL и бизнес-правил;
+- RLS включён на всех таблицах каталога, `tenant_id` денормализован в дочерние таблицы;
+- публичные ответы остаются в формате `contract/openapi.json` (без envelope шаблона);
+- для этого среза используется FastAPI `Depends`, так как request-scoped сессией владеет `TenantMiddleware`; Dishka можно добавить позже без изменения domain/application.
+
+Публичные endpoint:
+
+```text
+GET /api/v1/public/categories
+GET /api/v1/public/lots?category_id=&q=&limit=&offset=
+GET /api/v1/public/lots/{slug}
+```
+
+Админские CRUD-операции каталога отложены до появления собственной авторизации.
+
 ## Известные ограничения MVP
 
 - Настоящий streaming с долгоживущей БД-сессией не поддерживается: тело ответа

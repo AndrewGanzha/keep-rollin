@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from app.config import Settings
 from app.db import DsnSettings, parse_dsn, to_async_dsn
 from app.models import Base
+from src.infrastructure.postgres import models as catalog_models  # noqa: F401
 
 config = context.config
 if config.config_file_name is not None:

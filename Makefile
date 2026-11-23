@@ -25,7 +25,7 @@ backend-format:
 	cd $(BACKEND_DIR) && $(UV) run --locked ruff format --check .
 
 backend-typecheck:
-	cd $(BACKEND_DIR) && $(UV) run --locked mypy app tests
+	cd $(BACKEND_DIR) && $(UV) run --locked mypy app src tests
 
 backend-test:
 	cd $(BACKEND_DIR) && $(UV) run --locked pytest
@@ -36,7 +36,7 @@ backend-integration:
 
 backend-coverage:
 	$(if $(DATABASE_URL),,$(error DATABASE_URL is required for coverage))
-	cd $(BACKEND_DIR) && $(UV) run --locked pytest --cov=app --cov-report=term-missing --cov-fail-under=80
+	cd $(BACKEND_DIR) && $(UV) run --locked pytest --cov=app --cov=src --cov-report=term-missing --cov-fail-under=80
 
 backend-smoke:
 	cd $(BACKEND_DIR) && $(UV) run --locked python scripts/smoke_http.py
