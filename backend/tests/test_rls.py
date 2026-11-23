@@ -126,6 +126,23 @@ async def test_rls_isolates_tenants(
         assert list(result.scalars()) == [email_b]
 
 
+async def test_rls_context_resets_after_commit(
+    session_factory: async_sessionmaker[AsyncSession],
+    seeded: tuple[UUID, UUID, str, str],
+) -> None:
+    tenant_a, _tenant_b, email_a, _email_b = seeded
+
+    async with session_factory() as session:
+        configure_session(session, tenant_id=tenant_a, database_role="keep_rollin_app")
+        first = await session.execute(select(User.email))
+        assert list(first.scalars()) == [email_a]
+        await session.commit()
+
+        configure_session(session, tenant_id=None, database_role="keep_rollin_app")
+        second = await session.execute(select(User.email))
+        assert list(second.scalars()) == []
+
+
 async def test_rls_rejects_cross_tenant_insert(
     session_factory: async_sessionmaker[AsyncSession],
     seeded: tuple[UUID, UUID, str, str],

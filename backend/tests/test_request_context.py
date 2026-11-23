@@ -1,6 +1,6 @@
 import logging
 from collections.abc import AsyncIterator
-from typing import Literal, cast
+from typing import Any, Literal, cast
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -89,6 +89,17 @@ def tenant_router() -> APIRouter:
     @router.get("/api/v1/_test/http-415")
     async def http_415() -> None:
         raise HTTPException(status_code=415)
+
+    @router.get("/api/v1/_test/http-duplicate-headers")
+    async def http_duplicate_headers() -> None:
+        headers = cast(
+            Any,
+            [
+                ("Set-Cookie", "first=1; Path=/"),
+                ("Set-Cookie", "second=2; Path=/"),
+            ],
+        )
+        raise HTTPException(status_code=401, headers=headers)
 
     @router.get("/api/v1/_test/duplicate-headers")
     async def duplicate_headers() -> FastAPIResponse:
@@ -485,9 +496,15 @@ def test_streaming_response_keeps_session_open_until_body_finishes() -> None:
 def test_duplicate_response_headers_are_preserved() -> None:
     with make_client() as client:
         response = client.get("/api/v1/_test/duplicate-headers")
+        error_response = client.get("/api/v1/_test/http-duplicate-headers")
 
     assert response.status_code == 200
     assert response.headers.get_list("set-cookie") == ["first=1", "second=2"]
+    assert error_response.status_code == 401
+    assert error_response.headers.get_list("set-cookie") == [
+        "first=1; Path=/",
+        "second=2; Path=/",
+    ]
 
 
 def test_http_413_and_415_have_contract_codes() -> None:

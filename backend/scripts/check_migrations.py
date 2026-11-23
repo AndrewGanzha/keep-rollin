@@ -44,12 +44,16 @@ async def drop_database(admin_dsn: str, name: str) -> None:
 
 def run_alembic(dsn: str, *args: str) -> None:
     environment = {**os.environ, "DATABASE_URL": dsn}
-    subprocess.run(
+    result = subprocess.run(
         [sys.executable, "-m", "alembic", *args],
         cwd=BACKEND_DIR,
         env=environment,
-        check=True,
+        capture_output=True,
+        text=True,
     )
+    if result.returncode != 0:
+        # Do not print the captured output: it may contain the DSN.
+        raise RuntimeError(f"alembic {' '.join(args)} failed")
 
 
 async def main() -> int:

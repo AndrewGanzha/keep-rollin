@@ -6,7 +6,7 @@ from urllib.parse import parse_qs, urlsplit, urlunsplit
 import certifi
 import pytest
 
-from app.db import database_ready, parse_dsn, split_dsn
+from app.db import create_engine, database_ready, engine_ready, parse_dsn, split_dsn
 
 
 def test_parse_dsn_moves_application_name_to_server_settings() -> None:
@@ -140,10 +140,30 @@ def test_options_is_a_server_setting() -> None:
     assert "options" not in parsed.dsn
 
 
-def test_empty_authority_keeps_three_slashes() -> None:
-    parsed = parse_dsn("postgresql:///keep_rollin?host=127.0.0.1")
+def test_empty_authority_moves_host_into_netloc() -> None:
+    parsed = parse_dsn("postgresql:///keep_rollin?host=127.0.0.1&port=5432")
 
-    assert parsed.dsn == "postgresql:///keep_rollin?host=127.0.0.1"
+    assert parsed.dsn == "postgresql://127.0.0.1:5432/keep_rollin"
+
+
+@pytest.mark.skipif(not os.getenv("DATABASE_URL"), reason="DATABASE_URL is required")
+def test_engine_accepts_empty_authority_uri() -> None:
+    parsed = urlsplit(os.environ["DATABASE_URL"])
+    database = parsed.path.lstrip("/")
+    user = f"&user={parsed.username}" if parsed.username else ""
+    dsn = (
+        f"postgresql:///{database}?host={parsed.hostname}"
+        f"&port={parsed.port or 5432}{user}"
+    )
+
+    async def check() -> bool:
+        engine = create_engine(dsn)
+        try:
+            return await engine_ready(engine, 2.0)
+        finally:
+            await engine.dispose()
+
+    assert asyncio.run(check()) is True
 
 
 @pytest.mark.skipif(not os.getenv("DATABASE_URL"), reason="DATABASE_URL is required")

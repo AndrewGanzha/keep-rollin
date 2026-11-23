@@ -152,11 +152,26 @@ def parse_dsn(dsn: str) -> DsnSettings:
         ssl_arg = _ssl_context("require", ssl_params)
 
     if not parsed.netloc and parsed.path.startswith("/"):
-        normalized = f"{parsed.scheme}://{parsed.path}"
-        if kept:
-            normalized = f"{normalized}?{urlencode(kept)}"
-        if parsed.fragment:
-            normalized = f"{normalized}#{parsed.fragment}"
+        query_values = dict(kept)
+        host = query_values.pop("host", None)
+        port = query_values.pop("port", None)
+        if host:
+            netloc = f"{host}:{port}" if port else host
+            normalized = urlunsplit(
+                (
+                    parsed.scheme,
+                    netloc,
+                    parsed.path,
+                    urlencode(list(query_values.items())),
+                    parsed.fragment,
+                )
+            )
+        else:
+            normalized = f"{parsed.scheme}://{parsed.path}"
+            if query_values:
+                normalized = f"{normalized}?{urlencode(list(query_values.items()))}"
+            if parsed.fragment:
+                normalized = f"{normalized}#{parsed.fragment}"
     else:
         normalized = urlunsplit(
             (parsed.scheme, parsed.netloc, parsed.path, urlencode(kept), parsed.fragment)

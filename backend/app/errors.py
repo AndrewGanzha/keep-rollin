@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from http import HTTPStatus
 from typing import Any
 
@@ -42,7 +42,7 @@ def problem_response(
     title: str | None = None,
     detail: str | None = None,
     fields: Mapping[str, str] | None = None,
-    headers: Mapping[str, str] | None = None,
+    headers: Mapping[str, str] | Sequence[tuple[str, str]] | None = None,
 ) -> JSONResponse:
     try:
         default_title = HTTPStatus(status).phrase
@@ -60,12 +60,18 @@ def problem_response(
         payload["detail"] = detail
     if fields:
         payload["fields"] = dict(fields)
-    return JSONResponse(
+    response = JSONResponse(
         status_code=status,
         content=payload,
         media_type=PROBLEM_CONTENT_TYPE,
-        headers=dict(headers) if headers else None,
     )
+    if isinstance(headers, Mapping):
+        response.headers.update(headers)
+    elif headers:
+        response.raw_headers.extend(
+            (key.encode("latin-1"), value.encode("latin-1")) for key, value in headers
+        )
+    return response
 
 
 def _code_for_status(status: int) -> str:
