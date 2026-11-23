@@ -150,8 +150,12 @@ def test_empty_authority_moves_host_into_netloc() -> None:
 def test_engine_accepts_empty_authority_uri() -> None:
     parsed = urlsplit(os.environ["DATABASE_URL"])
     database = parsed.path.lstrip("/")
-    user = f"&user={parsed.username}" if parsed.username else ""
-    dsn = f"postgresql:///{database}?host={parsed.hostname}&port={parsed.port or 5432}{user}"
+    auth = ""
+    if parsed.username:
+        auth += f"&user={parsed.username}"
+    if parsed.password:
+        auth += f"&password={parsed.password}"
+    dsn = f"postgresql:///{database}?host={parsed.hostname}&port={parsed.port or 5432}{auth}"
 
     async def check() -> bool:
         engine = create_engine(dsn)
