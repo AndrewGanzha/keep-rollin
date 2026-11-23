@@ -151,10 +151,7 @@ def test_engine_accepts_empty_authority_uri() -> None:
     parsed = urlsplit(os.environ["DATABASE_URL"])
     database = parsed.path.lstrip("/")
     user = f"&user={parsed.username}" if parsed.username else ""
-    dsn = (
-        f"postgresql:///{database}?host={parsed.hostname}"
-        f"&port={parsed.port or 5432}{user}"
-    )
+    dsn = f"postgresql:///{database}?host={parsed.hostname}&port={parsed.port or 5432}{user}"
 
     async def check() -> bool:
         engine = create_engine(dsn)
