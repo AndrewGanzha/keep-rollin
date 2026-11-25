@@ -111,6 +111,7 @@ app/api/            # тонкие HTTP-роутеры и FastAPI-wiring
 Публичные endpoint:
 
 ```text
+GET /api/v1/public/tenant
 GET /api/v1/public/categories
 GET /api/v1/public/lots?category_id=&q=&limit=&offset=
 GET /api/v1/public/lots/{slug}
@@ -130,6 +131,20 @@ GET /api/v1/public/lots/{slug}/quote?start=&end=
 `quote` реализует D-20: округление длительности вверх, минимальную допустимую
 длительность, выбор тарифа и round-up к более дешёвому длинному тарифу. Валюта
 берётся из tenant; `battery_unavailable` не вычисляется, пока нет `battery_stock`.
+
+`GET /public/tenant` отдаёт публичный branding, timezone, currency, VAPID key и
+policies из `tenant_settings` с `Cache-Control: max-age=300`. Админский
+`GET/PATCH /admin/settings` отложен до авторизации.
+
+## Outbox
+
+`outbox_message` хранит события в транзакции писателя. `OutboxWriter` только
+добавляет pending-сообщение и не коммитит. `OutboxConsumer` забирает due-события
+через `FOR UPDATE SKIP LOCKED`, вызывает handler и делает retry через 1/5/15 минут,
+после чего переводит событие в `failed`. `NoopOutboxHandler` используется до
+подключения email/push-провайдеров. Уникальность цепочки
+`(event_type, entity_id, user_id, channel)` tenant-scoped и использует
+`NULLS NOT DISTINCT`.
 
 Админские CRUD-операции каталога, ручные блокировки и аренды отложены до появления
 собственной авторизации.

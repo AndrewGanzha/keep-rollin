@@ -6,6 +6,8 @@ from src.infrastructure.postgres.models.lot_price_tier_record import LotPriceTie
 from src.infrastructure.postgres.models.lot_record import LotRecord
 from src.infrastructure.postgres.models.lot_variant_record import LotVariantRecord
 from src.infrastructure.postgres.models.occupancy_record import OccupancyRecord
+from src.infrastructure.postgres.models.outbox_message_record import OutboxMessageRecord
+from src.infrastructure.postgres.models.tenant_settings_record import TenantSettingsRecord
 
 __all__ = [
     "CategoryRecord",
@@ -14,4 +16,6 @@ __all__ = [
     "LotRecord",
     "LotVariantRecord",
     "OccupancyRecord",
+    "OutboxMessageRecord",
+    "TenantSettingsRecord",
 ]
