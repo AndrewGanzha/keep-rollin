@@ -202,6 +202,7 @@ def create_engine(dsn: str) -> AsyncEngine:
     return create_async_engine(
         to_async_dsn(parsed.dsn),
         pool_pre_ping=True,
+        isolation_level="READ COMMITTED",
         connect_args=connect_args,
     )
 

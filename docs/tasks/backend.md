@@ -50,18 +50,23 @@ _Подгруппа **B2** · 6 задач._
 **Зависит:** BE-02, BE-03
 **Объём:** таблицы `user`, `refresh_session`, `password_reset_token`, `user_mfa`; `POST /auth/register`; argon2id; email `citext` уникален в тенанте.
 **AC:**
-- [ ] Дубль email → 409 `email_taken`; нормализация регистра.
-- [ ] Пароль < 8 символов → 422 с `fields`.
-- [ ] Создаётся только роль `user`; `verification_status` = `pending`.
+- [x] Дубль email → 409 `email_taken`; нормализация регистра.
+- [x] Пароль < 8 символов → 422 с `fields`; MVP-список утёкших паролей → 422 `validation_error`.
+- [x] Создаётся только роль `user`; `verification_status` = `pending`.
+- [x] Argon2id-хеширование и проверка выполняются в отдельном bounded executor; dummy-hash переиспользуется.
+- [x] `name` опционален (fallback — локальная часть email), `phone` опционален для MVP.
+- [ ] Полная интеграция HIBP k-anonymity вместо MVP-списка — follow-up.
 
 ### BE-AUTH-02 · Логин, refresh, логаут
 
 **Зависит:** BE-AUTH-01
 **Объём:** `POST /auth/{login,refresh,logout}`, cookie `__Host-rt`, ротация и reuse detection.
 **AC:**
-- [ ] Повторное использование старого refresh → 401 `session_revoked` + отзыв сессии.
-- [ ] Cookie имеет `HttpOnly/Secure/SameSite=Lax`.
-- [ ] Access живёт 15 мин, перевыпуск без потери сессии.
+- [x] Повторное использование старого refresh → 401 `session_revoked` + отзыв сессии.
+- [x] Cookie имеет `HttpOnly/Secure/SameSite=Lax`.
+- [x] Access живёт 15 мин, перевыпуск без потери сессии.
+- [x] Ротация и отзыв сериализованы advisory-lock по family; logout отзывает активную логическую сессию.
+- [x] Регрессионные тесты: две генерации refresh, конкурентная ротация, logout со stale-cookie.
 
 ### BE-AUTH-03 · 2FA (TOTP)
 
@@ -77,8 +82,13 @@ _Подгруппа **B2** · 6 задач._
 **Зависит:** BE-AUTH-03
 **Объём:** `get_current_user`, `require_permission`, `GET /auth/session` (user, tenant, role, `permissions[]`, `verification_status`, `offer_accepted`).
 **AC:**
-- [ ] Каждая строка матрицы §3.3 покрыта тестом (403 `forbidden_role`).
-- [ ] `permissions[]` соответствует роли и используется FE для скрытия UI.
+- [x] Каждая строка матрицы §3.3 покрыта тестом (403 `forbidden_role`).
+- [x] `permissions[]` соответствует роли; `require_permission` проверен на разрешение и отказ.
+- [x] `/auth/session` проверяет подпись, срок, `tnt`, `is_active` и `token_version`.
+- [x] CSRF требует Origin и Sec-Fetch-Site, сравнивает scheme/host/port и отклоняет неканонический Origin; за TLS-прокси uvicorn принимает `X-Forwarded-Proto` только от allowlisted peer.
+- [ ] Использование `permissions[]` во frontend для скрытия UI — при подключении FE.
+- [ ] `prefs-summary` в `/auth/session` — вместе с настройками уведомлений.
+- [ ] Обязательный MFA для owner/admin — BE-AUTH-03.
 
 ### BE-AUTH-05 · Сброс пароля
 
@@ -146,9 +156,12 @@ _Подгруппа **B4** · 11 задач._
 **Зависит:** BE-AUTH-04
 **Объём:** CRUD + архивация, `slug` (unique per tenant), `version`, публичный список.
 **AC:**
-- [ ] Архивная категория скрывает свои лоты из публичного каталога.
-- [ ] Slug уникален и валидируется (`^[a-z0-9-]+$`).
-- [ ] PATCH без `version` → 422; устаревший → 409 `stale_version`.
+- [x] Архивная категория скрывает свои лоты из публичного каталога.
+- [x] Slug уникален и валидируется (`^[a-z0-9-]+$`).
+- [x] PATCH без `version` → 422; устаревший → 409 `stale_version`.
+- [x] GET/POST/PATCH `/admin/categories` только для owner (`catalog.manage`); admin/user → 403.
+- [x] Пагинация, `include_archived`, версия и характеристики в admin-DTO.
+- [ ] Bulk `PUT /admin/categories/{id}/characteristics` — BE-CAT-02.
 
 ### BE-CAT-02 · Характеристики категории
 

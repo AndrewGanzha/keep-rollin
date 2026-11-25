@@ -36,6 +36,12 @@ uv run --locked uvicorn app.main:app --reload --no-access-log
 | `DATABASE_ROLE` | роль для `SET LOCAL ROLE`, по умолчанию `keep_rollin_app` |
 | `PLATFORM_DOMAIN` | домен платформы для поиска поддоменов |
 | `ALLOW_TENANT_HEADER` | `X-Tenant` только для local/test |
+| `JWT_SECRET` | секрет access JWT; в production обязателен |
+| `ACCESS_TTL_SECONDS` | TTL access JWT, по умолчанию 900 |
+| `REFRESH_TTL_DAYS` | TTL refresh-сессии, по умолчанию 30 |
+| `PASSWORD_WORK_TIMEOUT_SECONDS` | максимум ожидания слота Argon2, по умолчанию 5 |
+| `REFRESH_COOKIE_NAME` | имя refresh-cookie, в production `__Host-rt` |
+| `REFRESH_COOKIE_SECURE` | `Secure` для refresh-cookie; в production только `true` |
 
 Без `DATABASE_URL` приложение запускается, `/health` отвечает `200`, а `/readyz`
 честно отвечает `503`.
@@ -118,6 +124,63 @@ GET /api/v1/public/lots/{slug}
 GET /api/v1/public/lots/{slug}/availability?from=&to=
 GET /api/v1/public/lots/{slug}/quote?start=&end=
 ```
+
+## Авторизация
+
+Реализован auth-core:
+
+```text
+POST /api/v1/auth/register
+POST /api/v1/auth/login
+POST /api/v1/auth/refresh
+POST /api/v1/auth/logout
+GET  /api/v1/auth/session
+```
+
+- регистрация принимает `email`, `password`, опциональные `phone` и `name`
+  (без `name` берётся локальная часть email); пароль — argon2id, email
+  нормализуется и уникален в тенанте;
+- MVP-список распространённых утёкших паролей отклоняется с 422; полная
+  интеграция HIBP k-anonymity — отдельная задача;
+- хеширование и проверка пароля выполняются в bounded thread pool, dummy-hash
+  переиспользуется process-wide;
+- access JWT: 15 минут, claims `sub/tnt/role/ver/jti/exp`;
+- refresh — opaque 30 дней в `__Host-rt` (`HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/`);
+- refresh ротируется, повторное использование отзывает всю family; ротация,
+  reuse-revoke и logout сериализуются advisory-lock по family;
+- `GET /auth/session` проверяет `tnt` от Host, `is_active` и `token_version`;
+- RBAC-матрица owner/admin/user и `require_permission` готовы для admin-роутов;
+- CSRF guard требует `Origin` и `Sec-Fetch-Site` для небезопасных
+  auth-запросов, проверяет scheme/host/port и отклоняет неканонический Origin.
+  API-клиенты должны отправлять оба заголовка; для не-браузерных вызовов
+  `Sec-Fetch-Site: none`.
+
+MFA, password reset, rate limit и полная проверка утечек остаются отдельными
+задачами. `phone` опционален для MVP; `prefs-summary` и фактический
+`offer_accepted` появятся вместе с BE-OFF-01 и настройками уведомлений.
+В production обязательны непустой `JWT_SECRET`, cookie `__Host-rt`
+и `Secure=True`; dev-secret запрещён. Образ Docker выставляет
+`APP_ENV=production`, поэтому без `JWT_SECRET` контейнер не стартует.
+За TLS-прокси задайте `FORWARDED_ALLOW_IPS` для uvicorn (образ уже включает
+`--proxy-headers`), чтобы `request.url.scheme` и CSRF-проверка Origin видели
+публичную схему. Доверять `X-Forwarded-Proto` без allowlist нельзя.
+
+## Админ-категории
+
+```text
+GET   /api/v1/admin/categories?include_archived=&limit=&offset=
+POST  /api/v1/admin/categories
+PATCH /api/v1/admin/categories/{id}
+```
+
+- доступ только для `owner` (`catalog.manage`); admin/user получают 403;
+- admin-DTO содержит `version` и активные характеристики; публичный DTO не изменён;
+- `POST` валидирует name/slug/description и отклоняет дубль slug с 409 `slug_taken`;
+- `PATCH` требует `version`, при устаревшей версии возвращает 409 `stale_version`;
+- архивация скрывает категорию и её лоты из публичного каталога;
+- миграция `0007_category_version` добавляет `category.version >= 1`.
+
+Bulk-характеристики (`PUT /admin/categories/{id}/characteristics`) остаются BE-CAT-02.
 
 ## Занятость и цена
 

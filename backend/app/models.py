@@ -3,7 +3,17 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, MetaData, String, Text, UniqueConstraint, func
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Integer,
+    MetaData,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.dialects.postgresql import CITEXT
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -51,7 +61,10 @@ class Tenant(Base):
 
 class User(Base):
     __tablename__ = "user"
-    __table_args__ = (UniqueConstraint("tenant_id", "email", name="uq_user_tenant_email"),)
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "email", name="uq_user_tenant_email"),
+        UniqueConstraint("tenant_id", "id", name="uq_user_tenant_id_id"),
+    )
 
     id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
@@ -66,8 +79,15 @@ class User(Base):
         index=True,
     )
     email: Mapped[str] = mapped_column(CITEXT(), nullable=False)
+    phone: Mapped[str | None] = mapped_column(CITEXT(), nullable=True)
     name: Mapped[str] = mapped_column(Text(), nullable=False)
     role: Mapped[str] = mapped_column(String(16), nullable=False, server_default="user")
+    password_hash: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    verification_status: Mapped[str] = mapped_column(
+        String(16), nullable=False, server_default="pending"
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean(), nullable=False, server_default="true")
+    token_version: Mapped[int] = mapped_column(Integer(), nullable=False, server_default="1")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

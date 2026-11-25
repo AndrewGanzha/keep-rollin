@@ -7,6 +7,7 @@ from src.infrastructure.postgres.models.lot_record import LotRecord
 from src.infrastructure.postgres.models.lot_variant_record import LotVariantRecord
 from src.infrastructure.postgres.models.occupancy_record import OccupancyRecord
 from src.infrastructure.postgres.models.outbox_message_record import OutboxMessageRecord
+from src.infrastructure.postgres.models.refresh_session_record import RefreshSessionRecord
 from src.infrastructure.postgres.models.tenant_settings_record import TenantSettingsRecord
 
 __all__ = [
@@ -17,5 +18,6 @@ __all__ = [
     "LotVariantRecord",
     "OccupancyRecord",
     "OutboxMessageRecord",
+    "RefreshSessionRecord",
     "TenantSettingsRecord",
 ]

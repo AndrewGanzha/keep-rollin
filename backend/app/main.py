@@ -4,6 +4,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.api.admin_categories import router as admin_categories_router
+from app.api.auth import router as auth_router
+from app.api.auth_deps import get_password_hasher
 from app.api.availability import router as availability_router
 from app.api.catalog import router as catalog_router
 from app.api.health import router as health_router
@@ -47,6 +50,7 @@ def create_app(
         application.state.engine = engine
         application.state.session_factory = factory
         application.state.tenant_resolver = resolver
+        get_password_hasher()
         try:
             yield
         finally:
@@ -66,6 +70,8 @@ def create_app(
     application.add_middleware(TenantMiddleware)
     application.add_middleware(RequestContextMiddleware)
     application.include_router(health_router)
+    application.include_router(auth_router)
+    application.include_router(admin_categories_router)
     application.include_router(catalog_router)
     application.include_router(availability_router)
     application.include_router(quote_router)

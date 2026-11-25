@@ -128,6 +128,7 @@ def make_client(
         app_env=app_env,
         platform_domain="platform.test",
         allow_tenant_header=allow_tenant_header,
+        jwt_secret="test-request-context-secret-0123456789abcdef",
     )
     app = create_app(
         settings,
