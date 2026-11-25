@@ -1,9 +1,9 @@
 # Backend (FastAPI)
 
-Каркас backend для BE-00…BE-03. Сервис содержит инфраструктурные
-`GET /health` и `GET /readyz`, request context, problem+json, JSON access logs,
-tenant resolution по Host, SQLAlchemy/Alembic и RLS-изоляцию `tenant`/`user`.
-Бизнес-эндпоинты появляются в следующих задачах.
+Backend keep-rollin: FastAPI, SQLAlchemy/Alembic, tenant RLS, публичный каталог,
+доступность и расчёт цены. Сервис содержит `GET /health` и `GET /readyz`,
+request context, problem+json, JSON access logs и tenant resolution по Host.
+Админские и авторизованные сценарии подключаются после собственной авторизации.
 
 ## Требования
 
@@ -63,9 +63,9 @@ $env:DATABASE_URL = "postgresql://postgres:postgres@127.0.0.1:5432/keep_rollin"
 uv lock --check
 uv run --locked ruff check .
 uv run --locked ruff format --check .
-uv run --locked mypy app tests
+uv run --locked mypy app src tests
 uv run --locked pytest
-uv run --locked pytest --cov=app --cov-report=term-missing --cov-fail-under=80
+uv run --locked pytest --cov=app --cov=src --cov-report=term-missing --cov-fail-under=80
 uv run --locked python scripts/smoke_http.py --expect-ready
 ```
 
@@ -114,9 +114,25 @@ app/api/            # тонкие HTTP-роутеры и FastAPI-wiring
 GET /api/v1/public/categories
 GET /api/v1/public/lots?category_id=&q=&limit=&offset=
 GET /api/v1/public/lots/{slug}
+GET /api/v1/public/lots/{slug}/availability?from=&to=
+GET /api/v1/public/lots/{slug}/quote?start=&end=
 ```
 
-Админские CRUD-операции каталога отложены до появления собственной авторизации.
+## Занятость и цена
+
+`occupancy` хранит интервалы `[start, end)` с `tenant_id`, tenant-safe FK на лот
+и PostgreSQL `EXCLUDE USING gist` для активных пересечений. `reserve`/`release`
+реализованы сервисными примитивами: пересечение даёт `OccupancyConflictError`,
+повторный `release` идемпотентен. Публичная доступность маскирует внутренние
+типы занятости как `busy` и возвращает `next_free`; диапазон больше 90 дней
+отклоняется.
+
+`quote` реализует D-20: округление длительности вверх, минимальную допустимую
+длительность, выбор тарифа и round-up к более дешёвому длинному тарифу. Валюта
+берётся из tenant; `battery_unavailable` не вычисляется, пока нет `battery_stock`.
+
+Админские CRUD-операции каталога, ручные блокировки и аренды отложены до появления
+собственной авторизации.
 
 ## Известные ограничения MVP
 

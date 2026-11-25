@@ -5,6 +5,7 @@ from src.infrastructure.postgres.models.characteristic_record import Characteris
 from src.infrastructure.postgres.models.lot_price_tier_record import LotPriceTierRecord
 from src.infrastructure.postgres.models.lot_record import LotRecord
 from src.infrastructure.postgres.models.lot_variant_record import LotVariantRecord
+from src.infrastructure.postgres.models.occupancy_record import OccupancyRecord
 
 __all__ = [
     "CategoryRecord",
@@ -12,4 +13,5 @@ __all__ = [
     "LotPriceTierRecord",
     "LotRecord",
     "LotVariantRecord",
+    "OccupancyRecord",
 ]

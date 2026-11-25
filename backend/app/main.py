@@ -4,8 +4,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.api.availability import router as availability_router
 from app.api.catalog import router as catalog_router
 from app.api.health import router as health_router
+from app.api.quote import router as quote_router
 from app.config import Settings, get_settings
 from app.db import create_engine, create_session_factory
 from app.errors import register_exception_handlers
@@ -64,6 +66,8 @@ def create_app(
     application.add_middleware(RequestContextMiddleware)
     application.include_router(health_router)
     application.include_router(catalog_router)
+    application.include_router(availability_router)
+    application.include_router(quote_router)
     return application
 
 

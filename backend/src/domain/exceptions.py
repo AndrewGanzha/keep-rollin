@@ -24,3 +24,15 @@ class InvalidAllowedDurationsError(CatalogDomainError):
 
 class InvalidPriceTierError(CatalogDomainError):
     pass
+
+
+class InvalidTimeRangeError(CatalogDomainError):
+    pass
+
+
+class InvalidOccupancyError(CatalogDomainError):
+    pass
+
+
+class OccupancyConflictError(CatalogDomainError):
+    pass
