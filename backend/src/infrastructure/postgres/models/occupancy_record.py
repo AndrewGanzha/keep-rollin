@@ -30,6 +30,15 @@ class OccupancyRecord(Base):
             name="fk_occupancy_tenant_lot",
             ondelete="CASCADE",
         ),
+        ForeignKeyConstraint(
+            ["tenant_id", "created_by"],
+            ["user.tenant_id", "user.id"],
+            name="fk_occupancy_tenant_created_by_user",
+        ),
+        CheckConstraint(
+            "reason IS NULL OR char_length(reason) BETWEEN 3 AND 200",
+            name="ck_occupancy_reason_length",
+        ),
         CheckConstraint(
             "kind IN ('booking', 'block', 'maintenance')",
             name="ck_occupancy_kind",
@@ -47,6 +56,7 @@ class OccupancyRecord(Base):
             where=text("status = 'active'"),
         ),
         Index("ix_occupancy_tenant_lot", "tenant_id", "lot_id"),
+        Index("ix_occupancy_tenant_created_by", "tenant_id", "created_by"),
     )
 
     id: Mapped[UUID] = mapped_column(
@@ -66,6 +76,8 @@ class OccupancyRecord(Base):
     status: Mapped[str] = mapped_column(
         Text(), nullable=False, default="active", server_default="active"
     )
+    reason: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    created_by: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

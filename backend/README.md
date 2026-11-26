@@ -228,6 +228,25 @@ POST /api/v1/me/offer-acceptances
 - `GET /auth/session` возвращает `offer_accepted=true` только после принятия
   текущей active-версии; новая публикация сбрасывает флаг до повторного принятия.
 
+## Админ-календарь и блокировки
+
+```text
+GET    /api/v1/admin/calendar?from=&to=&category_id=&lot_id=&status=
+GET    /api/v1/admin/lots/{id}/calendar?from=&to=
+POST   /api/v1/admin/lots/{id}/blocks
+DELETE /api/v1/admin/lots/{id}/blocks/{block_id}
+```
+
+- доступ: `calendar.view` / `calendar.block` (owner и admin), user → 403;
+- окно календаря ограничено 90 днями, ответы `no-store`, фильтр шире 200 лотов → 422;
+- событие содержит `kind`, `rental_id` или `block_id`, `status`, времена и `reason`;
+- booking-события отдают статус `booked`; block/maintenance — статус occupancy;
+- границы блока выравниваются по локальной полуночи tenant (хранение в UTC);
+- блок требует причину 3–200 символов и автора, пересечение с active occupancy → 409 `slot_taken`;
+- удаление блока освобождает интервал; повторное удаление идемпотентно, неизвестный блок → 404.
+
+Audit-запись блокировок остаётся в BE-VER-04; аренды/rental status появятся в BE-BOOK-01.
+
 ## Занятость и цена
 
 `occupancy` хранит интервалы `[start, end)` с `tenant_id`, tenant-safe FK на лот

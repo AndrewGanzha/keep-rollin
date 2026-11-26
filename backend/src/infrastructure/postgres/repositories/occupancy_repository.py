@@ -39,6 +39,8 @@ class OccupancyRepository(IOccupancyRepository):
             ),
             ref_id=occupancy.ref_id,
             status=occupancy.status,
+            reason=occupancy.reason,
+            created_by=occupancy.created_by,
             created_at=occupancy.created_at,
             updated_at=occupancy.updated_at,
         )
@@ -91,4 +93,6 @@ class OccupancyRepository(IOccupancyRepository):
             period=TimeRange(start=start, end=end),
             ref_id=record.ref_id,
             status=cast(OccupancyStatus, record.status),
+            reason=record.reason,
+            created_by=record.created_by,
         )

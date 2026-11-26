@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from app.db import configure_session, create_engine, create_session_factory
 from app.models import Tenant
 from src.application.services.occupancy import OccupancyService
-from src.domain.exceptions import OccupancyConflictError
+from src.domain.exceptions import InvalidOccupancyError, OccupancyConflictError
 from src.domain.value_objects.time_range import TimeRange
 from src.infrastructure.postgres.models.category_record import CategoryRecord
 from src.infrastructure.postgres.models.lot_record import LotRecord
@@ -163,6 +163,22 @@ async def test_overlapping_reservations_race_has_one_winner(
     assert sum(result is not None for result in results) == 1
 
 
+async def test_block_reservation_requires_reason_and_author(
+    session_factory: async_sessionmaker[AsyncSession],
+    seeded: tuple[UUID, UUID, UUID],
+) -> None:
+    tenant_a, _tenant_b, lot_a = seeded
+    async with session_factory() as session:
+        configure_session(session, tenant_id=tenant_a, database_role="keep_rollin_app")
+        service = OccupancyService(OccupancyRepository(session))
+        with pytest.raises(InvalidOccupancyError):
+            await service.reserve(
+                lot_id=lot_a,
+                kind="block",
+                period=TimeRange(START, END),
+            )
+
+
 async def test_adjacent_intervals_are_allowed(
     session_factory: async_sessionmaker[AsyncSession],
     seeded: tuple[UUID, UUID, UUID],
@@ -178,7 +194,7 @@ async def test_adjacent_intervals_are_allowed(
         )
         second = await service.reserve(
             lot_id=lot_a,
-            kind="block",
+            kind="booking",
             period=TimeRange(END, datetime(2026, 1, 1, 14, tzinfo=UTC)),
         )
         await session.commit()

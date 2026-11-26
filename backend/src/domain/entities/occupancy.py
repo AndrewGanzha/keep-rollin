@@ -10,6 +10,14 @@ OccupancyKind = Literal["booking", "block", "maintenance"]
 OccupancyStatus = Literal["active", "released"]
 
 
+class TooManyCalendarLotsError(InvalidOccupancyError):
+    pass
+
+
+class BlockNotFoundError(InvalidOccupancyError):
+    pass
+
+
 @dataclass(frozen=True)
 class Occupancy(Entity):
     lot_id: UUID
@@ -17,6 +25,8 @@ class Occupancy(Entity):
     period: TimeRange
     ref_id: UUID | None
     status: OccupancyStatus
+    reason: str | None = None
+    created_by: UUID | None = None
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -30,6 +40,12 @@ class Occupancy(Entity):
             raise InvalidOccupancyError("period must be a TimeRange")
         if self.ref_id is not None and not isinstance(self.ref_id, UUID):
             raise InvalidOccupancyError("ref_id must be a UUID or None")
+        if self.reason is not None and (
+            not isinstance(self.reason, str) or not 3 <= len(self.reason) <= 200
+        ):
+            raise InvalidOccupancyError("reason must be 3-200 characters or None")
+        if self.created_by is not None and not isinstance(self.created_by, UUID):
+            raise InvalidOccupancyError("created_by must be a UUID or None")
 
     @property
     def is_active(self) -> bool:

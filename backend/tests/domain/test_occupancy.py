@@ -65,3 +65,27 @@ def test_occupancy_validates_kind_status_and_ref() -> None:
             ref_id="not-a-uuid",  # type: ignore[arg-type]
             status="active",
         )
+    legacy_block = Occupancy(
+        id=uuid4(),
+        created_at=START,
+        updated_at=START,
+        lot_id=uuid4(),
+        kind="block",
+        period=TimeRange(START, END),
+        ref_id=None,
+        status="active",
+    )
+    assert legacy_block.reason is None
+    block = Occupancy(
+        id=uuid4(),
+        created_at=START,
+        updated_at=START,
+        lot_id=uuid4(),
+        kind="block",
+        period=TimeRange(START, END),
+        ref_id=None,
+        status="active",
+        reason="Repair",
+        created_by=uuid4(),
+    )
+    assert block.reason == "Repair"
