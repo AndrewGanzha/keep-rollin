@@ -33,8 +33,11 @@ graph LR
 
 CI-гейты (job `contract`):
 
+> Текущий `contract/openapi.json` фиксирует пути и схемы DTO; полные 4xx-ответы, `application/problem+json`-примеры и взаимоисключающие success/challenge-варианты для auth-операций остаются в BE-QA-01/CT-08. Runtime-поведение ошибок покрыто HTTP-тестами (401/403/409/422/429, `Retry-After`).
+
 ```bash
-make openapi                 # backend: python -m app.scripts.export_openapi > contract/openapi.json
+cd backend
+python scripts/export_openapi.py      # пишет contract/openapi.json без редиректа
 git diff --exit-code contract/openapi.json
 oasdiff breaking contract/openapi.json@main contract/openapi.json   # падает → метка breaking-contract
 pnpm --dir frontend gen:api && git diff --exit-code frontend/generated  # кодогенерация детерминирована
@@ -70,7 +73,7 @@ schemathesis run contract/openapi.json --url http://api:8000 --checks all   # в
 | D-01 | Тенант               | Тенант определяется по `Host`; `X-Tenant` — только dev/test; `tenant_id` никогда не в теле запроса |
 | D-02 | Пути и версии        | `/api/v1/{public,me,admin,platform}`; breaking-изменения → `/api/v2`                            |
 | D-03 | Аутентификация       | Access JWT 15 мин в памяти; refresh — в `__Host-rt` (HttpOnly/Secure/SameSite=Lax), ротация     |
-| D-04 | 2FA                  | TOTP обязателен для `owner`/`admin`; `mfa_token` 5 мин; 10 recovery-кодов                      |
+| D-04 | 2FA                  | TOTP обязателен для `owner`/`admin`; `mfa_token` 5 мин; 10 recovery-кодов; enrollment до выдачи access |
 | D-05 | Время                | Всё в UTC ISO-8601 (`Z`), `timestamptz`; интервалы полуоткрытые `[start, end)`                  |
 | D-06 | Деньги               | `price_minor` (int) + `currency` тенанта; цену считает только сервер                           |
 | D-07 | Списки               | `limit` (20, max 100) + `offset` + `sort`; ответ `{items,total,limit,offset}`; неизвестный фильтр → 422 |
@@ -90,7 +93,7 @@ schemathesis run contract/openapi.json --url http://api:8000 --checks all   # в
 
 1. `Host` → `tenant` (уникальные `subdomain` и `domain`); ответ 404 `tenant_not_found`, если не найден.
 2. JWT содержит `tnt`; несовпадение с `Host` → 403 `tenant_mismatch` (защита от переноса токена).
-3. RLS: `SET LOCAL app.tenant_id` в начале транзакции (SQLAlchemy event `after_begin`); воркер/миграции — `app.bypass_rls`.
+3. RLS: `SET LOCAL app.tenant_id` в начале транзакции (SQLAlchemy event `after_begin`); воркер/CLI-провижининг используют отдельный привилегированный DSN (не `keep_rollin_app`) и не полагаются на GUC-bypass.
 4. Nuxt SSR обязан пробрасывать `host` и `cookie` в исходящие запросы; SSR-кэш — по `host+path`, никакого общего кэша между тенантами.
 
 ### 3.2. Аутентификация (D-03, D-04)
@@ -104,6 +107,7 @@ schemathesis run contract/openapi.json --url http://api:8000 --checks all   # в
 | Пароль           | argon2id; минимум 8 символов; «утечка в списке» → 422                    |
 | MFA              | TOTP 30 с, ±1 окно, lockout 5 попыток/5 мин; recovery-код одноразовый   |
 | Сброс пароля     | Токен 1 ч, одноразовый; после сброса все refresh-сессии отозваны        |
+| Enrollment staff | Пароль верный, но MFA не подтверждён → только `mfa_setup_required` + `mfa_token`; access/refresh не выдаются |
 
 Пример логина с MFA:
 
@@ -112,6 +116,20 @@ POST /api/v1/auth/login  →  200 {"mfa_required": true, "mfa_token": "..."}
 POST /api/v1/auth/mfa/verify {"mfa_token": "...", "code": "123456"}
                          →  200 {"access_token": "...", "expires_in": 900, "user": {...}}
 ```
+
+Первый вход owner/admin без подтверждённого TOTP:
+
+```json
+POST /api/v1/auth/login → 200 {"mfa_setup_required": true, "mfa_token": "..."}
+POST /api/v1/auth/mfa/setup {"mfa_token": "..."}
+                        → 200 {"secret": "...", "otpauth_uri": "otpauth://..."}
+POST /api/v1/auth/mfa/confirm {"mfa_token": "...", "code": "123456"}
+                        → 200 {"access_token": "...", "recovery_codes": ["...", "..."]}
+```
+
+`mfa_token` — отдельный тип JWT (`typ=mfa`), не принимается как Bearer access. Подтверждение MFA повышает `token_version` и отзывает прежние сессии. Recovery-коды хранятся keyed-хешами и одноразовы. Lockout-счётчик сохраняется до истечения окна; 6-я попытка возвращает `429 rate_limited` + `Retry-After`.
+
+Сброс пароля не раскрывает существование аккаунта: `POST /auth/password/forgot` всегда `202` с одинаковым телом. Токен живёт 1 час, хранится хешем, а материал для доставки — в зашифрованном виде до подключения email-воркера (BE-NOT-02). Успешный сброс повышает `token_version` и отзывает все refresh-семьи.
 
 ### 3.3. Роли и права
 
@@ -312,3 +330,4 @@ ALTER TABLE occupancy ADD CONSTRAINT occupancy_no_overlap
 * `Date`-заголовок ответа — источник для клиентского таймера (FE считает offset, не доверяет локальным часам).
 * Кэш: `GET /public/tenant` → `max-age=300`; каталог/карточка → `max-age=60, stale-while-revalidate=300`; доступность → `max-age=10`; `/me` и `/admin` → `no-store`.
 * Валюта одна на тенанта; мультивалютность — бэклог (ТЗ 12.1).
+* Rate limit логина — in-process, `tenant+IP` и `tenant+email`, окно и лимиты из env (`AUTH_RATE_LIMIT_*`). Это ограничение MVP: при нескольких API-инстансах эффективный лимит умножается; Redis — бэклог. `X-Forwarded-For` не используется, клиентский IP берётся из доверенного `request.client.host` (настройка `FORWARDED_ALLOW_IPS` на прокси).

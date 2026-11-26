@@ -48,7 +48,7 @@ _Подгруппа **B2** · 6 задач._
 ### BE-AUTH-01 · Регистрация и модель пользователя
 
 **Зависит:** BE-02, BE-03
-**Объём:** таблицы `user`, `refresh_session`, `password_reset_token`, `user_mfa`; `POST /auth/register`; argon2id; email `citext` уникален в тенанте.
+**Объём:** таблицы `user` (MFA-поля), `refresh_session`, `password_reset_token`, `mfa_challenge`; `POST /auth/register`; argon2id; email `citext` уникален в тенанте.
 **AC:**
 - [x] Дубль email → 409 `email_taken`; нормализация регистра.
 - [x] Пароль < 8 символов → 422 с `fields`; MVP-список утёкших паролей → 422 `validation_error`.
@@ -73,9 +73,9 @@ _Подгруппа **B2** · 6 задач._
 **Зависит:** BE-AUTH-02
 **Объём:** `POST /auth/mfa/{setup,confirm,verify}`; recovery-коды; обязательность для `owner`/`admin`.
 **AC:**
-- [ ] Без подтверждённого MFA owner/admin не получает access.
-- [ ] Recovery-код одноразовый; 10 кодов, хранятся хешами.
-- [ ] 5 неверных попыток/5 мин → блокировка (`rate_limited`).
+- [x] Без подтверждённого MFA owner/admin не получает access: login возвращает `mfa_setup_required`/`mfa_required` + `mfa_token`, refresh и Bearer-проверка отклоняют такие сессии; enrollment повышает `token_version` и отзывает прежние сессии.
+- [x] Recovery-код одноразовый; 10 кодов, хранятся keyed-хешами (HMAC-SHA256), возвращаются один раз.
+- [x] 5 неверных попыток/5 мин → блокировка; счётчик сохраняется после 401, 6-я попытка → 429 `rate_limited`; TOTP ±1 шаг и защита от replay по `last_step`.
 
 ### BE-AUTH-04 · RBAC и `/auth/session`
 
@@ -88,24 +88,25 @@ _Подгруппа **B2** · 6 задач._
 - [x] CSRF требует Origin и Sec-Fetch-Site, сравнивает scheme/host/port и отклоняет неканонический Origin; за TLS-прокси uvicorn принимает `X-Forwarded-Proto` только от allowlisted peer.
 - [ ] Использование `permissions[]` во frontend для скрытия UI — при подключении FE.
 - [ ] `prefs-summary` в `/auth/session` — вместе с настройками уведомлений.
-- [ ] Обязательный MFA для owner/admin — BE-AUTH-03.
+- [x] Обязательный MFA для owner/admin — BE-AUTH-03.
 
 ### BE-AUTH-05 · Сброс пароля
 
 **Зависит:** BE-AUTH-01
 **Объём:** `POST /auth/password/{forgot,reset}`, токен 1 ч.
 **AC:**
-- [ ] `forgot` всегда 202 (нет enumeration).
-- [ ] После сброса все refresh-сессии отозваны.
+- [x] `forgot` всегда 202 (нет enumeration); для известного/неизвестного/inactive email одинаковое тело.
+- [x] После сброса все refresh-сессии отозваны, `token_version` повышен, токен одноразовый и истекает через 1 ч.
+- [ ] Доставка письма — BE-NOT-02: токен и зашифрованный delivery-material сохраняются, outbox-событие `auth.password_reset` создаётся; SMTP-воркер ещё не подключён.
 
 ### BE-AUTH-06 · Rate limit аутентификации
 
 **Зависит:** BE-AUTH-02
-**Объём:** in-process лимитер (IP+email), `Retry-After`, метрика.
+**Объём:** in-process лимитер (IP+email), `Retry-After`; экспорт метрики — follow-up вместе с `/metrics` (BE-WRK-01).
 **AC:**
-- [ ] 10 логинов/мин/IP → 429 `rate_limited`.
-- [ ] Лимит конфигурируется через env.
-- [ ] Ограничение задокументировано как single-instance (см. §10).
+- [x] 10 логинов/мин/IP → 429 `rate_limited`; дополнительный bucket tenant+email; `Retry-After` возвращается.
+- [x] Лимит конфигурируется через env (`AUTH_RATE_LIMIT_PER_MINUTE`, `AUTH_RATE_LIMIT_EMAIL_PER_MINUTE`, `AUTH_RATE_LIMIT_WINDOW_SECONDS`).
+- [x] Ограничение задокументировано как single-instance (см. §10); `X-Forwarded-For` не используется.
 
 ## 6.2.3. Тенант, настройки, администраторы, оферта
 

@@ -4,6 +4,8 @@
 
 Роли: `гость` — без токена; `user`, `admin`, `owner` — см. §3.3. Все пути с префиксом `/api/v1`.
 
+`*` MFA setup/confirm доступны без access-токена: короткоживущий `mfa_token` выдаётся после проверки пароля и подтверждает только право завершить enrollment для этого пользователя.
+
 ### 4.1. Публичные и сессия
 
 | Метод и путь                              | Роли  | Назначение / заметки |
@@ -15,22 +17,22 @@
 | `GET /public/lots/{slug}/availability`    | гость | §3.7 |
 | `GET /public/availability`                | гость | Агрегат по категории/модели (UC-2.2) |
 | `GET /public/offers/current`              | гость | Активная версия оферты (текст + версия) |
-| `GET /health`, `GET /readyz`, `GET /metrics` | infra | Liveness / readiness / Prometheus |
+| `GET /health`, `GET /readyz` | infra | Liveness / readiness (Prometheus `/metrics` — follow-up BE-WRK-01) |
 
 ### 4.2. Аутентификация и профиль
 
 | Метод и путь                     | Роли  | Назначение / заметки |
 | -------------------------------- | ----- | -------------------- |
 | `POST /auth/register`            | гость | email+phone+password → 201 + токены |
-| `POST /auth/login`               | гость | → токены или `mfa_required` |
-| `POST /auth/mfa/verify`          | гость | `mfa_token` + код → токены |
-| `POST /auth/mfa/setup`           | owner/admin | Секрет + otpauth-URI |
-| `POST /auth/mfa/confirm`         | owner/admin | Код → recovery-коды |
+| `POST /auth/login`               | гость | → токены или `mfa_required`/`mfa_setup_required` |
+| `POST /auth/mfa/verify`          | гость | `mfa_token` + TOTP/recovery-код → токены |
+| `POST /auth/mfa/setup`           | гость* | `mfa_token` (purpose `enroll`) → секрет + otpauth-URI |
+| `POST /auth/mfa/confirm`         | гость* | `mfa_token` + код → токены + 10 recovery-кодов |
 | `POST /auth/refresh`             | cookie | Ротация refresh |
 | `POST /auth/logout`              | все   | Отзыв сессии, очистка cookie |
 | `POST /auth/password/forgot`     | гость | Всегда 202 (без enumeration) |
-| `POST /auth/password/reset`      | гость | Токен + новый пароль |
-| `GET /auth/session`              | все   | user, tenant, role, `permissions[]`, `verification_status`, `offer_accepted`, prefs-summary |
+| `POST /auth/password/reset`      | гость | Токен + новый пароль; 204 |
+| `GET /auth/session`              | все   | user, tenant, role, `permissions[]`, `verification_status`, `offer_accepted`, `mfa_enabled` (`prefs-summary` — follow-up BE-NOT-04) |
 | `GET /me/push-subscriptions`     | user+ | Список подписок |
 | `POST /me/push-subscriptions`    | user+ | Upsert по `endpoint` |
 | `DELETE /me/push-subscriptions/{id}` | user+ | Отписка |

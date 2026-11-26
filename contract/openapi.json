@@ -1,899 +1,975 @@
 {
-  "openapi": "3.1.0",
-  "info": {
-    "title": "Keep Rollin API",
-    "version": "1.0.0-seed",
-    "description": "Seed-подмножество контракта (§4 плана): публичный каталог, авторизация, аренды, staff-операции (аренды, верификация, тикеты). Источник правды переезжает в Pydantic на CT-03."
-  },
-  "servers": [{ "url": "/" }],
-  "tags": [
-    { "name": "public", "description": "Доступно без токена" },
-    { "name": "auth", "description": "Аутентификация" },
-    { "name": "rentals", "description": "Брони и аренды" },
-    { "name": "admin", "description": "Staff-операции (admin, owner)" }
-  ],
-  "paths": {
-    "/api/v1/public/tenant": {
-      "get": {
-        "operationId": "getTenant",
-        "tags": ["public"],
-        "summary": "Брендинг и политики тенанта",
-        "responses": {
-          "200": {
-            "description": "Тенант",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Tenant" } } }
-          },
-          "404": { "$ref": "#/components/responses/NotFound" }
-        }
-      }
-    },
-    "/api/v1/public/categories": {
-      "get": {
-        "operationId": "listCategories",
-        "tags": ["public"],
-        "summary": "Активные категории с характеристиками",
-        "responses": {
-          "200": {
-            "description": "Категории",
-            "content": {
-              "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Category" } } }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/public/lots": {
-      "get": {
-        "operationId": "listLots",
-        "tags": ["public"],
-        "summary": "Каталог активных лотов",
-        "parameters": [
-          { "name": "category_id", "in": "query", "schema": { "type": "string", "format": "uuid" } },
-          { "name": "q", "in": "query", "schema": { "type": "string" } },
-          { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 } },
-          { "name": "offset", "in": "query", "schema": { "type": "integer", "minimum": 0, "default": 0 } }
-        ],
-        "responses": {
-          "200": {
-            "description": "Страница лотов",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LotPage" } } }
-          },
-          "422": { "$ref": "#/components/responses/Validation" }
-        }
-      }
-    },
-    "/api/v1/public/lots/{slug}": {
-      "get": {
-        "operationId": "getLot",
-        "tags": ["public"],
-        "summary": "Карточка лота",
-        "parameters": [{ "name": "slug", "in": "path", "required": true, "schema": { "type": "string" } }],
-        "responses": {
-          "200": {
-            "description": "Лот",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Lot" } } }
-          },
-          "404": { "$ref": "#/components/responses/NotFound" }
-        }
-      }
-    },
-    "/api/v1/public/lots/{slug}/availability": {
-      "get": {
-        "operationId": "getLotAvailability",
-        "tags": ["public"],
-        "summary": "Занятость лота в интервале",
-        "parameters": [
-          { "name": "slug", "in": "path", "required": true, "schema": { "type": "string" } },
-          { "name": "from", "in": "query", "required": true, "schema": { "type": "string", "format": "date-time" } },
-          { "name": "to", "in": "query", "required": true, "schema": { "type": "string", "format": "date-time" } }
-        ],
-        "responses": {
-          "200": {
-            "description": "Занятость",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Availability" } } }
-          },
-          "404": { "$ref": "#/components/responses/NotFound" },
-          "422": { "$ref": "#/components/responses/Validation" }
-        }
-      }
-    },
-    "/api/v1/public/lots/{slug}/quote": {
-      "get": {
-        "operationId": "getLotQuote",
-        "tags": ["public"],
-        "summary": "Цена и доступность вариантов лота на интервал",
-        "description": "Цену считает только сервер по алгоритму D-20 (`contract/pricing.md`): тир по сроку + round-up до более длинного пакета. Ответ `no-store`: зависит от интервала и остатков АКБ. Точное количество аккумуляторов не раскрывается — только `available`.",
-        "parameters": [
-          { "name": "slug", "in": "path", "required": true, "schema": { "type": "string" } },
-          { "name": "start", "in": "query", "required": true, "schema": { "type": "string", "format": "date-time" } },
-          { "name": "end", "in": "query", "required": true, "schema": { "type": "string", "format": "date-time" } }
-        ],
-        "responses": {
-          "200": {
-            "description": "Цены по всем вариантам лота; срок меньше минимального даёт 422 `rental_period_not_allowed`",
-            "headers": {
-              "Cache-Control": { "schema": { "type": "string" }, "example": "no-store" }
-            },
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Quote" } } }
-          },
-          "404": { "$ref": "#/components/responses/NotFound" },
-          "422": { "$ref": "#/components/responses/Validation" }
-        }
-      }
-    },
-    "/api/v1/auth/login": {
-      "post": {
-        "operationId": "login",
-        "tags": ["auth"],
-        "summary": "Вход по email и паролю",
-        "requestBody": {
-          "required": true,
-          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LoginRequest" } } }
-        },
-        "responses": {
-          "200": {
-            "description": "Сессия",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LoginResponse" } } }
-          },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "422": { "$ref": "#/components/responses/Validation" }
-        }
-      }
-    },
-    "/api/v1/auth/session": {
-      "get": {
-        "operationId": "getSession",
-        "tags": ["auth"],
-        "summary": "Текущая сессия и права",
-        "security": [{ "bearerAuth": [] }],
-        "responses": {
-          "200": {
-            "description": "Сессия",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Session" } } }
-          },
-          "401": { "$ref": "#/components/responses/Unauthorized" }
-        }
-      }
-    },
-    "/api/v1/me/rentals": {
-      "get": {
-        "operationId": "listMyRentals",
-        "tags": ["rentals"],
-        "summary": "Мои аренды",
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [
-          {
-            "name": "status",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "enum": ["booked", "active", "overdue", "completed", "cancelled"]
-            }
-          },
-          { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 } },
-          { "name": "offset", "in": "query", "schema": { "type": "integer", "minimum": 0, "default": 0 } }
-        ],
-        "responses": {
-          "200": {
-            "description": "Страница аренд",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RentalPage" } } }
-          },
-          "401": { "$ref": "#/components/responses/Unauthorized" }
-        }
-      }
-    },
-    "/api/v1/rentals": {
-      "post": {
-        "operationId": "createRental",
-        "tags": ["rentals"],
-        "summary": "Создать бронь",
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [
-          { "name": "Idempotency-Key", "in": "header", "required": true, "schema": { "type": "string", "format": "uuid" } }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateRentalRequest" } } }
-        },
-        "responses": {
-          "201": {
-            "description": "Бронь создана",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Rental" } } }
-          },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "403": { "$ref": "#/components/responses/Forbidden" },
-          "409": { "$ref": "#/components/responses/Conflict" },
-          "422": { "$ref": "#/components/responses/Validation" }
-        }
-      }
-    },
-    "/api/v1/me/rentals/{id}/cancel": {
-      "post": {
-        "operationId": "cancelRental",
-        "tags": ["rentals"],
-        "summary": "Отменить бронь",
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
-        "responses": {
-          "200": {
-            "description": "Бронь отменена",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Rental" } } }
-          },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "404": { "$ref": "#/components/responses/NotFound" },
-          "409": { "$ref": "#/components/responses/Conflict" }
-        }
-      }
-    },
-    "/api/v1/me/rentals/{id}/tickets": {
-      "post": {
-        "operationId": "createRentalTicket",
-        "tags": ["tickets"],
-        "summary": "Сообщить о неполадке по активной аренде",
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
-        "requestBody": {
-          "required": true,
-          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateTicketRequest" } } }
-        },
-        "responses": {
-          "201": {
-            "description": "Тикет создан",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Ticket" } } }
-          },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "403": { "$ref": "#/components/responses/Forbidden" },
-          "404": { "$ref": "#/components/responses/NotFound" },
-          "409": { "$ref": "#/components/responses/Conflict" },
-          "422": { "$ref": "#/components/responses/Validation" },
-          "429": { "$ref": "#/components/responses/TooManyRequests" }
-        }
-      }
-    },
-    "/api/v1/me/tickets": {
-      "get": {
-        "operationId": "listMyTickets",
-        "tags": ["tickets"],
-        "summary": "Мои обращения о неполадках",
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [
-          {
-            "name": "status",
-            "in": "query",
-            "schema": { "type": "string", "enum": ["submitted", "in_progress", "resolved"] }
-          },
-          { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 } },
-          { "name": "offset", "in": "query", "schema": { "type": "integer", "minimum": 0, "default": 0 } }
-        ],
-        "responses": {
-          "200": {
-            "description": "Страница тикетов",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TicketPage" } } }
-          },
-          "401": { "$ref": "#/components/responses/Unauthorized" }
-        }
-      }
-    },
-    "/api/v1/admin/analytics/summary": {
-      "get": {
-        "operationId": "getAnalyticsSummary",
-        "tags": ["admin"],
-        "summary": "KPI за период",
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [
-          { "name": "from", "in": "query", "required": true, "schema": { "type": "string", "format": "date-time" } },
-          { "name": "to", "in": "query", "required": true, "schema": { "type": "string", "format": "date-time" } }
-        ],
-        "responses": {
-          "200": {
-            "description": "KPI",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AnalyticsSummary" } } }
-          },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "403": { "$ref": "#/components/responses/Forbidden" },
-          "422": { "$ref": "#/components/responses/Validation" }
-        }
-      }
-    },
-    "/api/v1/admin/analytics/revenue": {
-      "get": {
-        "operationId": "getAnalyticsRevenue",
-        "tags": ["admin"],
-        "summary": "Выручка с группировкой",
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [
-          { "name": "from", "in": "query", "required": true, "schema": { "type": "string", "format": "date-time" } },
-          { "name": "to", "in": "query", "required": true, "schema": { "type": "string", "format": "date-time" } },
-          {
-            "name": "group_by",
-            "in": "query",
-            "required": true,
-            "schema": { "type": "string", "enum": ["lot", "category", "day"] }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Выручка",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AnalyticsRevenue" } } }
-          },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "403": { "$ref": "#/components/responses/Forbidden" },
-          "422": { "$ref": "#/components/responses/Validation" }
-        }
-      }
-    },
-    "/api/v1/admin/analytics/lots/{lot_id}": {
-      "get": {
-        "operationId": "getAnalyticsLot",
-        "tags": ["admin"],
-        "summary": "Доходность лота за период",
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [
-          { "name": "lot_id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } },
-          { "name": "from", "in": "query", "required": true, "schema": { "type": "string", "format": "date-time" } },
-          { "name": "to", "in": "query", "required": true, "schema": { "type": "string", "format": "date-time" } }
-        ],
-        "responses": {
-          "200": {
-            "description": "Детализация по лоту",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AnalyticsLotDetail" } } }
-          },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "403": { "$ref": "#/components/responses/Forbidden" },
-          "404": { "$ref": "#/components/responses/NotFound" },
-          "422": { "$ref": "#/components/responses/Validation" }
-        }
-      }
-    },
-    "/api/v1/admin/lots": {
-      "get": {
-        "operationId": "listAdminLots",
-        "tags": ["admin"],
-        "summary": "Лоты для staff, включая неопубликованные",
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [
-          { "name": "category_id", "in": "query", "schema": { "type": "string", "format": "uuid" } },
-          {
-            "name": "status",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "enum": ["active", "archived", "maintenance", "overdue"]
-            }
-          },
-          { "name": "q", "in": "query", "schema": { "type": "string" } },
-          { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 } },
-          { "name": "offset", "in": "query", "schema": { "type": "integer", "minimum": 0, "default": 0 } }
-        ],
-        "responses": {
-          "200": {
-            "description": "Страница лотов",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LotPage" } } }
-          },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "403": { "$ref": "#/components/responses/Forbidden" }
-        }
-      },
-      "post": {
-        "operationId": "createLot",
-        "tags": ["admin"],
-        "summary": "Создать лот",
-        "security": [{ "bearerAuth": [] }],
-        "requestBody": {
-          "required": true,
-          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateLotRequest" } } }
-        },
-        "responses": {
-          "201": {
-            "description": "Лот создан",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Lot" } } }
-          },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "403": { "$ref": "#/components/responses/Forbidden" },
-          "422": { "$ref": "#/components/responses/Validation" }
-        }
-      }
-    },
-    "/api/v1/admin/lots/{id}": {
-      "patch": {
-        "operationId": "updateLot",
-        "tags": ["admin"],
-        "summary": "Изменить лот, варианты, тарифы и сроки",
-        "description": "Частичное обновление: любое подмножество полей `CreateLotRequest` плюс обязательный `version` (D-09). Правка тарифов не меняет цену уже созданных аренд.",
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
-        "requestBody": {
-          "required": true,
-          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UpdateLotRequest" } } }
-        },
-        "responses": {
-          "200": {
-            "description": "Обновлённый лот (с новым `version`)",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Lot" } } }
-          },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "403": { "$ref": "#/components/responses/Forbidden" },
-          "404": { "$ref": "#/components/responses/NotFound" },
-          "409": { "$ref": "#/components/responses/StaleVersion" },
-          "422": { "$ref": "#/components/responses/Validation" }
-        }
-      }
-    },
-    "/api/v1/admin/lots/{id}/status": {
-      "post": {
-        "operationId": "setLotStatus",
-        "tags": ["admin"],
-        "summary": "Сменить статус лота",
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
-        "requestBody": {
-          "required": true,
-          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LotStatusRequest" } } }
-        },
-        "responses": {
-          "200": {
-            "description": "Статус обновлён",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Lot" } } }
-          },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "403": { "$ref": "#/components/responses/Forbidden" },
-          "404": { "$ref": "#/components/responses/NotFound" },
-          "409": { "$ref": "#/components/responses/Conflict" },
-          "422": { "$ref": "#/components/responses/Validation" }
-        }
-      }
-    },
-    "/api/v1/admin/lots/{id}/blocks": {
-      "post": {
-        "operationId": "createLotBlock",
-        "tags": ["admin"],
-        "summary": "Заблокировать дни лота",
-        "description": "Границы выравниваются по началу суток в TZ тенанта, интервал `[start_time, end_time)` (D-24). Пересечение с арендой в статусе `booked`/`active` → 409 `slot_taken`. Блок не расходует АКБ.",
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
-        "requestBody": {
-          "required": true,
-          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateLotBlockRequest" } } }
-        },
-        "responses": {
-          "201": {
-            "description": "Блок создан",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LotBlock" } } }
-          },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "403": { "$ref": "#/components/responses/Forbidden" },
-          "404": { "$ref": "#/components/responses/NotFound" },
-          "409": { "$ref": "#/components/responses/SlotTaken" },
-          "422": { "$ref": "#/components/responses/Validation" }
-        }
-      }
-    },
-    "/api/v1/admin/lots/{id}/blocks/{block_id}": {
-      "delete": {
-        "operationId": "deleteLotBlock",
-        "tags": ["admin"],
-        "summary": "Снять блокировку лота",
-        "description": "Удаление сразу освобождает дни для новых броней и публичной доступности.",
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [
-          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } },
-          { "name": "block_id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
-        ],
-        "responses": {
-          "204": { "description": "Блок удалён" },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "403": { "$ref": "#/components/responses/Forbidden" },
-          "404": { "$ref": "#/components/responses/NotFound" }
-        }
-      }
-    },
-    "/api/v1/admin/schedule": {
-      "get": {
-        "operationId": "getAdminSchedule",
-        "tags": ["admin"],
-        "summary": "Гант «лоты × дни»: аренды, блоки и остатки АКБ",
-        "description": "Лоты возвращаются все, включая те, у которых нет событий (иначе гант теряет строки). Окно не шире 90 дней, иначе 422. Ответ `no-store`.",
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [
-          { "name": "from", "in": "query", "required": true, "schema": { "type": "string", "format": "date" } },
-          { "name": "to", "in": "query", "required": true, "schema": { "type": "string", "format": "date" } },
-          { "name": "category_id", "in": "query", "schema": { "type": "string", "format": "uuid" } }
-        ],
-        "responses": {
-          "200": {
-            "description": "Строки лотов, интервалы аренд и блоков, остатки АКБ",
-            "headers": {
-              "Cache-Control": { "schema": { "type": "string" }, "example": "no-store" }
-            },
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AdminSchedule" } } }
-          },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "403": { "$ref": "#/components/responses/Forbidden" },
-          "422": { "$ref": "#/components/responses/Validation" }
-        }
-      }
-    },
-    "/api/v1/admin/batteries": {
-      "get": {
-        "operationId": "listBatteryStock",
-        "tags": ["admin"],
-        "summary": "Остатки аккумуляторов тенанта",
-        "description": "Пул АКБ по типам. `peak_committed` — максимум одновременной занятости по активным и будущим арендам (D-23).",
-        "security": [{ "bearerAuth": [] }],
-        "responses": {
-          "200": {
-            "description": "Остатки по типам",
-            "content": {
-              "application/json": {
-                "schema": { "type": "array", "items": { "$ref": "#/components/schemas/BatteryStock" } }
-              }
-            }
-          },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "403": { "$ref": "#/components/responses/Forbidden" }
-        }
-      }
-    },
-    "/api/v1/admin/batteries/{battery_type}": {
-      "patch": {
-        "operationId": "updateBatteryStock",
-        "tags": ["admin"],
-        "summary": "Изменить количество аккумуляторов типа",
-        "description": "`quantity` не может быть меньше `peak_committed` по активным и будущим броням → 409 `stock_below_committed`.",
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [
-          { "name": "battery_type", "in": "path", "required": true, "schema": { "type": "string", "examples": ["48v"] } }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UpdateBatteryStockRequest" } } }
-        },
-        "responses": {
-          "200": {
-            "description": "Остаток обновлён",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/BatteryStock" } } }
-          },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "403": { "$ref": "#/components/responses/Forbidden" },
-          "404": { "$ref": "#/components/responses/NotFound" },
-          "409": { "$ref": "#/components/responses/StockBelowCommitted" },
-          "422": { "$ref": "#/components/responses/Validation" }
-        }
-      }
-    },
-    "/api/v1/admin/rentals": {
-      "get": {
-        "operationId": "listAdminRentals",
-        "tags": ["admin"],
-        "summary": "Аренды для staff",
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [
-          {
-            "name": "status",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "enum": ["booked", "active", "overdue", "completed", "cancelled"]
-            }
-          },
-          { "name": "lot_id", "in": "query", "schema": { "type": "string", "format": "uuid" } },
-          { "name": "from", "in": "query", "schema": { "type": "string", "format": "date-time" } },
-          { "name": "to", "in": "query", "schema": { "type": "string", "format": "date-time" } },
-          { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 } },
-          { "name": "offset", "in": "query", "schema": { "type": "integer", "minimum": 0, "default": 0 } }
-        ],
-        "responses": {
-          "200": {
-            "description": "Страница аренд",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AdminRentalPage" } } }
-          },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "403": { "$ref": "#/components/responses/Forbidden" }
-        }
-      }
-    },
-    "/api/v1/admin/rentals/{id}/close": {
-      "post": {
-        "operationId": "closeAdminRental",
-        "tags": ["admin"],
-        "summary": "Закрыть аренду и вернуть лот",
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
-        "requestBody": {
-          "required": true,
-          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CloseRentalRequest" } } }
-        },
-        "responses": {
-          "200": {
-            "description": "Аренда закрыта",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AdminRental" } } }
-          },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "403": { "$ref": "#/components/responses/Forbidden" },
-          "404": { "$ref": "#/components/responses/NotFound" },
-          "409": { "$ref": "#/components/responses/Conflict" },
-          "422": { "$ref": "#/components/responses/Validation" }
-        }
-      }
-    },
-    "/api/v1/admin/rentals/{id}/cancel": {
-      "post": {
-        "operationId": "cancelAdminRental",
-        "tags": ["admin"],
-        "summary": "Отменить аренду staff-ом",
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
-        "requestBody": {
-          "required": true,
-          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CancelAdminRentalRequest" } } }
-        },
-        "responses": {
-          "200": {
-            "description": "Аренда отменена",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AdminRental" } } }
-          },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "403": { "$ref": "#/components/responses/Forbidden" },
-          "404": { "$ref": "#/components/responses/NotFound" },
-          "409": { "$ref": "#/components/responses/Conflict" },
-          "422": { "$ref": "#/components/responses/Validation" }
-        }
-      }
-    },
-    "/api/v1/admin/verification-requests": {
-      "get": {
-        "operationId": "listVerificationRequests",
-        "tags": ["admin"],
-        "summary": "Очередь верификации",
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [
-          {
-            "name": "status",
-            "in": "query",
-            "schema": { "type": "string", "enum": ["pending", "approved", "rejected"] }
-          },
-          { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 } },
-          { "name": "offset", "in": "query", "schema": { "type": "integer", "minimum": 0, "default": 0 } }
-        ],
-        "responses": {
-          "200": {
-            "description": "Страница заявок",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/VerificationRequestPage" } } }
-          },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "403": { "$ref": "#/components/responses/Forbidden" }
-        }
-      }
-    },
-    "/api/v1/admin/verification-requests/{id}/decision": {
-      "post": {
-        "operationId": "decideVerificationRequest",
-        "tags": ["admin"],
-        "summary": "Решение по заявке верификации",
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
-        "requestBody": {
-          "required": true,
-          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/VerificationDecisionRequest" } } }
-        },
-        "responses": {
-          "200": {
-            "description": "Заявка обработана",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/VerificationRequest" } } }
-          },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "403": { "$ref": "#/components/responses/Forbidden" },
-          "404": { "$ref": "#/components/responses/NotFound" },
-          "409": { "$ref": "#/components/responses/Conflict" },
-          "422": { "$ref": "#/components/responses/Validation" }
-        }
-      }
-    },
-    "/api/v1/admin/tickets": {
-      "get": {
-        "operationId": "listAdminTickets",
-        "tags": ["admin"],
-        "summary": "Очередь тикетов",
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [
-          {
-            "name": "status",
-            "in": "query",
-            "schema": { "type": "string", "enum": ["submitted", "in_progress", "resolved"] }
-          },
-          { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 } },
-          { "name": "offset", "in": "query", "schema": { "type": "integer", "minimum": 0, "default": 0 } }
-        ],
-        "responses": {
-          "200": {
-            "description": "Страница тикетов",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TicketPage" } } }
-          },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "403": { "$ref": "#/components/responses/Forbidden" }
-        }
-      }
-    },
-    "/api/v1/admin/tickets/{id}": {
-      "patch": {
-        "operationId": "updateAdminTicket",
-        "tags": ["admin"],
-        "summary": "Изменить статус тикета",
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
-        "requestBody": {
-          "required": true,
-          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TicketPatchRequest" } } }
-        },
-        "responses": {
-          "200": {
-            "description": "Тикет обновлён",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Ticket" } } }
-          },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "403": { "$ref": "#/components/responses/Forbidden" },
-          "404": { "$ref": "#/components/responses/NotFound" },
-          "409": { "$ref": "#/components/responses/Conflict" },
-          "422": { "$ref": "#/components/responses/Validation" }
-        }
-      }
-    }
-  },
   "components": {
-    "securitySchemes": {
-      "bearerAuth": { "type": "http", "scheme": "bearer", "bearerFormat": "JWT" }
-    },
-    "responses": {
-      "Unauthorized": {
-        "description": "Не авторизован",
-        "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } } }
-      },
-      "Forbidden": {
-        "description": "Нет прав",
-        "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } } }
-      },
-      "NotFound": {
-        "description": "Не найдено",
-        "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } } }
-      },
-      "Conflict": {
-        "description": "Конфликт состояния",
-        "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } } }
-      },
-      "Validation": {
-        "description": "Ошибка валидации",
-        "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } } }
-      },
-      "StaleVersion": {
-        "description": "Версия записи устарела (`stale_version`)",
-        "content": {
-          "application/problem+json": {
-            "schema": { "$ref": "#/components/schemas/Problem" },
-            "example": {
-              "type": "urn:keeprollin:error:stale_version",
-              "title": "Версия устарела",
-              "status": 409,
-              "code": "stale_version",
-              "detail": "Лот изменён другим администратором"
-            }
-          }
-        }
-      },
-      "SlotTaken": {
-        "description": "Интервал занят (`slot_taken`)",
-        "content": {
-          "application/problem+json": {
-            "schema": { "$ref": "#/components/schemas/Problem" },
-            "example": {
-              "type": "urn:keeprollin:error:slot_taken",
-              "title": "Слот занят",
-              "status": 409,
-              "code": "slot_taken",
-              "detail": "В эти дни лот занят"
-            }
-          }
-        }
-      },
-      "StockBelowCommitted": {
-        "description": "Нельзя уменьшить остаток ниже занятого (`stock_below_committed`)",
-        "content": {
-          "application/problem+json": {
-            "schema": { "$ref": "#/components/schemas/Problem" },
-            "example": {
-              "type": "urn:keeprollin:error:stock_below_committed",
-              "title": "Остаток занят",
-              "status": 409,
-              "code": "stock_below_committed",
-              "detail": "Нельзя уменьшить: 12 шт. уже забронированы"
-            }
-          }
-        }
-      },
-      "TooManyRequests": {
-        "description": "Превышен лимит обращений",
-        "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } } }
-      }
-    },
     "schemas": {
-      "Problem": {
-        "type": "object",
-        "required": ["type", "title", "status", "code"],
+      "AcceptOfferRequest": {
+        "additionalProperties": false,
         "properties": {
-          "type": { "type": "string", "examples": ["urn:keeprollin:error:slot_taken"] },
-          "title": { "type": "string", "examples": ["Слот занят"] },
-          "status": { "type": "integer", "examples": [409] },
-          "code": { "type": "string", "examples": ["slot_taken"] },
-          "detail": { "type": "string", "examples": ["Лот занят в выбранном интервале"] },
-          "trace_id": { "type": "string" },
-          "fields": { "type": "object", "additionalProperties": { "type": "string" } }
-        }
-      },
-      "Tenant": {
-        "type": "object",
-        "required": ["id", "name", "slug", "timezone", "currency", "primary_color", "policies"],
-        "properties": {
-          "id": { "type": "string", "format": "uuid" },
-          "name": { "type": "string", "examples": ["Северный Ветер"] },
-          "slug": { "type": "string", "examples": ["severny-veter"] },
-          "logo_url": { "type": ["string", "null"] },
-          "primary_color": { "type": "string", "examples": ["#0f766e"] },
-          "timezone": { "type": "string", "examples": ["Europe/Moscow"] },
-          "currency": { "type": "string", "examples": ["RUB"] },
-          "vapid_public_key": { "type": ["string", "null"] },
-          "policies": { "$ref": "#/components/schemas/TenantPolicies" }
-        }
-      },
-      "TenantPolicies": {
-        "type": "object",
+          "offer_version_id": {
+            "format": "uuid",
+            "title": "Offer Version Id",
+            "type": "string"
+          }
+        },
         "required": [
-          "booking_horizon_days",
-          "min_rental_minutes",
-          "max_rental_days",
-          "cancellation_free_hours",
-          "reminder_hours_before",
-          "tickets_per_rental_per_day"
+          "offer_version_id"
         ],
-        "properties": {
-          "booking_horizon_days": { "type": "integer", "examples": [60] },
-          "min_rental_minutes": { "type": "integer", "examples": [60] },
-          "max_rental_days": { "type": "integer", "examples": [30] },
-          "cancellation_free_hours": { "type": "integer", "examples": [24] },
-          "reminder_hours_before": { "type": "integer", "examples": [1] },
-          "tickets_per_rental_per_day": { "type": "integer", "examples": [5] }
-        }
+        "title": "AcceptOfferRequest",
+        "type": "object"
       },
-      "Characteristic": {
-        "type": "object",
-        "required": ["id", "code", "name", "type", "is_required", "options", "sort"],
+      "AdminCategoryDTO": {
         "properties": {
-          "id": { "type": "string", "format": "uuid" },
-          "code": { "type": "string", "examples": ["power"] },
-          "name": { "type": "string", "examples": ["Мощность"] },
-          "type": { "type": "string", "enum": ["number", "text", "select"] },
-          "unit": { "type": ["string", "null"], "examples": ["Вт"] },
-          "is_required": { "type": "boolean" },
-          "options": { "type": "array", "items": { "type": "string" } },
-          "sort": { "type": "integer" }
-        }
+          "characteristics": {
+            "items": {
+              "$ref": "#/components/schemas/AdminCharacteristicDTO"
+            },
+            "title": "Characteristics",
+            "type": "array"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_archived": {
+            "title": "Is Archived",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "slug",
+          "description",
+          "is_archived",
+          "version",
+          "characteristics"
+        ],
+        "title": "AdminCategoryDTO",
+        "type": "object"
       },
-      "Category": {
-        "type": "object",
-        "required": ["id", "name", "slug", "is_archived", "characteristics"],
+      "AdminCategoryPageDTO": {
         "properties": {
-          "id": { "type": "string", "format": "uuid" },
-          "name": { "type": "string", "examples": ["Электробайки"] },
-          "slug": { "type": "string", "examples": ["ebikes"] },
-          "description": { "type": ["string", "null"] },
-          "is_archived": { "type": "boolean" },
-          "characteristics": { "type": "array", "items": { "$ref": "#/components/schemas/Characteristic" } }
-        }
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AdminCategoryDTO"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "AdminCategoryPageDTO",
+        "type": "object"
       },
-      "Lot": {
-        "type": "object",
+      "AdminCharacteristicDTO": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_archived": {
+            "title": "Is Archived",
+            "type": "boolean"
+          },
+          "is_required": {
+            "title": "Is Required",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "options": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "sort": {
+            "title": "Sort",
+            "type": "integer"
+          },
+          "type": {
+            "enum": [
+              "number",
+              "text",
+              "select"
+            ],
+            "title": "Type",
+            "type": "string"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "name",
+          "type",
+          "unit",
+          "is_required",
+          "options",
+          "sort",
+          "is_archived"
+        ],
+        "title": "AdminCharacteristicDTO",
+        "type": "object"
+      },
+      "AdminSettingsDTO": {
+        "properties": {
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "logo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logo Url"
+          },
+          "policies": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Policies",
+            "type": "object"
+          },
+          "primary_color": {
+            "title": "Primary Color",
+            "type": "string"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          },
+          "vapid_public_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vapid Public Key"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "logo_url",
+          "primary_color",
+          "timezone",
+          "currency",
+          "vapid_public_key",
+          "policies",
+          "version"
+        ],
+        "title": "AdminSettingsDTO",
+        "type": "object"
+      },
+      "AvailabilityDTO": {
+        "properties": {
+          "busy": {
+            "items": {
+              "$ref": "#/components/schemas/BusyIntervalDTO"
+            },
+            "title": "Busy",
+            "type": "array"
+          },
+          "from": {
+            "format": "date-time",
+            "title": "From",
+            "type": "string"
+          },
+          "lot_id": {
+            "format": "uuid",
+            "title": "Lot Id",
+            "type": "string"
+          },
+          "next_free": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FreeWindowDTO"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "to": {
+            "format": "date-time",
+            "title": "To",
+            "type": "string"
+          }
+        },
+        "required": [
+          "lot_id",
+          "from",
+          "to",
+          "busy",
+          "next_free"
+        ],
+        "title": "AvailabilityDTO",
+        "type": "object"
+      },
+      "BusyIntervalDTO": {
+        "properties": {
+          "end": {
+            "format": "date-time",
+            "title": "End",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "busy",
+              "booking",
+              "block",
+              "maintenance"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "start": {
+            "format": "date-time",
+            "title": "Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "start",
+          "end",
+          "kind"
+        ],
+        "title": "BusyIntervalDTO",
+        "type": "object"
+      },
+      "CalendarEventDTO": {
+        "properties": {
+          "block_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Block Id"
+          },
+          "end_time": {
+            "format": "date-time",
+            "title": "End Time",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "booking",
+              "block",
+              "maintenance"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "lot_id": {
+            "format": "uuid",
+            "title": "Lot Id",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "rental_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rental Id"
+          },
+          "start_time": {
+            "format": "date-time",
+            "title": "Start Time",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "lot_id",
+          "kind",
+          "rental_id",
+          "block_id",
+          "status",
+          "start_time",
+          "end_time",
+          "reason"
+        ],
+        "title": "CalendarEventDTO",
+        "type": "object"
+      },
+      "CategoryDTO": {
+        "properties": {
+          "characteristics": {
+            "items": {
+              "$ref": "#/components/schemas/CharacteristicDTO"
+            },
+            "title": "Characteristics",
+            "type": "array"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_archived": {
+            "title": "Is Archived",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "slug",
+          "description",
+          "is_archived",
+          "characteristics"
+        ],
+        "title": "CategoryDTO",
+        "type": "object"
+      },
+      "CharacteristicDTO": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_required": {
+            "title": "Is Required",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "options": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "sort": {
+            "title": "Sort",
+            "type": "integer"
+          },
+          "type": {
+            "enum": [
+              "number",
+              "text",
+              "select"
+            ],
+            "title": "Type",
+            "type": "string"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "name",
+          "type",
+          "unit",
+          "is_required",
+          "options",
+          "sort"
+        ],
+        "title": "CharacteristicDTO",
+        "type": "object"
+      },
+      "CharacteristicDefinitionInput": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^[a-z0-9-]+$",
+            "title": "Code",
+            "type": "string"
+          },
+          "is_archived": {
+            "default": false,
+            "title": "Is Archived",
+            "type": "boolean"
+          },
+          "is_required": {
+            "default": false,
+            "title": "Is Required",
+            "type": "boolean"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "options": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "sort": {
+            "default": 0,
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "title": "Sort",
+            "type": "integer"
+          },
+          "type": {
+            "enum": [
+              "number",
+              "text",
+              "select"
+            ],
+            "title": "Type",
+            "type": "string"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          }
+        },
+        "required": [
+          "code",
+          "name",
+          "type"
+        ],
+        "title": "CharacteristicDefinitionInput",
+        "type": "object"
+      },
+      "CreateCategoryRequest": {
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "slug": {
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^[a-z0-9-]+$",
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "slug"
+        ],
+        "title": "CreateCategoryRequest",
+        "type": "object"
+      },
+      "CreateLotBlockRequest": {
+        "properties": {
+          "end_time": {
+            "format": "date-time",
+            "title": "End Time",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 200,
+            "minLength": 3,
+            "title": "Reason",
+            "type": "string"
+          },
+          "start_time": {
+            "format": "date-time",
+            "title": "Start Time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "start_time",
+          "end_time",
+          "reason"
+        ],
+        "title": "CreateLotBlockRequest",
+        "type": "object"
+      },
+      "CreateOfferRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "body": {
+            "maxLength": 20000,
+            "minLength": 1,
+            "title": "Body",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "body"
+        ],
+        "title": "CreateOfferRequest",
+        "type": "object"
+      },
+      "FreeWindowDTO": {
+        "properties": {
+          "end": {
+            "format": "date-time",
+            "title": "End",
+            "type": "string"
+          },
+          "start": {
+            "format": "date-time",
+            "title": "Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "start",
+          "end"
+        ],
+        "title": "FreeWindowDTO",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HealthResponse": {
+        "properties": {
+          "status": {
+            "const": "ok",
+            "default": "ok",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "title": "HealthResponse",
+        "type": "object"
+      },
+      "LoginRequest": {
+        "properties": {
+          "email": {
+            "maxLength": 254,
+            "title": "Email",
+            "type": "string"
+          },
+          "password": {
+            "maxLength": 128,
+            "minLength": 8,
+            "title": "Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "LoginRequest",
+        "type": "object"
+      },
+      "LoginResponse": {
+        "properties": {
+          "access_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Access Token"
+          },
+          "expires_in": {
+            "title": "Expires In",
+            "type": "integer"
+          },
+          "mfa_required": {
+            "default": false,
+            "title": "Mfa Required",
+            "type": "boolean"
+          },
+          "mfa_setup_required": {
+            "default": false,
+            "title": "Mfa Setup Required",
+            "type": "boolean"
+          },
+          "mfa_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mfa Token"
+          },
+          "permissions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Permissions",
+            "type": "array"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "enum": [
+                  "owner",
+                  "admin",
+                  "user"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          },
+          "user": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UserDTO"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "expires_in"
+        ],
+        "title": "LoginResponse",
+        "type": "object"
+      },
+      "LotBlockDTO": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "format": "uuid",
+            "title": "Created By",
+            "type": "string"
+          },
+          "end_time": {
+            "format": "date-time",
+            "title": "End Time",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "lot_id": {
+            "format": "uuid",
+            "title": "Lot Id",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "start_time": {
+            "format": "date-time",
+            "title": "Start Time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "lot_id",
+          "start_time",
+          "end_time",
+          "reason",
+          "created_by",
+          "created_at"
+        ],
+        "title": "LotBlockDTO",
+        "type": "object"
+      },
+      "LotDTO": {
+        "properties": {
+          "allowed_durations": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Allowed Durations",
+            "type": "array"
+          },
+          "battery_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Battery Type"
+          },
+          "category_id": {
+            "format": "uuid",
+            "title": "Category Id",
+            "type": "string"
+          },
+          "characteristics": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "title": "Characteristics",
+            "type": "object"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_bookable": {
+            "title": "Is Bookable",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "photos": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Photos",
+            "type": "array"
+          },
+          "price_from": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PriceFromDTO"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rental_unit": {
+            "enum": [
+              "day",
+              "hour"
+            ],
+            "title": "Rental Unit",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "archived",
+              "maintenance",
+              "overdue"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "variants": {
+            "items": {
+              "$ref": "#/components/schemas/LotVariantDTO"
+            },
+            "title": "Variants",
+            "type": "array"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
         "required": [
           "id",
           "slug",
           "name",
+          "description",
           "category_id",
           "photos",
           "characteristics",
@@ -907,122 +983,572 @@
           "is_bookable",
           "version"
         ],
-        "properties": {
-          "id": { "type": "string", "format": "uuid" },
-          "slug": { "type": "string", "examples": ["urban-1"] },
-          "name": { "type": "string", "examples": ["Urban 1"] },
-          "description": { "type": "string" },
-          "category_id": { "type": "string", "format": "uuid" },
-          "photos": { "type": "array", "items": { "type": "string", "format": "uri" } },
-          "characteristics": { "type": "object", "additionalProperties": { "type": ["string", "number"] } },
-          "rental_unit": {
-            "type": "string",
-            "enum": ["day", "hour"],
-            "description": "Единица срока аренды (D-19)"
-          },
-          "battery_type": {
-            "type": ["string", "null"],
-            "examples": ["48v"],
-            "description": "Тип АКБ из пула `battery_stock`; null — лот без АКБ"
-          },
-          "variants": {
-            "type": "array",
-            "minItems": 1,
-            "items": { "$ref": "#/components/schemas/LotVariant" },
-            "description": "Варианты комплектации; `battery_count` уникален в пределах лота (D-19)"
-          },
-          "allowed_durations": {
-            "type": "array",
-            "minItems": 1,
-            "uniqueItems": true,
-            "items": { "type": "integer", "minimum": 1, "maximum": 365 },
-            "description": "Разрешённые сроки в единицах `rental_unit`, по возрастанию (D-25)"
-          },
-          "price_from": {
-            "anyOf": [{ "$ref": "#/components/schemas/PriceFrom" }, { "type": "null" }],
-            "description": "Минимум по активным вариантам и тирам; считает сервер. null — нет активных вариантов (D-22)"
-          },
-          "currency": { "type": "string", "examples": ["RUB"] },
-          "status": { "type": "string", "enum": ["active", "archived", "maintenance", "overdue"] },
-          "is_bookable": { "type": "boolean" },
-          "version": { "type": "integer", "minimum": 1, "description": "Версия записи для PATCH (D-09)" }
-        }
+        "title": "LotDTO",
+        "type": "object"
       },
-      "LotVariant": {
-        "type": "object",
-        "required": ["id", "battery_count", "is_active", "price_tiers"],
+      "LotPageDTO": {
         "properties": {
-          "id": { "type": "string", "format": "uuid" },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LotDTO"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "LotPageDTO",
+        "type": "object"
+      },
+      "LotVariantDTO": {
+        "properties": {
           "battery_count": {
-            "type": "integer",
-            "minimum": 0,
-            "examples": [1],
-            "description": "Сколько АКБ занимает вариант; 0 — лот без АКБ"
+            "title": "Battery Count",
+            "type": "integer"
           },
-          "is_active": { "type": "boolean" },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          },
           "price_tiers": {
-            "type": "array",
-            "minItems": 1,
-            "items": { "$ref": "#/components/schemas/PriceTier" },
-            "description": "Отсортированы по `min_units`; первая граница = `min(allowed_durations)`; цена за единицу не возрастает"
+            "items": {
+              "$ref": "#/components/schemas/PriceTierDTO"
+            },
+            "title": "Price Tiers",
+            "type": "array"
           }
-        }
+        },
+        "required": [
+          "id",
+          "battery_count",
+          "is_active",
+          "price_tiers"
+        ],
+        "title": "LotVariantDTO",
+        "type": "object"
       },
-      "LotVariantInput": {
-        "type": "object",
-        "required": ["battery_count", "price_tiers"],
+      "MessageResponse": {
         "properties": {
-          "battery_count": { "type": "integer", "minimum": 0 },
-          "is_active": { "type": "boolean", "description": "По умолчанию `true`" },
-          "price_tiers": {
-            "type": "array",
-            "minItems": 1,
-            "items": { "$ref": "#/components/schemas/PriceTier" }
+          "message": {
+            "title": "Message",
+            "type": "string"
           }
-        }
+        },
+        "required": [
+          "message"
+        ],
+        "title": "MessageResponse",
+        "type": "object"
       },
-      "PriceTier": {
-        "type": "object",
-        "required": ["min_units", "price_per_unit_minor"],
+      "MfaCodeRequest": {
+        "properties": {
+          "code": {
+            "maxLength": 32,
+            "minLength": 6,
+            "title": "Code",
+            "type": "string"
+          },
+          "mfa_token": {
+            "maxLength": 4096,
+            "minLength": 20,
+            "title": "Mfa Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mfa_token",
+          "code"
+        ],
+        "title": "MfaCodeRequest",
+        "type": "object"
+      },
+      "MfaConfirmResponse": {
+        "properties": {
+          "access_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Access Token"
+          },
+          "expires_in": {
+            "title": "Expires In",
+            "type": "integer"
+          },
+          "mfa_required": {
+            "default": false,
+            "title": "Mfa Required",
+            "type": "boolean"
+          },
+          "mfa_setup_required": {
+            "default": false,
+            "title": "Mfa Setup Required",
+            "type": "boolean"
+          },
+          "mfa_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mfa Token"
+          },
+          "permissions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Permissions",
+            "type": "array"
+          },
+          "recovery_codes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Recovery Codes",
+            "type": "array"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "enum": [
+                  "owner",
+                  "admin",
+                  "user"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          },
+          "user": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UserDTO"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "expires_in",
+          "recovery_codes"
+        ],
+        "title": "MfaConfirmResponse",
+        "type": "object"
+      },
+      "MfaSetupResponse": {
+        "properties": {
+          "otpauth_uri": {
+            "title": "Otpauth Uri",
+            "type": "string"
+          },
+          "secret": {
+            "title": "Secret",
+            "type": "string"
+          }
+        },
+        "required": [
+          "secret",
+          "otpauth_uri"
+        ],
+        "title": "MfaSetupResponse",
+        "type": "object"
+      },
+      "MfaTokenRequest": {
+        "properties": {
+          "mfa_token": {
+            "maxLength": 4096,
+            "minLength": 20,
+            "title": "Mfa Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mfa_token"
+        ],
+        "title": "MfaTokenRequest",
+        "type": "object"
+      },
+      "OfferAcceptanceDTO": {
+        "properties": {
+          "accepted_at": {
+            "title": "Accepted At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "ip": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ip"
+          },
+          "offer_version_id": {
+            "format": "uuid",
+            "title": "Offer Version Id",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "offer_version_id",
+          "version",
+          "accepted_at",
+          "ip"
+        ],
+        "title": "OfferAcceptanceDTO",
+        "type": "object"
+      },
+      "OfferPageDTO": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/OfferVersionDTO"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "OfferPageDTO",
+        "type": "object"
+      },
+      "OfferVersionDTO": {
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published At"
+          },
+          "status": {
+            "enum": [
+              "draft",
+              "active",
+              "archived"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "version",
+          "title",
+          "body",
+          "status",
+          "published_at",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "OfferVersionDTO",
+        "type": "object"
+      },
+      "PasswordForgotRequest": {
+        "properties": {
+          "email": {
+            "maxLength": 254,
+            "title": "Email",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "title": "PasswordForgotRequest",
+        "type": "object"
+      },
+      "PasswordResetRequest": {
+        "properties": {
+          "password": {
+            "maxLength": 128,
+            "minLength": 8,
+            "title": "Password",
+            "type": "string"
+          },
+          "token": {
+            "maxLength": 512,
+            "minLength": 20,
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token",
+          "password"
+        ],
+        "title": "PasswordResetRequest",
+        "type": "object"
+      },
+      "PriceFromDTO": {
+        "properties": {
+          "amount_minor": {
+            "title": "Amount Minor",
+            "type": "integer"
+          },
+          "at_units": {
+            "title": "At Units",
+            "type": "integer"
+          },
+          "battery_count": {
+            "title": "Battery Count",
+            "type": "integer"
+          },
+          "per": {
+            "enum": [
+              "day",
+              "hour"
+            ],
+            "title": "Per",
+            "type": "string"
+          }
+        },
+        "required": [
+          "amount_minor",
+          "per",
+          "at_units",
+          "battery_count"
+        ],
+        "title": "PriceFromDTO",
+        "type": "object"
+      },
+      "PriceTierDTO": {
         "properties": {
           "min_units": {
-            "type": "integer",
-            "minimum": 1,
-            "examples": [7],
-            "description": "С какого срока в единицах `rental_unit` действует цена"
+            "title": "Min Units",
+            "type": "integer"
           },
           "price_per_unit_minor": {
-            "type": "integer",
-            "minimum": 1,
-            "examples": [40000],
-            "description": "Цена за единицу в минорных единицах валюты тенанта"
+            "title": "Price Per Unit Minor",
+            "type": "integer"
           }
-        }
+        },
+        "required": [
+          "min_units",
+          "price_per_unit_minor"
+        ],
+        "title": "PriceTierDTO",
+        "type": "object"
       },
-      "PriceFrom": {
-        "type": "object",
-        "required": ["amount_minor", "per", "at_units", "battery_count"],
+      "PublicOfferDTO": {
         "properties": {
-          "amount_minor": { "type": "integer", "minimum": 1, "examples": [40000] },
-          "per": { "type": "string", "enum": ["day", "hour"], "description": "Совпадает с `rental_unit` лота" },
-          "at_units": { "type": "integer", "minimum": 1, "examples": [7] },
-          "battery_count": { "type": "integer", "minimum": 0, "examples": [1] }
-        }
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "published_at": {
+            "title": "Published At",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "version",
+          "title",
+          "body",
+          "published_at"
+        ],
+        "title": "PublicOfferDTO",
+        "type": "object"
       },
-      "Quote": {
-        "type": "object",
-        "required": ["lot_id", "start", "end", "units", "rental_unit", "variants"],
+      "QuoteDTO": {
         "properties": {
-          "lot_id": { "type": "string", "format": "uuid" },
-          "start": { "type": "string", "format": "date-time" },
-          "end": { "type": "string", "format": "date-time" },
-          "units": { "type": "integer", "minimum": 1, "description": "Округлённая вверх длительность в единицах `rental_unit`" },
-          "rental_unit": { "type": "string", "enum": ["day", "hour"] },
-          "variants": { "type": "array", "items": { "$ref": "#/components/schemas/QuoteVariant" } }
-        }
+          "end": {
+            "format": "date-time",
+            "title": "End",
+            "type": "string"
+          },
+          "lot_id": {
+            "format": "uuid",
+            "title": "Lot Id",
+            "type": "string"
+          },
+          "rental_unit": {
+            "enum": [
+              "day",
+              "hour"
+            ],
+            "title": "Rental Unit",
+            "type": "string"
+          },
+          "start": {
+            "format": "date-time",
+            "title": "Start",
+            "type": "string"
+          },
+          "units": {
+            "title": "Units",
+            "type": "integer"
+          },
+          "variants": {
+            "items": {
+              "$ref": "#/components/schemas/QuoteVariantDTO"
+            },
+            "title": "Variants",
+            "type": "array"
+          }
+        },
+        "required": [
+          "lot_id",
+          "start",
+          "end",
+          "units",
+          "rental_unit",
+          "variants"
+        ],
+        "title": "QuoteDTO",
+        "type": "object"
       },
-      "QuoteVariant": {
-        "type": "object",
+      "QuoteVariantDTO": {
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "battery_count": {
+            "title": "Battery Count",
+            "type": "integer"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "price_total_minor": {
+            "title": "Price Total Minor",
+            "type": "integer"
+          },
+          "tier_min_units": {
+            "title": "Tier Min Units",
+            "type": "integer"
+          },
+          "unavailable_reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "slot_taken",
+                  "rental_period_not_allowed",
+                  "battery_unavailable"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unavailable Reason"
+          },
+          "variant_id": {
+            "format": "uuid",
+            "title": "Variant Id",
+            "type": "string"
+          }
+        },
         "required": [
           "variant_id",
           "battery_count",
@@ -1032,590 +1558,2253 @@
           "available",
           "unavailable_reason"
         ],
+        "title": "QuoteVariantDTO",
+        "type": "object"
+      },
+      "ReadinessChecks": {
         "properties": {
-          "variant_id": { "type": "string", "format": "uuid" },
-          "battery_count": { "type": "integer", "minimum": 0 },
-          "price_total_minor": { "type": "integer", "minimum": 1, "description": "Итог за весь интервал по алгоритму D-20" },
-          "currency": { "type": "string" },
-          "tier_min_units": { "type": "integer", "minimum": 1, "description": "`min_units` сработавшего тира (с учётом round-up)" },
-          "available": { "type": "boolean" },
-          "unavailable_reason": {
+          "database": {
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Database",
+            "type": "string"
+          }
+        },
+        "required": [
+          "database"
+        ],
+        "title": "ReadinessChecks",
+        "type": "object"
+      },
+      "ReadinessResponse": {
+        "properties": {
+          "checks": {
+            "$ref": "#/components/schemas/ReadinessChecks"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "checks"
+        ],
+        "title": "ReadinessResponse",
+        "type": "object"
+      },
+      "RegisterRequest": {
+        "properties": {
+          "email": {
+            "maxLength": 254,
+            "title": "Email",
+            "type": "string"
+          },
+          "name": {
             "anyOf": [
               {
-                "type": "string",
-                "enum": ["slot_taken", "rental_period_not_allowed", "battery_unavailable"]
+                "maxLength": 120,
+                "minLength": 1,
+                "type": "string"
               },
-              { "type": "null" }
+              {
+                "type": "null"
+              }
             ],
-            "description": "Причина недоступности варианта; точное количество АКБ не раскрывается"
+            "title": "Name"
+          },
+          "password": {
+            "maxLength": 128,
+            "minLength": 8,
+            "title": "Password",
+            "type": "string"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
           }
-        }
+        },
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "RegisterRequest",
+        "type": "object"
       },
-      "LotPage": {
-        "type": "object",
-        "required": ["items", "total", "limit", "offset"],
+      "SessionDTO": {
         "properties": {
-          "items": { "type": "array", "items": { "$ref": "#/components/schemas/Lot" } },
-          "total": { "type": "integer" },
-          "limit": { "type": "integer" },
-          "offset": { "type": "integer" }
-        }
+          "mfa_enabled": {
+            "default": false,
+            "title": "Mfa Enabled",
+            "type": "boolean"
+          },
+          "offer_accepted": {
+            "title": "Offer Accepted",
+            "type": "boolean"
+          },
+          "permissions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Permissions",
+            "type": "array"
+          },
+          "role": {
+            "enum": [
+              "owner",
+              "admin",
+              "user"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "user": {
+            "$ref": "#/components/schemas/UserDTO"
+          }
+        },
+        "required": [
+          "user",
+          "tenant_id",
+          "role",
+          "permissions",
+          "offer_accepted"
+        ],
+        "title": "SessionDTO",
+        "type": "object"
       },
-      "LotBlock": {
-        "type": "object",
-        "required": ["id", "lot_id", "start_time", "end_time", "reason", "created_by", "created_at"],
+      "SettingsPoliciesPatch": {
+        "additionalProperties": false,
         "properties": {
-          "id": { "type": "string", "format": "uuid" },
-          "lot_id": { "type": "string", "format": "uuid" },
-          "start_time": { "type": "string", "format": "date-time", "description": "Начало суток в TZ тенанта" },
-          "end_time": { "type": "string", "format": "date-time", "description": "Конец интервала, не включается (D-05, D-24)" },
-          "reason": { "type": "string", "minLength": 3, "maxLength": 200 },
-          "created_by": { "type": "string", "format": "uuid" },
-          "created_at": { "type": "string", "format": "date-time" }
-        }
+          "booking_horizon_days": {
+            "anyOf": [
+              {
+                "maximum": 365.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Booking Horizon Days"
+          },
+          "cancellation_free_hours": {
+            "anyOf": [
+              {
+                "maximum": 168.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cancellation Free Hours"
+          },
+          "lot_photos_max": {
+            "anyOf": [
+              {
+                "maximum": 20.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lot Photos Max"
+          },
+          "max_rental_days": {
+            "anyOf": [
+              {
+                "maximum": 90.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Rental Days"
+          },
+          "min_rental_minutes": {
+            "anyOf": [
+              {
+                "maximum": 1440.0,
+                "minimum": 15.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Rental Minutes"
+          },
+          "reminder_hours_before": {
+            "anyOf": [
+              {
+                "maximum": 72.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reminder Hours Before"
+          },
+          "tickets_per_rental_per_day": {
+            "anyOf": [
+              {
+                "maximum": 20.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tickets Per Rental Per Day"
+          },
+          "verification_docs_retention_days": {
+            "anyOf": [
+              {
+                "maximum": 365.0,
+                "minimum": 30.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verification Docs Retention Days"
+          }
+        },
+        "title": "SettingsPoliciesPatch",
+        "type": "object"
       },
-      "CreateLotBlockRequest": {
-        "type": "object",
-        "required": ["start_time", "end_time", "reason"],
+      "TenantDTO": {
         "properties": {
-          "start_time": { "type": "string", "format": "date-time" },
-          "end_time": { "type": "string", "format": "date-time" },
-          "reason": { "type": "string", "minLength": 3, "maxLength": 200, "examples": ["Техобслуживание"] }
-        }
-      },
-      "ScheduleLot": {
-        "type": "object",
-        "required": ["id", "name", "category_id", "status", "battery_type", "rental_unit"],
-        "properties": {
-          "id": { "type": "string", "format": "uuid" },
-          "name": { "type": "string" },
-          "category_id": { "type": "string", "format": "uuid" },
-          "status": { "type": "string", "enum": ["active", "archived", "maintenance", "overdue"] },
-          "battery_type": { "type": ["string", "null"] },
-          "rental_unit": { "type": "string", "enum": ["day", "hour"] }
-        }
-      },
-      "ScheduleRentalInterval": {
-        "type": "object",
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "logo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logo Url"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "policies": {
+            "$ref": "#/components/schemas/TenantPoliciesDTO"
+          },
+          "primary_color": {
+            "title": "Primary Color",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          },
+          "vapid_public_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vapid Public Key"
+          }
+        },
         "required": [
           "id",
-          "lot_id",
-          "kind",
-          "start_time",
-          "end_time",
-          "rental_id",
-          "status",
-          "battery_count",
-          "user_name"
+          "name",
+          "slug",
+          "logo_url",
+          "primary_color",
+          "timezone",
+          "currency",
+          "vapid_public_key",
+          "policies"
         ],
-        "properties": {
-          "id": { "type": "string", "format": "uuid" },
-          "lot_id": { "type": "string", "format": "uuid" },
-          "kind": { "type": "string", "const": "rental" },
-          "start_time": { "type": "string", "format": "date-time" },
-          "end_time": { "type": "string", "format": "date-time" },
-          "rental_id": { "type": "string", "format": "uuid" },
-          "status": { "type": "string", "enum": ["booked", "active", "overdue", "completed", "cancelled"] },
-          "battery_count": { "type": "integer", "minimum": 0 },
-          "user_name": { "type": "string" }
-        }
+        "title": "TenantDTO",
+        "type": "object"
       },
-      "ScheduleBlockInterval": {
-        "type": "object",
-        "required": ["id", "lot_id", "kind", "start_time", "end_time", "block_id", "reason"],
+      "TenantPoliciesDTO": {
         "properties": {
-          "id": { "type": "string", "format": "uuid" },
-          "lot_id": { "type": "string", "format": "uuid" },
-          "kind": { "type": "string", "const": "block" },
-          "start_time": { "type": "string", "format": "date-time" },
-          "end_time": { "type": "string", "format": "date-time" },
-          "block_id": { "type": "string", "format": "uuid" },
-          "reason": { "type": "string" }
-        }
+          "booking_horizon_days": {
+            "title": "Booking Horizon Days",
+            "type": "integer"
+          },
+          "cancellation_free_hours": {
+            "title": "Cancellation Free Hours",
+            "type": "integer"
+          },
+          "lot_photos_max": {
+            "title": "Lot Photos Max",
+            "type": "integer"
+          },
+          "max_rental_days": {
+            "title": "Max Rental Days",
+            "type": "integer"
+          },
+          "min_rental_minutes": {
+            "title": "Min Rental Minutes",
+            "type": "integer"
+          },
+          "reminder_hours_before": {
+            "title": "Reminder Hours Before",
+            "type": "integer"
+          },
+          "tickets_per_rental_per_day": {
+            "title": "Tickets Per Rental Per Day",
+            "type": "integer"
+          },
+          "verification_docs_retention_days": {
+            "title": "Verification Docs Retention Days",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "booking_horizon_days",
+          "min_rental_minutes",
+          "max_rental_days",
+          "cancellation_free_hours",
+          "reminder_hours_before",
+          "tickets_per_rental_per_day",
+          "lot_photos_max",
+          "verification_docs_retention_days"
+        ],
+        "title": "TenantPoliciesDTO",
+        "type": "object"
       },
-      "AdminSchedule": {
-        "type": "object",
-        "required": ["lots", "intervals", "battery_stock"],
+      "UpdateCategoryRequest": {
         "properties": {
-          "lots": { "type": "array", "items": { "$ref": "#/components/schemas/ScheduleLot" } },
-          "intervals": {
-            "type": "array",
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "is_archived": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Archived"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "minLength": 1,
+                "pattern": "^[a-z0-9-]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slug"
+          },
+          "version": {
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version"
+        ],
+        "title": "UpdateCategoryRequest",
+        "type": "object"
+      },
+      "UpdateCharacteristicsRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
             "items": {
-              "oneOf": [
-                { "$ref": "#/components/schemas/ScheduleRentalInterval" },
-                { "$ref": "#/components/schemas/ScheduleBlockInterval" }
-              ],
-              "discriminator": {
-                "propertyName": "kind",
-                "mapping": {
-                  "rental": "#/components/schemas/ScheduleRentalInterval",
-                  "block": "#/components/schemas/ScheduleBlockInterval"
+              "$ref": "#/components/schemas/CharacteristicDefinitionInput"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Items",
+            "type": "array"
+          },
+          "version": {
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version",
+          "items"
+        ],
+        "title": "UpdateCharacteristicsRequest",
+        "type": "object"
+      },
+      "UpdateOfferRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "body": {
+            "anyOf": [
+              {
+                "maxLength": 20000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "title": "UpdateOfferRequest",
+        "type": "object"
+      },
+      "UpdateSettingsRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "currency": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Z]{3}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
+          "logo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logo Url"
+          },
+          "policies": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SettingsPoliciesPatch"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "primary_color": {
+            "anyOf": [
+              {
+                "pattern": "^#[0-9a-fA-F]{6}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Primary Color"
+          },
+          "timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timezone"
+          },
+          "version": {
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version"
+        ],
+        "title": "UpdateSettingsRequest",
+        "type": "object"
+      },
+      "UserDTO": {
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "owner",
+              "admin",
+              "user"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "verification_status": {
+            "enum": [
+              "pending",
+              "approved",
+              "rejected"
+            ],
+            "title": "Verification Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "name",
+          "role",
+          "verification_status"
+        ],
+        "title": "UserDTO",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
                 }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "title": "Keep Rollin API",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/v1/admin/calendar": {
+      "get": {
+        "operationId": "get_calendar_api_v1_admin_calendar_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "from",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "From",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "To",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "category_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "lot_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Lot Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(booked|active|released)$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CalendarEventDTO"
+                  },
+                  "title": "Response Get Calendar Api V1 Admin Calendar Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Calendar",
+        "tags": [
+          "admin-calendar"
+        ]
+      }
+    },
+    "/api/v1/admin/categories": {
+      "get": {
+        "operationId": "list_categories_api_v1_admin_categories_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "include_archived",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Archived",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "maximum": 9223372036854775807,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminCategoryPageDTO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Categories",
+        "tags": [
+          "admin-categories"
+        ]
+      },
+      "post": {
+        "operationId": "create_category_api_v1_admin_categories_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCategoryRequest"
               }
             }
           },
-          "battery_stock": { "type": "array", "items": { "$ref": "#/components/schemas/BatteryStock" } }
-        }
-      },
-      "BatteryStock": {
-        "type": "object",
-        "required": ["battery_type", "name", "quantity", "peak_committed"],
-        "properties": {
-          "battery_type": { "type": "string", "examples": ["48v"] },
-          "name": { "type": "string", "examples": ["48V 720 Вт·ч"] },
-          "quantity": { "type": "integer", "minimum": 0 },
-          "peak_committed": {
-            "type": "integer",
-            "minimum": 0,
-            "description": "Максимум одновременной занятости по активным и будущим арендам (D-23)"
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminCategoryDTO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
-        }
-      },
-      "UpdateBatteryStockRequest": {
-        "type": "object",
-        "required": ["quantity"],
-        "properties": { "quantity": { "type": "integer", "minimum": 0 } }
-      },
-      "BusyInterval": {
-        "type": "object",
-        "required": ["start", "end", "kind"],
-        "properties": {
-          "start": { "type": "string", "format": "date-time" },
-          "end": { "type": "string", "format": "date-time" },
-          "kind": { "type": "string", "enum": ["busy", "booking", "block", "maintenance"] }
-        }
-      },
-      "FreeWindow": {
-        "type": "object",
-        "required": ["start", "end"],
-        "properties": {
-          "start": { "type": "string", "format": "date-time" },
-          "end": { "type": "string", "format": "date-time" }
-        }
-      },
-      "Availability": {
-        "type": "object",
-        "required": ["lot_id", "from", "to", "busy"],
-        "properties": {
-          "lot_id": { "type": "string", "format": "uuid" },
-          "from": { "type": "string", "format": "date-time" },
-          "to": { "type": "string", "format": "date-time" },
-          "busy": { "type": "array", "items": { "$ref": "#/components/schemas/BusyInterval" } },
-          "next_free": { "anyOf": [{ "$ref": "#/components/schemas/FreeWindow" }, { "type": "null" }] }
-        }
-      },
-      "User": {
-        "type": "object",
-        "required": ["id", "email", "name", "role", "verification_status"],
-        "properties": {
-          "id": { "type": "string", "format": "uuid" },
-          "email": { "type": "string", "format": "email", "examples": ["rider@example.com"] },
-          "name": { "type": "string", "examples": ["Иван Петров"] },
-          "role": { "type": "string", "enum": ["owner", "admin", "user"] },
-          "verification_status": { "type": "string", "enum": ["pending", "approved", "rejected"] }
-        }
-      },
-      "Session": {
-        "type": "object",
-        "required": ["user", "role", "permissions", "offer_accepted"],
-        "properties": {
-          "user": { "$ref": "#/components/schemas/User" },
-          "role": { "type": "string", "enum": ["owner", "admin", "user"] },
-          "permissions": { "type": "array", "items": { "type": "string" } },
-          "offer_accepted": { "type": "boolean" }
-        }
-      },
-      "LoginRequest": {
-        "type": "object",
-        "required": ["email", "password"],
-        "properties": {
-          "email": { "type": "string", "format": "email" },
-          "password": { "type": "string", "minLength": 8 }
-        }
-      },
-      "LoginResponse": {
-        "type": "object",
-        "required": ["access_token", "expires_in", "user", "role", "permissions"],
-        "properties": {
-          "access_token": { "type": "string" },
-          "expires_in": { "type": "integer", "examples": [900] },
-          "user": { "$ref": "#/components/schemas/User" },
-          "role": { "type": "string", "enum": ["owner", "admin", "user"] },
-          "permissions": { "type": "array", "items": { "type": "string" } }
-        }
-      },
-      "RentalLot": {
-        "type": "object",
-        "required": ["id", "slug", "name", "photo_url"],
-        "properties": {
-          "id": { "type": "string", "format": "uuid" },
-          "slug": { "type": "string" },
-          "name": { "type": "string" },
-          "photo_url": { "type": ["string", "null"], "format": "uri" }
-        }
-      },
-      "Rental": {
-        "type": "object",
-        "required": [
-          "id",
-          "lot",
-          "status",
-          "start_time",
-          "end_time",
-          "price_minor",
-          "currency",
-          "remaining_seconds"
-        ],
-        "properties": {
-          "id": { "type": "string", "format": "uuid" },
-          "lot": { "$ref": "#/components/schemas/RentalLot" },
-          "status": { "type": "string", "enum": ["booked", "active", "overdue", "completed", "cancelled"] },
-          "start_time": { "type": "string", "format": "date-time" },
-          "end_time": { "type": "string", "format": "date-time" },
-          "price_minor": { "type": "integer" },
-          "currency": { "type": "string" },
-          "remaining_seconds": { "type": "integer" },
-          "cancellation_deadline": { "type": ["string", "null"], "format": "date-time" }
-        }
-      },
-      "RentalPage": {
-        "type": "object",
-        "required": ["items", "total", "limit", "offset"],
-        "properties": {
-          "items": { "type": "array", "items": { "$ref": "#/components/schemas/Rental" } },
-          "total": { "type": "integer" },
-          "limit": { "type": "integer" },
-          "offset": { "type": "integer" }
-        }
-      },
-      "CreateRentalRequest": {
-        "type": "object",
-        "required": ["lot_id", "variant_id", "start_time", "end_time"],
-        "properties": {
-          "lot_id": { "type": "string", "format": "uuid" },
-          "variant_id": { "type": "string", "format": "uuid", "description": "Вариант лота; цена и `battery_count` берутся из него" },
-          "start_time": { "type": "string", "format": "date-time" },
-          "end_time": { "type": "string", "format": "date-time" }
-        }
-      },
-      "AnalyticsSummary": {
-        "type": "object",
-        "required": [
-          "from",
-          "to",
-          "revenue_minor",
-          "rentals_count",
-          "cancelled_count",
-          "overdue_count",
-          "avg_rental_minor",
-          "utilization_pct"
-        ],
-        "properties": {
-          "from": { "type": "string", "format": "date-time" },
-          "to": { "type": "string", "format": "date-time" },
-          "revenue_minor": { "type": "integer" },
-          "rentals_count": { "type": "integer" },
-          "cancelled_count": { "type": "integer" },
-          "overdue_count": { "type": "integer" },
-          "avg_rental_minor": { "type": "integer" },
-          "utilization_pct": { "type": "number" }
-        }
-      },
-      "AnalyticsBucket": {
-        "type": "object",
-        "required": ["key", "label", "rentals_count", "cancelled_count", "revenue_minor", "utilization_pct"],
-        "properties": {
-          "key": { "type": "string" },
-          "label": { "type": "string" },
-          "rentals_count": { "type": "integer" },
-          "cancelled_count": { "type": "integer" },
-          "revenue_minor": { "type": "integer" },
-          "utilization_pct": { "type": "number" }
-        }
-      },
-      "AnalyticsRevenue": {
-        "type": "object",
-        "required": ["group_by", "buckets"],
-        "properties": {
-          "group_by": { "type": "string", "enum": ["lot", "category", "day"] },
-          "buckets": { "type": "array", "items": { "$ref": "#/components/schemas/AnalyticsBucket" } }
-        }
-      },
-      "AnalyticsRental": {
-        "type": "object",
-        "required": ["id", "start_time", "end_time", "status", "price_minor", "currency", "user"],
-        "properties": {
-          "id": { "type": "string", "format": "uuid" },
-          "start_time": { "type": "string", "format": "date-time" },
-          "end_time": { "type": "string", "format": "date-time" },
-          "status": { "type": "string", "enum": ["booked", "active", "overdue", "completed", "cancelled"] },
-          "price_minor": { "type": "integer" },
-          "currency": { "type": "string" },
-          "user": { "$ref": "#/components/schemas/AdminUserRef" }
-        }
-      },
-      "AnalyticsLotDetail": {
-        "type": "object",
-        "required": ["lot", "from", "to", "summary", "daily", "rentals"],
-        "properties": {
-          "lot": { "$ref": "#/components/schemas/Lot" },
-          "from": { "type": "string", "format": "date-time" },
-          "to": { "type": "string", "format": "date-time" },
-          "summary": { "$ref": "#/components/schemas/AnalyticsSummary" },
-          "daily": { "type": "array", "items": { "$ref": "#/components/schemas/AnalyticsBucket" } },
-          "rentals": { "type": "array", "items": { "$ref": "#/components/schemas/AnalyticsRental" } }
-        }
-      },
-      "CreateLotRequest": {
-        "type": "object",
-        "required": ["name", "category_id", "rental_unit", "variants", "allowed_durations", "characteristics"],
-        "properties": {
-          "name": { "type": "string", "minLength": 2, "maxLength": 120 },
-          "category_id": { "type": "string", "format": "uuid" },
-          "description": { "type": "string", "maxLength": 1000 },
-          "rental_unit": { "type": "string", "enum": ["day", "hour"] },
-          "battery_type": {
-            "type": ["string", "null"],
-            "description": "Обязателен, если хотя бы один вариант имеет `battery_count > 0`"
-          },
-          "variants": {
-            "type": "array",
-            "minItems": 1,
-            "items": { "$ref": "#/components/schemas/LotVariantInput" },
-            "description": "`battery_count` уникален; `price_tiers` отсортированы, первая граница = `min(allowed_durations)`, цена за единицу не возрастает"
-          },
-          "allowed_durations": {
-            "type": "array",
-            "minItems": 1,
-            "uniqueItems": true,
-            "items": { "type": "integer", "minimum": 1, "maximum": 365 },
-            "description": "По возрастанию, без дублей; `allowed_durations[0] === variants[*].price_tiers[0].min_units`"
-          },
-          "characteristics": {
-            "type": "object",
-            "additionalProperties": { "type": ["string", "number"] }
-          },
-          "photos": { "type": "array", "items": { "type": "string", "format": "uri" } },
-          "status": {
-            "type": "string",
-            "enum": ["active", "archived", "maintenance"],
-            "description": "По умолчанию `active`"
+        },
+        "security": [
+          {
+            "HTTPBearer": []
           }
-        }
-      },
-      "UpdateLotRequest": {
-        "type": "object",
-        "required": ["version"],
-        "properties": {
-          "version": { "type": "integer", "minimum": 1, "description": "Текущая версия лота; несовпадение → 409 `stale_version`" },
-          "name": { "type": "string", "minLength": 2, "maxLength": 120 },
-          "category_id": { "type": "string", "format": "uuid" },
-          "description": { "type": "string", "maxLength": 1000 },
-          "rental_unit": { "type": "string", "enum": ["day", "hour"] },
-          "battery_type": { "type": ["string", "null"] },
-          "variants": {
-            "type": "array",
-            "minItems": 1,
-            "items": { "$ref": "#/components/schemas/LotVariantInput" }
-          },
-          "allowed_durations": {
-            "type": "array",
-            "minItems": 1,
-            "uniqueItems": true,
-            "items": { "type": "integer", "minimum": 1, "maximum": 365 }
-          },
-          "characteristics": {
-            "type": "object",
-            "additionalProperties": { "type": ["string", "number"] }
-          },
-          "photos": { "type": "array", "items": { "type": "string", "format": "uri" } },
-          "status": { "type": "string", "enum": ["active", "archived", "maintenance"] }
-        }
-      },
-      "LotStatusRequest": {
-        "type": "object",
-        "required": ["status"],
-        "properties": {
-          "status": { "type": "string", "enum": ["active", "archived", "maintenance"] }
-        }
-      },
-      "CreateTicketRequest": {
-        "type": "object",
-        "required": ["category", "description"],
-        "properties": {
-          "category": { "type": "string", "enum": ["no_power", "no_drive", "battery", "damage", "other"] },
-          "description": { "type": "string", "minLength": 10, "maxLength": 1000 },
-          "photo_urls": {
-            "type": "array",
-            "maxItems": 3,
-            "items": { "type": "string", "format": "uri" }
+        ],
+        "summary": "Create Category",
+        "tags": [
+          "admin-categories"
+        ]
+      }
+    },
+    "/api/v1/admin/categories/{category_id}": {
+      "patch": {
+        "operationId": "update_category_api_v1_admin_categories__category_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "category_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Category Id",
+              "type": "string"
+            }
           }
-        }
-      },
-      "AdminUserRef": {
-        "type": "object",
-        "required": ["id", "name", "email"],
-        "properties": {
-          "id": { "type": "string", "format": "uuid" },
-          "name": { "type": "string" },
-          "email": { "type": "string", "format": "email" }
-        }
-      },
-      "AdminRental": {
-        "type": "object",
-        "required": [
-          "id",
-          "lot",
-          "user",
-          "status",
-          "start_time",
-          "end_time",
-          "price_minor",
-          "currency",
-          "remaining_seconds",
-          "version"
         ],
-        "properties": {
-          "id": { "type": "string", "format": "uuid" },
-          "lot": { "$ref": "#/components/schemas/RentalLot" },
-          "user": { "$ref": "#/components/schemas/AdminUserRef" },
-          "status": { "type": "string", "enum": ["booked", "active", "overdue", "completed", "cancelled"] },
-          "start_time": { "type": "string", "format": "date-time" },
-          "end_time": { "type": "string", "format": "date-time" },
-          "price_minor": { "type": "integer" },
-          "currency": { "type": "string" },
-          "remaining_seconds": { "type": "integer" },
-          "cancellation_deadline": { "type": ["string", "null"], "format": "date-time" },
-          "version": { "type": "integer" }
-        }
-      },
-      "AdminRentalPage": {
-        "type": "object",
-        "required": ["items", "total", "limit", "offset"],
-        "properties": {
-          "items": { "type": "array", "items": { "$ref": "#/components/schemas/AdminRental" } },
-          "total": { "type": "integer" },
-          "limit": { "type": "integer" },
-          "offset": { "type": "integer" }
-        }
-      },
-      "CloseRentalRequest": {
-        "type": "object",
-        "required": ["comment", "lot_status"],
-        "properties": {
-          "comment": { "type": "string", "minLength": 3, "maxLength": 500 },
-          "lot_status": { "type": "string", "enum": ["active", "maintenance"] }
-        }
-      },
-      "CancelAdminRentalRequest": {
-        "type": "object",
-        "required": ["reason"],
-        "properties": {
-          "reason": { "type": "string", "minLength": 3, "maxLength": 200 }
-        }
-      },
-      "VerificationPassport": {
-        "type": "object",
-        "required": ["full_name", "birth_date", "passport_number", "issued_by"],
-        "properties": {
-          "full_name": { "type": "string" },
-          "birth_date": { "type": "string", "format": "date" },
-          "passport_number": { "type": "string" },
-          "issued_by": { "type": "string" }
-        }
-      },
-      "VerificationDocument": {
-        "type": "object",
-        "required": ["purpose", "url"],
-        "properties": {
-          "purpose": {
-            "type": "string",
-            "enum": ["verification_passport", "verification_registration", "verification_selfie"]
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCategoryRequest"
+              }
+            }
           },
-          "url": { "type": "string", "format": "uri" }
-        }
-      },
-      "VerificationRequest": {
-        "type": "object",
-        "required": ["id", "user", "status", "passport", "documents", "created_at", "version"],
-        "properties": {
-          "id": { "type": "string", "format": "uuid" },
-          "user": { "$ref": "#/components/schemas/AdminUserRef" },
-          "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
-          "passport": { "$ref": "#/components/schemas/VerificationPassport" },
-          "documents": { "type": "array", "items": { "$ref": "#/components/schemas/VerificationDocument" } },
-          "admin_comment": { "type": ["string", "null"] },
-          "created_at": { "type": "string", "format": "date-time" },
-          "reviewed_at": { "type": ["string", "null"], "format": "date-time" },
-          "version": { "type": "integer" }
-        }
-      },
-      "VerificationRequestPage": {
-        "type": "object",
-        "required": ["items", "total", "limit", "offset"],
-        "properties": {
-          "items": { "type": "array", "items": { "$ref": "#/components/schemas/VerificationRequest" } },
-          "total": { "type": "integer" },
-          "limit": { "type": "integer" },
-          "offset": { "type": "integer" }
-        }
-      },
-      "VerificationDecisionRequest": {
-        "type": "object",
-        "required": ["decision", "version"],
-        "properties": {
-          "decision": { "type": "string", "enum": ["approved", "rejected"] },
-          "comment": { "type": "string", "maxLength": 500 },
-          "version": { "type": "integer" }
-        }
-      },
-      "Ticket": {
-        "type": "object",
-        "required": [
-          "id",
-          "rental_id",
-          "lot",
-          "user",
-          "category",
-          "description",
-          "photo_urls",
-          "status",
-          "created_at",
-          "version"
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminCategoryDTO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
         ],
-        "properties": {
-          "id": { "type": "string", "format": "uuid" },
-          "rental_id": { "type": "string", "format": "uuid" },
-          "lot": { "$ref": "#/components/schemas/RentalLot" },
-          "user": { "$ref": "#/components/schemas/AdminUserRef" },
-          "category": { "type": "string", "enum": ["no_power", "no_drive", "battery", "damage", "other"] },
-          "description": { "type": "string", "minLength": 10, "maxLength": 1000 },
-          "photo_urls": { "type": "array", "items": { "type": "string", "format": "uri" } },
-          "status": { "type": "string", "enum": ["submitted", "in_progress", "resolved"] },
-          "admin_comment": { "type": ["string", "null"] },
-          "created_at": { "type": "string", "format": "date-time" },
-          "resolved_at": { "type": ["string", "null"], "format": "date-time" },
-          "version": { "type": "integer" }
-        }
+        "summary": "Update Category",
+        "tags": [
+          "admin-categories"
+        ]
+      }
+    },
+    "/api/v1/admin/categories/{category_id}/characteristics": {
+      "put": {
+        "operationId": "update_characteristics_api_v1_admin_categories__category_id__characteristics_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "category_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Category Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCharacteristicsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminCategoryDTO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update Characteristics",
+        "tags": [
+          "admin-categories"
+        ]
+      }
+    },
+    "/api/v1/admin/lots/{lot_id}/blocks": {
+      "post": {
+        "operationId": "create_block_api_v1_admin_lots__lot_id__blocks_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "lot_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Lot Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateLotBlockRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LotBlockDTO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Block",
+        "tags": [
+          "admin-calendar"
+        ]
+      }
+    },
+    "/api/v1/admin/lots/{lot_id}/blocks/{block_id}": {
+      "delete": {
+        "operationId": "delete_block_api_v1_admin_lots__lot_id__blocks__block_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "lot_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Lot Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "block_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Block Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Block",
+        "tags": [
+          "admin-calendar"
+        ]
+      }
+    },
+    "/api/v1/admin/lots/{lot_id}/calendar": {
+      "get": {
+        "operationId": "get_lot_calendar_api_v1_admin_lots__lot_id__calendar_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "lot_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Lot Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "From",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "To",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CalendarEventDTO"
+                  },
+                  "title": "Response Get Lot Calendar Api V1 Admin Lots  Lot Id  Calendar Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Lot Calendar",
+        "tags": [
+          "admin-calendar"
+        ]
+      }
+    },
+    "/api/v1/admin/offers": {
+      "get": {
+        "operationId": "list_offers_api_v1_admin_offers_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "maximum": 9223372036854775807,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OfferPageDTO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Offers",
+        "tags": [
+          "admin-offers"
+        ]
       },
-      "TicketPage": {
-        "type": "object",
-        "required": ["items", "total", "limit", "offset"],
-        "properties": {
-          "items": { "type": "array", "items": { "$ref": "#/components/schemas/Ticket" } },
-          "total": { "type": "integer" },
-          "limit": { "type": "integer" },
-          "offset": { "type": "integer" }
-        }
+      "post": {
+        "operationId": "create_offer_api_v1_admin_offers_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateOfferRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OfferVersionDTO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Offer",
+        "tags": [
+          "admin-offers"
+        ]
+      }
+    },
+    "/api/v1/admin/offers/{offer_id}": {
+      "patch": {
+        "operationId": "update_offer_api_v1_admin_offers__offer_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "offer_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Offer Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateOfferRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OfferVersionDTO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update Offer",
+        "tags": [
+          "admin-offers"
+        ]
+      }
+    },
+    "/api/v1/admin/offers/{offer_id}/publish": {
+      "post": {
+        "operationId": "publish_offer_api_v1_admin_offers__offer_id__publish_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "offer_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Offer Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OfferVersionDTO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Publish Offer",
+        "tags": [
+          "admin-offers"
+        ]
+      }
+    },
+    "/api/v1/admin/settings": {
+      "get": {
+        "operationId": "get_settings_api_v1_admin_settings_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminSettingsDTO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Settings",
+        "tags": [
+          "admin-settings"
+        ]
       },
-      "TicketPatchRequest": {
-        "type": "object",
-        "required": ["status", "version"],
-        "properties": {
-          "status": { "type": "string", "enum": ["in_progress", "resolved"] },
-          "admin_comment": { "type": "string", "maxLength": 500 },
-          "version": { "type": "integer" }
-        }
+      "patch": {
+        "operationId": "update_settings_api_v1_admin_settings_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSettingsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminSettingsDTO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update Settings",
+        "tags": [
+          "admin-settings"
+        ]
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "operationId": "login_api_v1_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Login",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "operationId": "logout_api_v1_auth_logout_post",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Logout",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/mfa/confirm": {
+      "post": {
+        "operationId": "confirm_mfa_api_v1_auth_mfa_confirm_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MfaCodeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MfaConfirmResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Confirm Mfa",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/mfa/setup": {
+      "post": {
+        "operationId": "setup_mfa_api_v1_auth_mfa_setup_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MfaTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MfaSetupResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Setup Mfa",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/mfa/verify": {
+      "post": {
+        "operationId": "verify_mfa_api_v1_auth_mfa_verify_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MfaCodeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Verify Mfa",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/password/forgot": {
+      "post": {
+        "operationId": "forgot_password_api_v1_auth_password_forgot_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasswordForgotRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Forgot Password",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/password/reset": {
+      "post": {
+        "operationId": "reset_password_api_v1_auth_password_reset_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasswordResetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reset Password",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/refresh": {
+      "post": {
+        "operationId": "refresh_api_v1_auth_refresh_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Refresh",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/register": {
+      "post": {
+        "operationId": "register_api_v1_auth_register_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Register",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/session": {
+      "get": {
+        "operationId": "session_api_v1_auth_session_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionDTO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Session",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/me/offer-acceptances": {
+      "get": {
+        "operationId": "list_offer_acceptances_api_v1_me_offer_acceptances_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/OfferAcceptanceDTO"
+                  },
+                  "title": "Response List Offer Acceptances Api V1 Me Offer Acceptances Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Offer Acceptances",
+        "tags": [
+          "me-offers"
+        ]
+      },
+      "post": {
+        "operationId": "accept_offer_api_v1_me_offer_acceptances_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceptOfferRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OfferAcceptanceDTO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Accept Offer",
+        "tags": [
+          "me-offers"
+        ]
+      }
+    },
+    "/api/v1/public/categories": {
+      "get": {
+        "operationId": "list_categories_api_v1_public_categories_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CategoryDTO"
+                  },
+                  "title": "Response List Categories Api V1 Public Categories Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Categories",
+        "tags": [
+          "public-catalog"
+        ]
+      }
+    },
+    "/api/v1/public/lots": {
+      "get": {
+        "operationId": "list_lots_api_v1_public_lots_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "category_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "maximum": 9223372036854775807,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LotPageDTO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Lots",
+        "tags": [
+          "public-catalog"
+        ]
+      }
+    },
+    "/api/v1/public/lots/{slug}": {
+      "get": {
+        "operationId": "get_lot_api_v1_public_lots__slug__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LotDTO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Lot",
+        "tags": [
+          "public-catalog"
+        ]
+      }
+    },
+    "/api/v1/public/lots/{slug}/availability": {
+      "get": {
+        "operationId": "get_lot_availability_api_v1_public_lots__slug__availability_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "From",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "To",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AvailabilityDTO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Lot Availability",
+        "tags": [
+          "public-availability"
+        ]
+      }
+    },
+    "/api/v1/public/lots/{slug}/quote": {
+      "get": {
+        "operationId": "get_lot_quote_api_v1_public_lots__slug__quote_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "start",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "Start",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "end",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "End",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteDTO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Lot Quote",
+        "tags": [
+          "public-quote"
+        ]
+      }
+    },
+    "/api/v1/public/offers/current": {
+      "get": {
+        "operationId": "get_current_offer_api_v1_public_offers_current_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicOfferDTO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Current Offer",
+        "tags": [
+          "public-offers"
+        ]
+      }
+    },
+    "/api/v1/public/tenant": {
+      "get": {
+        "operationId": "get_public_tenant_api_v1_public_tenant_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantDTO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Public Tenant",
+        "tags": [
+          "public-tenant"
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "description": "Report that the process is alive without touching the database.",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Liveness probe",
+        "tags": [
+          "infra"
+        ]
+      }
+    },
+    "/readyz": {
+      "get": {
+        "description": "Report readiness after a real, bounded database check.",
+        "operationId": "readyz_readyz_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadinessResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadinessResponse"
+                }
+              }
+            },
+            "description": "Database is not ready"
+          }
+        },
+        "summary": "Readiness probe",
+        "tags": [
+          "infra"
+        ]
       }
     }
   }
