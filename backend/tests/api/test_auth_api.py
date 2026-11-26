@@ -24,6 +24,7 @@ from app.main import create_app
 from app.models import Tenant, User
 from src.infrastructure.postgres.models.refresh_session_record import RefreshSessionRecord
 from src.infrastructure.security.password_hasher import Argon2PasswordHasher
+from tests.api.auth_helpers import enable_mfa, login_with_mfa
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 pytestmark = pytest.mark.skipif(
@@ -147,6 +148,8 @@ def seed_auth() -> SeededAuth:
         is_active=True,
         token_version=1,
     )
+    enable_mfa(owner)
+    enable_mfa(admin)
 
     async def seed() -> None:
         engine = create_engine(DATABASE_URL)
@@ -297,12 +300,7 @@ def client_for(domain: str, *, browser_headers: bool = True) -> TestClient:
 
 
 def _login(client: TestClient, email: str) -> dict[str, object]:
-    response = client.post(
-        "/api/v1/auth/login",
-        json={"email": email, "password": PASSWORD},
-    )
-    assert response.status_code == 200
-    return cast(dict[str, object], response.json())
+    return login_with_mfa(client, email)
 
 
 def test_register_creates_user_and_secure_cookie(seeded: SeededAuth) -> None:

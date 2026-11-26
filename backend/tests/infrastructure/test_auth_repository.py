@@ -12,7 +12,7 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from app.db import configure_session, create_engine, create_session_factory
-from app.models import Tenant
+from app.models import Tenant, User
 from src.domain.entities.user_account import EmailTakenError
 from src.infrastructure.postgres.repositories.auth_repository import AuthRepository
 
@@ -175,3 +175,44 @@ async def test_cross_tenant_refresh_session_write_is_rejected(
                 },
             )
         await session.rollback()
+
+
+async def test_for_update_refreshes_stale_identity_map(
+    session_factory: async_sessionmaker[AsyncSession],
+    tenants: tuple[UUID, UUID],
+) -> None:
+    tenant_a, _tenant_b = tenants
+    async with session_factory() as first:
+        _configured(first, tenant_a)
+        first_repository = AuthRepository(first)
+        user = await first_repository.create_user(
+            email=f"stale-{uuid4().hex[:8]}@example.com",
+            name="Stale",
+            password_hash="old-hash",
+            phone=None,
+        )
+        await first.commit()
+        cached = await first_repository.get_by_id(user.id)
+        assert cached is not None
+        assert cached.password_hash == "old-hash"
+        mapped = await first.get(User, user.id)
+        assert mapped is not None
+        assert mapped.password_hash == "old-hash"
+
+        async with session_factory() as second:
+            _configured(second, tenant_a)
+            await AuthRepository(second).update_password(
+                user.id,
+                password_hash="new-hash",
+                token_version=2,
+            )
+            await second.commit()
+
+        refreshed = await first_repository.get_by_id_for_update(user.id)
+        assert refreshed is not None
+        assert refreshed.password_hash == "new-hash"
+        assert refreshed.token_version == 2
+        await first.refresh(mapped)
+        assert mapped.password_hash == "new-hash"
+        assert mapped.token_version == 2
+        await first.commit()

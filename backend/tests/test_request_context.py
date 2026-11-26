@@ -1,3 +1,5 @@
+import base64
+import hashlib
 import logging
 from collections.abc import AsyncIterator
 from typing import Any, Literal, cast
@@ -17,6 +19,9 @@ from app.tenancy import LookupKind, TenantCandidate, TenantResolver
 
 TENANT_A = UUID("11111111-1111-1111-1111-111111111111")
 TENANT_B = UUID("22222222-2222-2222-2222-222222222222")
+SECURITY_KEY = base64.urlsafe_b64encode(
+    hashlib.sha256(b"request-context-security-key").digest()
+).decode("ascii")
 
 
 class FakeResolver(TenantResolver):
@@ -129,6 +134,7 @@ def make_client(
         platform_domain="platform.test",
         allow_tenant_header=allow_tenant_header,
         jwt_secret="test-request-context-secret-0123456789abcdef",
+        security_key=SECURITY_KEY,
     )
     app = create_app(
         settings,

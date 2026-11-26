@@ -16,6 +16,7 @@ from app.db import create_engine, create_session_factory
 from app.main import create_app
 from app.models import Tenant, User
 from src.infrastructure.security.password_hasher import Argon2PasswordHasher
+from tests.api.auth_helpers import enable_mfa, login_with_mfa
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 pytestmark = pytest.mark.skipif(
@@ -101,6 +102,9 @@ def seed_offers() -> SeededOffers:
         is_active=True,
         token_version=1,
     )
+    enable_mfa(owner)
+    enable_mfa(admin)
+    enable_mfa(owner_b)
 
     async def seed() -> None:
         engine = create_engine(DATABASE_URL)
@@ -175,12 +179,8 @@ def client_for(domain: str, *, browser_headers: bool = True) -> TestClient:
 
 
 def login(client: TestClient, email: str) -> str:
-    response = client.post(
-        "/api/v1/auth/login",
-        json={"email": email, "password": PASSWORD},
-    )
-    assert response.status_code == 200
-    return str(response.json()["access_token"])
+    payload = login_with_mfa(client, email)
+    return str(payload["access_token"])
 
 
 def auth(token: str) -> dict[str, str]:

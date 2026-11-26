@@ -18,6 +18,7 @@ from src.domain.entities.user_account import (
     AuthBusyError,
     UserAccount,
 )
+from src.infrastructure.security.secret_box import CodeHasher, SecretBox
 
 NOW = datetime(2026, 1, 1, tzinfo=UTC)
 CONTRACT_PERMISSIONS = {
@@ -116,6 +117,10 @@ class RecordingRepository:
         self.events.append("read")
         return self.user
 
+    async def get_by_id_for_update(self, user_id: object) -> UserAccount:
+        self.events.append("lock")
+        return self.user
+
     async def commit(self) -> None:
         self.events.append("commit")
 
@@ -163,7 +168,7 @@ def test_auth_busy_error_maps_to_service_unavailable() -> None:
 
 
 async def test_login_releases_read_transaction_before_password_work() -> None:
-    user = _user("owner")
+    user = _user("user")
     repository = RecordingRepository(user)
     hasher = RecordingHasher(repository.events)
     service = AuthService(
@@ -173,11 +178,13 @@ async def test_login_releases_read_transaction_before_password_work() -> None:
         refresh_ttl_days=30,
         tenant_id=uuid4(),
         password_work_timeout_seconds=1,
+        secret_box=SecretBox.from_settings("x" * 32),
+        code_hasher=CodeHasher("x" * 32),
     )
 
     await service.login(email=user.email, password="Bike-Rider-2026!")
 
-    assert repository.events == ["read", "commit", "verify", "create_refresh"]
+    assert repository.events == ["read", "commit", "verify", "lock", "create_refresh"]
 
 
 async def test_password_work_returns_result() -> None:

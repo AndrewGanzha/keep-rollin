@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
@@ -13,6 +14,10 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from app.db import configure_session, create_engine, create_session_factory
 from app.models import Tenant, User
 from app.tenancy import DatabaseTenantResolver, TenantCandidate
+from src.infrastructure.postgres.models.mfa_challenge_record import MfaChallengeRecord
+from src.infrastructure.postgres.models.password_reset_token_record import (
+    PasswordResetTokenRecord,
+)
 from tests.factories import TenantSeedFactory, UserSeedFactory
 
 DATABASE_URL = os.getenv("DATABASE_URL")
@@ -220,3 +225,81 @@ async def test_database_tenant_resolver_handles_stored_mixed_case(
         async with session_factory() as session:
             await session.execute(delete(Tenant).where(Tenant.id == tenant_id))
             await session.commit()
+
+
+async def test_auth_hardening_tables_are_tenant_isolated(
+    session_factory: async_sessionmaker[AsyncSession],
+    seeded: tuple[UUID, UUID, str, str],
+) -> None:
+    tenant_a, tenant_b, email_a, email_b = seeded
+    async with session_factory() as session:
+        rows = await session.execute(select(User.id, User.email))
+        user_ids = {row.email: row.id for row in rows}
+    user_a = user_ids[email_a]
+    user_b = user_ids[email_b]
+    expires_at = datetime.now(UTC) + timedelta(minutes=5)
+
+    challenge_id = uuid4()
+    async with session_factory() as session:
+        configure_session(session, tenant_id=tenant_a, database_role="keep_rollin_app")
+        session.add(
+            MfaChallengeRecord(
+                jti=challenge_id,
+                tenant_id=tenant_a,
+                user_id=user_a,
+                purpose="login",
+                expires_at=expires_at,
+            )
+        )
+        session.add(
+            PasswordResetTokenRecord(
+                tenant_id=tenant_a,
+                user_id=user_a,
+                token_hash=f"hash-{challenge_id}",
+                token_secret_enc="encrypted",
+                expires_at=expires_at,
+            )
+        )
+        await session.commit()
+
+    async with session_factory() as session:
+        configure_session(session, tenant_id=tenant_b, database_role="keep_rollin_app")
+        assert list((await session.execute(select(MfaChallengeRecord))).scalars()) == []
+        assert list((await session.execute(select(PasswordResetTokenRecord))).scalars()) == []
+
+    async with session_factory() as session:
+        configure_session(session, tenant_id=tenant_a, database_role="keep_rollin_app")
+        challenges = list((await session.execute(select(MfaChallengeRecord))).scalars())
+        tokens = list((await session.execute(select(PasswordResetTokenRecord))).scalars())
+        assert [row.jti for row in challenges] == [challenge_id]
+        assert len(tokens) == 1
+
+    async with session_factory() as session:
+        configure_session(session, tenant_id=tenant_a, database_role="keep_rollin_app")
+        session.add(
+            MfaChallengeRecord(
+                jti=uuid4(),
+                tenant_id=tenant_b,
+                user_id=user_b,
+                purpose="login",
+                expires_at=expires_at,
+            )
+        )
+        with pytest.raises(DBAPIError):
+            await session.flush()
+        await session.rollback()
+
+    async with session_factory() as session:
+        configure_session(session, tenant_id=tenant_a, database_role="keep_rollin_app")
+        session.add(
+            PasswordResetTokenRecord(
+                tenant_id=tenant_b,
+                user_id=user_b,
+                token_hash=f"cross-{uuid4()}",
+                token_secret_enc="encrypted",
+                expires_at=expires_at,
+            )
+        )
+        with pytest.raises(DBAPIError):
+            await session.flush()
+        await session.rollback()
