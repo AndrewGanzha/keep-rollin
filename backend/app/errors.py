@@ -65,6 +65,8 @@ def problem_response(
         content=payload,
         media_type=PROBLEM_CONTENT_TYPE,
     )
+    if request.url.path.startswith(("/api/v1/auth", "/api/v1/me", "/api/v1/admin")):
+        response.headers["Cache-Control"] = "no-store"
     if isinstance(headers, Mapping):
         response.headers.update(headers)
     elif headers:

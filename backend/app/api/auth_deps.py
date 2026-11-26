@@ -9,7 +9,10 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db_session
-from src.application.services.auth import AuthService
+from src.application.dtos.auth_dto import LoginRequest
+from src.application.services.auth import AuthService, TokenService
+from src.application.services.outbox import OutboxWriter
+from src.application.services.rate_limit import SlidingWindowRateLimiter
 from src.domain.entities.user_account import (
     InactiveUserError,
     InvalidTokenError,
@@ -18,7 +21,9 @@ from src.domain.entities.user_account import (
     UserAccount,
 )
 from src.infrastructure.postgres.repositories.auth_repository import AuthRepository
+from src.infrastructure.postgres.repositories.outbox_repository import OutboxRepository
 from src.infrastructure.security.password_hasher import Argon2PasswordHasher
+from src.infrastructure.security.secret_box import CodeHasher, SecretBox
 from src.infrastructure.security.token_service import JwtTokenService
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -38,16 +43,29 @@ def get_auth_service(
     tenant_id = cast(UUID | None, getattr(request.state, "tenant_id", None))
     if tenant_id is None:
         raise HTTPException(status_code=404, detail={"code": "tenant_not_found"})
+    secret_box = cast(SecretBox | None, getattr(request.app.state, "secret_box", None))
+    code_hasher = cast(CodeHasher | None, getattr(request.app.state, "code_hasher", None))
+    if secret_box is None or code_hasher is None:
+        raise HTTPException(status_code=503, detail={"code": "service_unavailable"})
     return AuthService(
         AuthRepository(session),
         get_password_hasher(),
-        JwtTokenService(
-            secret=settings.jwt_secret,
-            access_ttl_seconds=settings.access_ttl_seconds,
+        cast(
+            TokenService,
+            JwtTokenService(
+                secret=settings.jwt_secret,
+                access_ttl_seconds=settings.access_ttl_seconds,
+                mfa_ttl_seconds=300,
+            ),
         ),
         refresh_ttl_days=settings.refresh_ttl_days,
         tenant_id=tenant_id,
         password_work_timeout_seconds=settings.password_work_timeout_seconds,
+        secret_box=secret_box,
+        code_hasher=code_hasher,
+        issuer=settings.app_name,
+        outbox=OutboxWriter(OutboxRepository(session)),
+        password_reset_ttl_seconds=settings.password_reset_ttl_seconds,
     )
 
 
@@ -138,3 +156,38 @@ async def verify_csrf(request: Request) -> None:
     origin = origins[0]
     if not _origin_matches_request(request, origin):
         raise HTTPException(status_code=403, detail={"code": "forbidden_role"})
+
+
+def _rate_limit_error(retry_after: int) -> HTTPException:
+    return HTTPException(
+        status_code=429,
+        detail={"code": "rate_limited"},
+        headers={
+            "Retry-After": str(retry_after),
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+async def enforce_login_rate_limit(
+    request: Request,
+    payload: LoginRequest,
+) -> None:
+    ip_limiter = cast(
+        SlidingWindowRateLimiter | None,
+        getattr(request.app.state, "login_ip_limiter", None),
+    )
+    email_limiter = cast(
+        SlidingWindowRateLimiter | None,
+        getattr(request.app.state, "login_email_limiter", None),
+    )
+    if ip_limiter is None or email_limiter is None:
+        return
+    tenant_id = str(getattr(request.state, "tenant_id", "unknown"))
+    ip = request.client.host if request.client else "unknown"
+    retry_after = ip_limiter.hit(f"{tenant_id}:{ip}")
+    if retry_after is not None:
+        raise _rate_limit_error(retry_after)
+    retry_after = email_limiter.hit(f"{tenant_id}:{payload.email}")
+    if retry_after is not None:
+        raise _rate_limit_error(retry_after)

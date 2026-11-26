@@ -4,17 +4,20 @@ from datetime import datetime
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     DateTime,
     ForeignKey,
     Integer,
     MetaData,
+    SmallInteger,
     String,
     Text,
     UniqueConstraint,
     func,
+    text,
 )
-from sqlalchemy.dialects.postgresql import CITEXT
+from sqlalchemy.dialects.postgresql import CITEXT, JSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -88,6 +91,21 @@ class User(Base):
     )
     is_active: Mapped[bool] = mapped_column(Boolean(), nullable=False, server_default="true")
     token_version: Mapped[int] = mapped_column(Integer(), nullable=False, server_default="1")
+    mfa_enabled: Mapped[bool] = mapped_column(Boolean(), nullable=False, server_default="false")
+    mfa_secret_enc: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    mfa_last_step: Mapped[int | None] = mapped_column(BigInteger(), nullable=True)
+    mfa_failed_attempts: Mapped[int] = mapped_column(
+        SmallInteger(), nullable=False, server_default="0"
+    )
+    mfa_failure_window_started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    mfa_locked_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    mfa_recovery_hashes: Mapped[list[str]] = mapped_column(
+        JSONB(), nullable=False, server_default=text("'[]'::jsonb")
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

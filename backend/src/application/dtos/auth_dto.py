@@ -74,11 +74,83 @@ class UserDTO(BaseModel):
 
 
 class LoginResponse(BaseModel):
-    access_token: str
+    access_token: str | None = None
     expires_in: int
-    user: UserDTO
-    role: UserRole
-    permissions: list[str]
+    user: UserDTO | None = None
+    role: UserRole | None = None
+    permissions: list[str] = Field(default_factory=list)
+    mfa_required: bool = False
+    mfa_setup_required: bool = False
+    mfa_token: str | None = None
+
+
+class MfaConfirmResponse(LoginResponse):
+    recovery_codes: list[str]
+
+
+class MfaSetupResponse(BaseModel):
+    secret: str
+    otpauth_uri: str
+
+
+class MfaTokenRequest(BaseModel):
+    mfa_token: str = Field(min_length=20, max_length=4096)
+
+    @field_validator("mfa_token")
+    @classmethod
+    def reject_nul(cls, value: str) -> str:
+        if "\x00" in value:
+            raise ValueError("NUL characters are not allowed")
+        return value
+
+
+class MfaCodeRequest(MfaTokenRequest):
+    code: str = Field(min_length=6, max_length=32)
+
+    @field_validator("code")
+    @classmethod
+    def normalize_code(cls, value: str) -> str:
+        normalized = value.strip()
+        if "\x00" in normalized:
+            raise ValueError("NUL characters are not allowed")
+        return normalized
+
+
+class PasswordForgotRequest(BaseModel):
+    email: str = Field(max_length=254)
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, value: str) -> str:
+        value = value.strip().lower()
+        if len(value) > 254:
+            raise ValueError("email is too long")
+        if not EMAIL_RE.fullmatch(value):
+            raise ValueError("invalid email")
+        return value
+
+    @field_validator("email")
+    @classmethod
+    def reject_nul(cls, value: str) -> str:
+        if "\x00" in value:
+            raise ValueError("NUL characters are not allowed")
+        return value
+
+
+class PasswordResetRequest(BaseModel):
+    token: str = Field(min_length=20, max_length=512)
+    password: str = Field(min_length=8, max_length=128)
+
+    @field_validator("token", "password")
+    @classmethod
+    def reject_nul(cls, value: str) -> str:
+        if "\x00" in value:
+            raise ValueError("NUL characters are not allowed")
+        return value
+
+
+class MessageResponse(BaseModel):
+    message: str
 
 
 class SessionDTO(BaseModel):
@@ -87,3 +159,4 @@ class SessionDTO(BaseModel):
     role: UserRole
     permissions: list[str]
     offer_accepted: bool
+    mfa_enabled: bool = False

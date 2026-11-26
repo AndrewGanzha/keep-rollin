@@ -23,6 +23,8 @@ from app.errors import register_exception_handlers
 from app.logging import configure_logging
 from app.middleware import RequestContextMiddleware, TenantMiddleware
 from app.tenancy import DatabaseTenantResolver, TenantResolver
+from src.application.services.rate_limit import SlidingWindowRateLimiter
+from src.infrastructure.security.secret_box import CodeHasher, SecretBox
 
 
 def create_app(
@@ -70,6 +72,21 @@ def create_app(
     application.state.settings = resolved_settings
     application.state.tenant_resolver = tenant_resolver
     application.state.session_factory = session_factory
+    security_secret = resolved_settings.security_key or resolved_settings.jwt_secret
+    application.state.secret_box = SecretBox.from_settings(
+        security_secret,
+        key_id=resolved_settings.security_key_id,
+        previous_keys=resolved_settings.security_previous_keys,
+    )
+    application.state.code_hasher = CodeHasher(security_secret)
+    application.state.login_ip_limiter = SlidingWindowRateLimiter(
+        limit=resolved_settings.auth_rate_limit_per_minute,
+        window_seconds=resolved_settings.auth_rate_limit_window_seconds,
+    )
+    application.state.login_email_limiter = SlidingWindowRateLimiter(
+        limit=resolved_settings.auth_rate_limit_email_per_minute,
+        window_seconds=resolved_settings.auth_rate_limit_window_seconds,
+    )
 
     register_exception_handlers(application)
     application.add_middleware(TenantMiddleware)

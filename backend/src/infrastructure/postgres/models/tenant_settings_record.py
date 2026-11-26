@@ -47,6 +47,8 @@ class TenantSettingsRecord(Base):
         server_default=text(DEFAULT_POLICIES_SQL),
     )
     vapid_public_key: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    vapid_private_key_enc: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    vapid_key_id: Mapped[str | None] = mapped_column(Text(), nullable=True)
     version: Mapped[int] = mapped_column(
         Integer(), nullable=False, default=1, server_default=text("1")
     )
