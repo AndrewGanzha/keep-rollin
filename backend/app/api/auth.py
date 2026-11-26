@@ -2,8 +2,10 @@ from typing import Annotated, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth_deps import get_auth_service, get_current_user, verify_csrf
+from app.api.deps import get_db_session
 from src.application.dtos.auth_dto import (
     LoginRequest,
     LoginResponse,
@@ -24,6 +26,7 @@ from src.domain.entities.user_account import (
     UserAccount,
 )
 from src.domain.policies.password_policy import PasswordCompromisedError
+from src.infrastructure.postgres.repositories.offer_repository import OfferRepository
 
 
 def no_store(response: Response) -> None:
@@ -199,13 +202,15 @@ async def logout(
 async def session(
     request: Request,
     user: Annotated[UserAccount, Depends(get_current_user)],
+    db_session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> SessionDTO:
+    offer_accepted = await OfferRepository(db_session).has_accepted_current(user_id=user.id)
     return SessionDTO(
         user=UserDTO.from_domain(user),
         tenant_id=cast(UUID, request.state.tenant_id),
         role=user.role,
         permissions=list(user.permissions),
-        offer_accepted=False,
+        offer_accepted=offer_accepted,
     )
 
 

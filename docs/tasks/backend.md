@@ -117,8 +117,8 @@ _Подгруппа **B3** · 4 задачи._
 **Объём:** `tenant`, `tenant_settings`, `GET /public/tenant`, `GET/PATCH /admin/settings` (version).
 **AC:**
 - [x] Public-DTO: branding, tz, currency, policies, `vapid_public_key`; кэш `max-age=300`.
-- [ ] PATCH валидирует диапазоны §3.8; неизвестное поле → 422 (отложено до авторизации).
-- [ ] После PATCH публичные ответы отражают изменения (инвалидация кэша; отложено до авторизации).
+- [x] PATCH валидирует диапазоны §3.8; неизвестное поле → 422.
+- [x] После PATCH публичные ответы отражают изменения; optimistic `version` и 409 `stale_version`.
 
 ### BE-TEN-02 · Провижининг тенанта (CLI)
 
@@ -143,9 +143,9 @@ _Подгруппа **B3** · 4 задачи._
 **Зависит:** BE-TEN-01
 **Объём:** `offer_version` (draft/active/archived), `GET/POST/PATCH /admin/offers`, `publish`, `GET /public/offers/current`, `POST/GET /me/offer-acceptances`.
 **AC:**
-- [ ] Ровно одна `active` версия (partial unique index); публикация атомарна.
-- [ ] Принятие фиксирует версию, время, IP; повтор идемпотентен (200).
-- [ ] `offer_accepted` в `/auth/session` соответствует последней версии.
+- [x] Ровно одна `active` версия (partial unique index); публикация атомарна.
+- [x] Принятие фиксирует версию, время, IP; повтор идемпотентен (200).
+- [x] `offer_accepted` в `/auth/session` соответствует последней версии.
 
 ## 6.2.4. Каталог, файлы, доступность
 
@@ -168,9 +168,9 @@ _Подгруппа **B4** · 11 задач._
 **Зависит:** BE-CAT-01
 **Объём:** bulk `PUT`, типы `number|text|select`, `code` immutable, `unit`, `is_required`, `options`, `is_archived`.
 **AC:**
-- [ ] Смена типа при существующих значениях → 409 `characteristic_in_use`.
-- [ ] Удаление = архивация; значения сохраняются в `lot.characteristics`.
-- [ ] Порядок (`sort`) сохраняется; фильтры публичного каталога строятся из активных.
+- [x] Смена типа при существующих значениях → 409 `characteristic_in_use`.
+- [x] Удаление = архивация; значения сохраняются в `lot.characteristics`.
+- [x] Порядок (`sort`) сохраняется; фильтры публичного каталога строятся из активных.
 
 ### BE-LOT-01 · CRUD лотов
 

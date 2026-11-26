@@ -151,7 +151,7 @@ def seed_admin_categories() -> SeededAdminCategories:
         name="Visible lot",
         description=None,
         photos=[],
-        characteristics={},
+        characteristics={"power": 500},
         rental_unit="day",
         battery_type="48v",
         allowed_durations=[1],
@@ -374,10 +374,28 @@ def test_admin_and_user_cannot_manage_categories(seeded: SeededAdminCategories) 
             json={"name": "Nope", "slug": "nope", "description": None},
         )
         user_list = client.get("/api/v1/admin/categories", headers=auth(user_token))
+        admin_characteristics = client.put(
+            f"/api/v1/admin/categories/{seeded.active_category_id}/characteristics",
+            headers=auth(admin_token),
+            json={
+                "version": 1,
+                "items": [{"code": "power", "name": "Power", "type": "number"}],
+            },
+        )
+        user_characteristics = client.put(
+            f"/api/v1/admin/categories/{seeded.active_category_id}/characteristics",
+            headers=auth(user_token),
+            json={
+                "version": 1,
+                "items": [{"code": "power", "name": "Power", "type": "number"}],
+            },
+        )
         anonymous = client.get("/api/v1/admin/categories")
 
     assert admin_list.status_code == 403
     assert admin_create.status_code == 403
+    assert admin_characteristics.status_code == 403
+    assert user_characteristics.status_code == 403
     assert user_list.status_code == 403
     assert anonymous.status_code == 401
 
@@ -428,6 +446,143 @@ def test_tenant_isolation_and_csrf(seeded: SeededAdminCategories) -> None:
             json={"name": "No CSRF", "slug": f"no-csrf-{uuid4().hex[:8]}", "description": None},
         )
     assert missing_headers.status_code == 403
+
+
+def test_bulk_characteristics_upsert_archive_and_conflict(
+    seeded: SeededAdminCategories,
+) -> None:
+    with client_for(seeded.domain_a) as client:
+        token = login(client, seeded.owner_a_email)
+        headers = auth(token)
+        category_id = seeded.active_category_id
+
+        created = client.put(
+            f"/api/v1/admin/categories/{category_id}/characteristics",
+            headers=headers,
+            json={
+                "version": 1,
+                "items": [
+                    {
+                        "code": "power",
+                        "name": "Power",
+                        "type": "number",
+                        "unit": "W",
+                        "is_required": True,
+                        "sort": 1,
+                    },
+                    {
+                        "code": "drive",
+                        "name": "Drive",
+                        "type": "select",
+                        "options": ["belt", "chain"],
+                        "sort": 2,
+                    },
+                ],
+            },
+        )
+        assert created.status_code == 200
+        assert created.json()["version"] == 2
+        by_code = {item["code"]: item for item in created.json()["characteristics"]}
+        assert by_code["power"]["options"] == []
+        assert by_code["drive"]["options"] == ["belt", "chain"]
+
+        public_after_create = client.get("/api/v1/public/categories")
+        public_category = next(
+            item for item in public_after_create.json() if item["id"] == str(category_id)
+        )
+        assert {item["code"] for item in public_category["characteristics"]} == {
+            "power",
+            "drive",
+        }
+
+        type_change = client.put(
+            f"/api/v1/admin/categories/{category_id}/characteristics",
+            headers=headers,
+            json={
+                "version": 2,
+                "items": [
+                    {
+                        "code": "power",
+                        "name": "Power",
+                        "type": "text",
+                        "sort": 1,
+                    }
+                ],
+            },
+        )
+        assert type_change.status_code == 409
+        assert type_change.json()["code"] == "characteristic_in_use"
+
+        archived = client.put(
+            f"/api/v1/admin/categories/{category_id}/characteristics",
+            headers=headers,
+            json={
+                "version": 2,
+                "items": [
+                    {
+                        "code": "power",
+                        "name": "Power",
+                        "type": "number",
+                        "unit": "W",
+                        "is_required": True,
+                        "sort": 1,
+                    },
+                    {
+                        "code": "drive",
+                        "name": "Drive",
+                        "type": "select",
+                        "options": ["belt", "chain"],
+                        "sort": 2,
+                        "is_archived": True,
+                    },
+                ],
+            },
+        )
+        assert archived.status_code == 200
+        assert archived.json()["version"] == 3
+        admin_by_code = {item["code"]: item for item in archived.json()["characteristics"]}
+        assert admin_by_code["drive"]["is_archived"] is True
+        assert admin_by_code["power"]["is_archived"] is False
+
+        public_after_archive = client.get("/api/v1/public/categories")
+        public_category = next(
+            item for item in public_after_archive.json() if item["id"] == str(category_id)
+        )
+        assert {item["code"] for item in public_category["characteristics"]} == {"power"}
+
+        stale = client.put(
+            f"/api/v1/admin/categories/{category_id}/characteristics",
+            headers=headers,
+            json={
+                "version": 2,
+                "items": [{"code": "power", "name": "Power", "type": "number"}],
+            },
+        )
+        assert stale.status_code == 409
+        assert stale.json()["code"] == "stale_version"
+
+        duplicate = client.put(
+            f"/api/v1/admin/categories/{category_id}/characteristics",
+            headers=headers,
+            json={
+                "version": 3,
+                "items": [
+                    {"code": "power", "name": "Power", "type": "number"},
+                    {"code": "power", "name": "Power two", "type": "text"},
+                ],
+            },
+        )
+        assert duplicate.status_code == 422
+
+        missing_options = client.put(
+            f"/api/v1/admin/categories/{category_id}/characteristics",
+            headers=headers,
+            json={
+                "version": 3,
+                "items": [{"code": "drive", "name": "Drive", "type": "select"}],
+            },
+        )
+        assert missing_options.status_code == 422
 
 
 def test_create_category_validates_input(seeded: SeededAdminCategories) -> None:

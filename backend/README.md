@@ -1,9 +1,9 @@
 # Backend (FastAPI)
 
 Backend keep-rollin: FastAPI, SQLAlchemy/Alembic, tenant RLS, публичный каталог,
-доступность и расчёт цены. Сервис содержит `GET /health` и `GET /readyz`,
-request context, problem+json, JSON access logs и tenant resolution по Host.
-Админские и авторизованные сценарии подключаются после собственной авторизации.
+доступность и расчёт цены, auth-core, админские категории, настройки и оферты.
+Сервис содержит `GET /health` и `GET /readyz`, request context, problem+json,
+JSON access logs и tenant resolution по Host.
 
 ## Требования
 
@@ -156,8 +156,9 @@ GET  /api/v1/auth/session
   `Sec-Fetch-Site: none`.
 
 MFA, password reset, rate limit и полная проверка утечек остаются отдельными
-задачами. `phone` опционален для MVP; `prefs-summary` и фактический
-`offer_accepted` появятся вместе с BE-OFF-01 и настройками уведомлений.
+задачами. `phone` опционален для MVP; `offer_accepted` уже отражает принятие
+текущей active-оферты, а `prefs-summary` появится вместе с настройками
+уведомлений.
 В production обязательны непустой `JWT_SECRET`, cookie `__Host-rt`
 и `Secure=True`; dev-secret запрещён. Образ Docker выставляет
 `APP_ENV=production`, поэтому без `JWT_SECRET` контейнер не стартует.
@@ -174,13 +175,58 @@ PATCH /api/v1/admin/categories/{id}
 ```
 
 - доступ только для `owner` (`catalog.manage`); admin/user получают 403;
-- admin-DTO содержит `version` и активные характеристики; публичный DTO не изменён;
+- admin-DTO содержит `version` и все характеристики, включая архивные
+  (`is_archived=true`); публичный DTO не изменён и отдаёт только активные;
 - `POST` валидирует name/slug/description и отклоняет дубль slug с 409 `slug_taken`;
 - `PATCH` требует `version`, при устаревшей версии возвращает 409 `stale_version`;
 - архивация скрывает категорию и её лоты из публичного каталога;
 - миграция `0007_category_version` добавляет `category.version >= 1`.
 
-Bulk-характеристики (`PUT /admin/categories/{id}/characteristics`) остаются BE-CAT-02.
+Bulk-характеристики:
+
+```text
+PUT /api/v1/admin/categories/{id}/characteristics
+```
+
+- требует `category.version`; успех увеличивает версию категории;
+- `code` неизменяем, определения создаются/обновляются/архивируются;
+- `number`/`text` без options, `select` требует непустой уникальный список;
+- смена типа при наличии значения в `lot.characteristics` → 409 `characteristic_in_use`;
+- архивные определения видны в admin-DTO, но скрыты из публичного каталога.
+
+## Настройки тенанта
+
+```text
+GET   /api/v1/admin/settings
+PATCH /api/v1/admin/settings
+```
+
+- owner-only (`settings.manage`), `no-store`;
+- PATCH требует `version` и валидирует диапазоны §3.8, IANA timezone,
+  ISO-подобный currency, hex-цвет и http(s) logo URL;
+- частичный `policies` мержится с текущими значениями, stale version → 409;
+- `timezone`/`currency` обновляются в `tenant`, брендинг и политики — в
+  `tenant_settings`; публичный `/public/tenant` сразу отражает изменения.
+
+## Оферты
+
+```text
+GET  /api/v1/public/offers/current
+GET  /api/v1/admin/offers
+POST /api/v1/admin/offers
+PATCH /api/v1/admin/offers/{id}
+POST /api/v1/admin/offers/{id}/publish
+GET  /api/v1/me/offer-acceptances
+POST /api/v1/me/offer-acceptances
+```
+
+- owner-only управление (`offers.manage`), draft можно править, active/archived — нет;
+- публикация атомарно архивирует предыдущую active-версию; partial unique index
+  гарантирует ровно одну active-версию на тенант;
+- принятие возможно только для active-версии, повтор идемпотентен и фиксирует
+  версию, время и IP;
+- `GET /auth/session` возвращает `offer_accepted=true` только после принятия
+  текущей active-версии; новая публикация сбрасывает флаг до повторного принятия.
 
 ## Занятость и цена
 
@@ -197,7 +243,8 @@ Bulk-характеристики (`PUT /admin/categories/{id}/characteristics`)
 
 `GET /public/tenant` отдаёт публичный branding, timezone, currency, VAPID key и
 policies из `tenant_settings` с `Cache-Control: max-age=300`. Админский
-`GET/PATCH /admin/settings` отложен до авторизации.
+`GET/PATCH /admin/settings` реализован: PATCH использует `version`, валидирует
+диапазоны §3.8 и сразу отражается в публичном ответе.
 
 ## Outbox
 
@@ -209,8 +256,9 @@ policies из `tenant_settings` с `Cache-Control: max-age=300`. Админск�
 `(event_type, entity_id, user_id, channel)` tenant-scoped и использует
 `NULLS NOT DISTINCT`.
 
-Админские CRUD-операции каталога, ручные блокировки и аренды отложены до появления
-собственной авторизации.
+Админские категории, настройки и оферты уже реализованы. CRUD лотов, ручные
+блокировки, аренды, верификация, тикеты и остальные админ-сценарии остаются
+следующими задачами.
 
 ## Известные ограничения MVP
 

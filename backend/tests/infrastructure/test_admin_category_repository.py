@@ -11,11 +11,14 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from app.db import configure_session, create_engine, create_session_factory
 from app.models import Tenant
+from src.application.repositories.i_admin_category_repository import CharacteristicUpsert
 from src.domain.entities.category import (
     CategoryNotFoundError,
     CategorySlugTakenError,
     CategoryVersionConflictError,
 )
+from src.domain.entities.characteristic import CharacteristicInUseError
+from src.infrastructure.postgres.models.lot_record import LotRecord
 from src.infrastructure.postgres.repositories.admin_category_repository import (
     AdminCategoryRepository,
 )
@@ -157,6 +160,129 @@ async def test_admin_category_duplicate_slug(
         with pytest.raises(CategorySlugTakenError):
             await repository.update(second_id, version=1, changes={"slug": "ebikes"})
         await session.rollback()
+
+
+async def test_admin_characteristics_upsert_and_archive(
+    session_factory: async_sessionmaker[AsyncSession],
+    tenants: tuple[UUID, UUID],
+) -> None:
+    tenant_a, _tenant_b = tenants
+    async with session_factory() as session:
+        _configured(session, tenant_a)
+        repository = AdminCategoryRepository(session)
+        category = await repository.create(name="E-bikes", slug="ebikes", description=None)
+        updated = await repository.update_characteristics(
+            category.id,
+            version=1,
+            definitions=[
+                CharacteristicUpsert(
+                    code="power",
+                    name="Power",
+                    type="number",
+                    unit="W",
+                    is_required=True,
+                    options=(),
+                    sort=1,
+                    is_archived=False,
+                ),
+                CharacteristicUpsert(
+                    code="drive",
+                    name="Drive",
+                    type="select",
+                    unit=None,
+                    is_required=False,
+                    options=("belt", "chain"),
+                    sort=2,
+                    is_archived=False,
+                ),
+            ],
+        )
+        assert updated.version == 2
+        assert {item.code.value for item in updated.characteristics} == {"power", "drive"}
+
+        archived = await repository.update_characteristics(
+            category.id,
+            version=2,
+            definitions=[
+                CharacteristicUpsert(
+                    code="power",
+                    name="Power",
+                    type="number",
+                    unit="W",
+                    is_required=True,
+                    options=(),
+                    sort=1,
+                    is_archived=True,
+                )
+            ],
+        )
+        assert archived.version == 3
+        by_code = {item.code.value: item for item in archived.characteristics}
+        assert by_code["power"].is_archived is True
+        assert by_code["drive"].is_archived is False
+
+
+async def test_admin_characteristic_type_change_is_rejected_when_lot_uses_it(
+    session_factory: async_sessionmaker[AsyncSession],
+    tenants: tuple[UUID, UUID],
+) -> None:
+    tenant_a, _tenant_b = tenants
+    async with session_factory() as session:
+        _configured(session, tenant_a)
+        repository = AdminCategoryRepository(session)
+        category = await repository.create(name="E-bikes", slug="ebikes", description=None)
+        await repository.update_characteristics(
+            category.id,
+            version=1,
+            definitions=[
+                CharacteristicUpsert(
+                    code="power",
+                    name="Power",
+                    type="number",
+                    unit="W",
+                    is_required=True,
+                    options=(),
+                    sort=1,
+                    is_archived=False,
+                )
+            ],
+        )
+        session.add(
+            LotRecord(
+                id=uuid4(),
+                tenant_id=tenant_a,
+                category_id=category.id,
+                slug="lot-with-power",
+                name="Lot",
+                description=None,
+                photos=[],
+                characteristics={"power": 500},
+                rental_unit="day",
+                battery_type="48v",
+                allowed_durations=[1],
+                status="active",
+                version=1,
+            )
+        )
+        await session.flush()
+
+        with pytest.raises(CharacteristicInUseError):
+            await repository.update_characteristics(
+                category.id,
+                version=2,
+                definitions=[
+                    CharacteristicUpsert(
+                        code="power",
+                        name="Power",
+                        type="text",
+                        unit=None,
+                        is_required=True,
+                        options=(),
+                        sort=1,
+                        is_archived=False,
+                    )
+                ],
+            )
 
 
 async def test_admin_category_tenant_isolation(

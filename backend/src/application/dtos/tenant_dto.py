@@ -13,6 +13,8 @@ class TenantPoliciesDTO(BaseModel):
     cancellation_free_hours: int
     reminder_hours_before: int
     tickets_per_rental_per_day: int
+    lot_photos_max: int
+    verification_docs_retention_days: int
 
 
 class TenantDTO(BaseModel):

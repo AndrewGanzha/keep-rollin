@@ -16,10 +16,30 @@ POLICY_DEFAULTS: dict[str, int] = {
     "cancellation_free_hours": 24,
     "reminder_hours_before": 1,
     "tickets_per_rental_per_day": 5,
+    "lot_photos_max": 10,
+    "verification_docs_retention_days": 90,
+}
+POLICY_RANGES: dict[str, tuple[int, int]] = {
+    "booking_horizon_days": (1, 365),
+    "min_rental_minutes": (15, 1440),
+    "max_rental_days": (1, 90),
+    "cancellation_free_hours": (0, 168),
+    "reminder_hours_before": (1, 72),
+    "tickets_per_rental_per_day": (1, 20),
+    "lot_photos_max": (1, 20),
+    "verification_docs_retention_days": (30, 365),
 }
 
 
 class InvalidTenantProfileError(CatalogDomainError):
+    pass
+
+
+class SettingsVersionConflictError(CatalogDomainError):
+    pass
+
+
+class SettingsNotFoundError(CatalogDomainError):
     pass
 
 
@@ -31,19 +51,27 @@ class TenantPolicies:
     cancellation_free_hours: int = 24
     reminder_hours_before: int = 1
     tickets_per_rental_per_day: int = 5
+    lot_photos_max: int = 10
+    verification_docs_retention_days: int = 90
 
     def __post_init__(self) -> None:
         for field, value in self.to_mapping().items():
-            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
-                raise InvalidTenantProfileError(f"{field} must be a non-negative integer")
+            low, high = POLICY_RANGES[field]
+            if isinstance(value, bool) or not isinstance(value, int) or not low <= value <= high:
+                raise InvalidTenantProfileError(
+                    f"{field} must be an integer between {low} and {high}"
+                )
 
     @classmethod
     def from_mapping(cls, value: Mapping[str, object]) -> Self:
         data: dict[str, int] = {}
         for field, default in POLICY_DEFAULTS.items():
+            low, high = POLICY_RANGES[field]
             raw = value.get(field, default)
-            if isinstance(raw, bool) or not isinstance(raw, int) or raw < 0:
-                raise InvalidTenantProfileError(f"{field} must be a non-negative integer")
+            if isinstance(raw, bool) or not isinstance(raw, int) or not low <= raw <= high:
+                raise InvalidTenantProfileError(
+                    f"{field} must be an integer between {low} and {high}"
+                )
             data[field] = raw
         return cls(**data)
 
@@ -55,6 +83,8 @@ class TenantPolicies:
             "cancellation_free_hours": self.cancellation_free_hours,
             "reminder_hours_before": self.reminder_hours_before,
             "tickets_per_rental_per_day": self.tickets_per_rental_per_day,
+            "lot_photos_max": self.lot_photos_max,
+            "verification_docs_retention_days": self.verification_docs_retention_days,
         }
 
 

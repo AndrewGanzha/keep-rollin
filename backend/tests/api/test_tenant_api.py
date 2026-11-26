@@ -143,6 +143,8 @@ def test_public_tenant_returns_branding_and_policies(seeded: SeededTenants) -> N
         "cancellation_free_hours": 12,
         "reminder_hours_before": 2,
         "tickets_per_rental_per_day": 3,
+        "lot_photos_max": 10,
+        "verification_docs_retention_days": 90,
     }
     assert response.headers["cache-control"] == "max-age=300"
 

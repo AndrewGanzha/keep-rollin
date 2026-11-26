@@ -5,11 +5,15 @@ from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.api.admin_categories import router as admin_categories_router
+from app.api.admin_offers import router as admin_offers_router
+from app.api.admin_settings import router as admin_settings_router
 from app.api.auth import router as auth_router
 from app.api.auth_deps import get_password_hasher
 from app.api.availability import router as availability_router
 from app.api.catalog import router as catalog_router
 from app.api.health import router as health_router
+from app.api.offers import me_router as me_offers_router
+from app.api.offers import public_router as public_offers_router
 from app.api.quote import router as quote_router
 from app.api.tenant import router as tenant_router
 from app.config import Settings, get_settings
@@ -72,7 +76,11 @@ def create_app(
     application.include_router(health_router)
     application.include_router(auth_router)
     application.include_router(admin_categories_router)
+    application.include_router(admin_settings_router)
+    application.include_router(admin_offers_router)
     application.include_router(catalog_router)
+    application.include_router(public_offers_router)
+    application.include_router(me_offers_router)
     application.include_router(availability_router)
     application.include_router(quote_router)
     application.include_router(tenant_router)

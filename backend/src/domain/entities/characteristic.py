@@ -9,6 +9,10 @@ from src.domain.value_objects.slug import Slug
 CharacteristicType = Literal["number", "text", "select"]
 
 
+class CharacteristicInUseError(CatalogDomainError):
+    pass
+
+
 @dataclass(frozen=True)
 class Characteristic(Entity):
     code: Slug

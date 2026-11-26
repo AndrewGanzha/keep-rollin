@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import DateTime, ForeignKey, String, Text, func, text
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -17,11 +17,14 @@ DEFAULT_POLICIES = {
     "cancellation_free_hours": 24,
     "reminder_hours_before": 1,
     "tickets_per_rental_per_day": 5,
+    "lot_photos_max": 10,
+    "verification_docs_retention_days": 90,
 }
 DEFAULT_POLICIES_SQL = (
     '\'{"booking_horizon_days": 60, "min_rental_minutes": 60, '
     '"max_rental_days": 30, "cancellation_free_hours": 24, '
-    '"reminder_hours_before": 1, "tickets_per_rental_per_day": 5}\'::jsonb'
+    '"reminder_hours_before": 1, "tickets_per_rental_per_day": 5, '
+    '"lot_photos_max": 10, "verification_docs_retention_days": 90}\'::jsonb'
 )
 
 
@@ -44,6 +47,9 @@ class TenantSettingsRecord(Base):
         server_default=text(DEFAULT_POLICIES_SQL),
     )
     vapid_public_key: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    version: Mapped[int] = mapped_column(
+        Integer(), nullable=False, default=1, server_default=text("1")
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

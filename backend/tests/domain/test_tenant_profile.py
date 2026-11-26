@@ -18,11 +18,21 @@ def test_policies_apply_defaults_and_validate_values() -> None:
     policies = TenantPolicies.from_mapping({"booking_horizon_days": 90})
     assert policies.booking_horizon_days == 90
     assert policies.max_rental_days == 30
+    assert policies.lot_photos_max == 10
+    assert policies.verification_docs_retention_days == 90
 
     with pytest.raises(InvalidTenantProfileError):
         TenantPolicies.from_mapping({"max_rental_days": True})
     with pytest.raises(InvalidTenantProfileError):
         TenantPolicies.from_mapping({"tickets_per_rental_per_day": -1})
+    with pytest.raises(InvalidTenantProfileError):
+        TenantPolicies.from_mapping({"booking_horizon_days": 0})
+    with pytest.raises(InvalidTenantProfileError):
+        TenantPolicies.from_mapping({"max_rental_days": 91})
+    with pytest.raises(InvalidTenantProfileError):
+        TenantPolicies.from_mapping({"lot_photos_max": 21})
+    with pytest.raises(InvalidTenantProfileError):
+        TenantPolicies.from_mapping({"verification_docs_retention_days": 10})
 
 
 def test_tenant_profile_validates_branding_and_currency() -> None:
