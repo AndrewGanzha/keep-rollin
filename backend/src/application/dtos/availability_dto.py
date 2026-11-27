@@ -42,3 +42,15 @@ class AvailabilityDTO(BaseModel):
             busy=busy,
             next_free=next_free,
         )
+
+
+class AvailabilityWindowDTO(BaseModel):
+    start: datetime
+    end: datetime
+    lots_free: int = Field(ge=0)
+
+
+class AvailabilitySummaryDTO(BaseModel):
+    lots_total: int = Field(ge=0)
+    lots_free: int = Field(ge=0)
+    windows: list[AvailabilityWindowDTO]

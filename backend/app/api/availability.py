@@ -1,23 +1,29 @@
 from datetime import datetime
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.catalog import get_lot_repository
 from app.api.deps import get_db_session
-from src.application.dtos.availability_dto import AvailabilityDTO
+from app.api.public_period import MAX_AVAILABILITY_DAYS, parse_public_period
+from src.application.dtos.availability_dto import AvailabilityDTO, AvailabilitySummaryDTO
 from src.application.handlers.availability.queries.get import (
     GetLotAvailabilityHandler,
     GetLotAvailabilityQuery,
 )
-from src.domain.exceptions import InvalidTimeRangeError
-from src.domain.value_objects.time_range import TimeRange
+from src.application.handlers.availability.queries.summary import (
+    GetAvailabilitySummaryHandler,
+    GetAvailabilitySummaryQuery,
+)
 from src.infrastructure.postgres.repositories.lot_repository import LotRepository
 from src.infrastructure.postgres.repositories.occupancy_repository import OccupancyRepository
+from src.infrastructure.postgres.repositories.public_availability_repository import (
+    PublicAvailabilityRepository,
+)
 
 router = APIRouter(prefix="/api/v1/public", tags=["public-availability"])
-MAX_AVAILABILITY_DAYS = 90
 
 
 def get_occupancy_repository(
@@ -33,44 +39,26 @@ def get_availability_handler(
     return GetLotAvailabilityHandler(lot_repository, occupancy_repository)
 
 
-def parse_public_period(
-    from_: datetime,
-    to: datetime,
-    *,
-    max_days: int | None = None,
-) -> TimeRange:
-    if (
-        from_.tzinfo is None
-        or from_.utcoffset() is None
-        or to.tzinfo is None
-        or to.utcoffset() is None
-    ):
-        raise HTTPException(
-            status_code=422,
-            detail={
-                "code": "validation_error",
-                "fields": {"from": "must be timezone-aware"},
-            },
-        )
-    try:
-        period = TimeRange(from_, to)
-    except InvalidTimeRangeError as exc:
-        raise HTTPException(
-            status_code=422,
-            detail={
-                "code": "validation_error",
-                "fields": {"to": "must be after from"},
-            },
-        ) from exc
-    if max_days is not None and period.duration_seconds > max_days * 86400:
-        raise HTTPException(
-            status_code=422,
-            detail={
-                "code": "validation_error",
-                "fields": {"to": f"range must not exceed {max_days} days"},
-            },
-        )
-    return period
+def get_availability_summary_handler(
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> GetAvailabilitySummaryHandler:
+    return GetAvailabilitySummaryHandler(PublicAvailabilityRepository(session))
+
+
+@router.get("/availability", response_model=AvailabilitySummaryDTO)
+async def get_availability_summary(
+    handler: Annotated[GetAvailabilitySummaryHandler, Depends(get_availability_summary_handler)],
+    response: Response,
+    from_: Annotated[datetime, Query(alias="from")],
+    to: Annotated[datetime, Query()],
+    category_id: Annotated[UUID | None, Query()] = None,
+) -> AvailabilitySummaryDTO:
+    period = parse_public_period(from_, to, max_days=MAX_AVAILABILITY_DAYS, normalize_to_utc=True)
+    summary = await handler.handle(
+        GetAvailabilitySummaryQuery(period=period, category_id=category_id)
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return summary
 
 
 @router.get("/lots/{slug}/availability", response_model=AvailabilityDTO)

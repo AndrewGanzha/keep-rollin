@@ -39,6 +39,9 @@ class SeededAvailability:
     tenant_a: UUID
     tenant_b: UUID
     lot_a: UUID
+    lot_b: UUID
+    category_a: UUID
+    category_b: UUID
     strict_lot: UUID
     slug: str
     strict_slug: str
@@ -216,6 +219,9 @@ def seed_catalog() -> SeededAvailability:
         tenant_a=tenant_a.id,
         tenant_b=tenant_b.id,
         lot_a=lot_a.id,
+        lot_b=lot_b.id,
+        category_a=category_a.id,
+        category_b=category_b.id,
         strict_lot=strict_lot.id,
         slug=lot_a.slug,
         strict_slug=strict_lot.slug,
@@ -246,6 +252,7 @@ def add_occupancy(
     start: datetime,
     end: datetime,
     kind: str = "booking",
+    status: str = "active",
 ) -> None:
     assert DATABASE_URL is not None
 
@@ -262,7 +269,7 @@ def add_occupancy(
                         kind=kind,
                         period=Range(start, end, bounds="[)"),
                         ref_id=None,
-                        status="active",
+                        status=status,
                     )
                 )
                 await session.commit()
@@ -483,3 +490,202 @@ def test_quote_uses_tenant_currency(seeded: SeededAvailability) -> None:
     assert response.status_code == 200
     assert response.json()["variants"][0]["currency"] == "USD"
     assert response.json()["variants"][0]["price_total_minor"] == 10000
+
+
+SUMMARY_PATH = "/api/v1/public/availability"
+
+
+def test_summary_sweeps_distinct_counts_and_clips_periods(seeded: SeededAvailability) -> None:
+    t2, t4, t5, t6, t9, t12 = (START + timedelta(hours=hour) for hour in (2, 4, 5, 6, 9, 12))
+    for lot_id, start, end, kind, status in (
+        (seeded.lot_a, START - timedelta(hours=1), t2, "maintenance", "active"),
+        (seeded.lot_a, t4, t6, "booking", "active"),
+        (seeded.lot_a, t12, END, "booking", "released"),
+        (seeded.lot_a, END, END + timedelta(hours=1), "booking", "active"),
+        (seeded.strict_lot, START - timedelta(hours=1), START, "booking", "active"),
+        (seeded.strict_lot, t2, t5, "block", "active"),
+        (seeded.strict_lot, t9, END + timedelta(hours=1), "maintenance", "active"),
+    ):
+        add_occupancy(
+            tenant_id=seeded.tenant_a, lot_id=lot_id, start=start, end=end, kind=kind, status=status
+        )
+
+    with client_for(seeded.domain_a) as client:
+        response = client.get(SUMMARY_PATH, params={"from": _iso(START), "to": _iso(END)})
+        handover = client.get(SUMMARY_PATH, params={"from": _iso(START), "to": _iso(t4)})
+
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
+    assert response.json() == {
+        "lots_total": 2,
+        "lots_free": 0,
+        "windows": [
+            {
+                "start": start.isoformat().replace("+00:00", "Z"),
+                "end": end.isoformat().replace("+00:00", "Z"),
+                "lots_free": count,
+            }
+            for start, end, count in (
+                (START, t4, 1),
+                (t4, t5, 0),
+                (t5, t6, 1),
+                (t6, t9, 2),
+                (t9, END, 1),
+            )
+        ],
+    }
+
+    # Each lot is busy during part of this range, even though one is always free.
+    assert handover.status_code == 200
+    assert handover.json() == {
+        "lots_total": 2,
+        "lots_free": 0,
+        "windows": [
+            {"start": "2026-01-01T10:00:00Z", "end": "2026-01-01T14:00:00Z", "lots_free": 1}
+        ],
+    }
+
+
+def test_summary_category_and_occupancy_are_tenant_scoped(seeded: SeededAvailability) -> None:
+    add_occupancy(tenant_id=seeded.tenant_b, lot_id=seeded.lot_b, start=START, end=END)
+
+    params = {"from": _iso(START), "to": _iso(END)}
+    with client_for(seeded.domain_a) as client:
+        own_category = client.get(
+            SUMMARY_PATH, params={**params, "category_id": str(seeded.category_a)}
+        )
+        foreign_category = client.get(
+            SUMMARY_PATH, params={**params, "category_id": str(seeded.category_b)}
+        )
+        unknown_category = client.get(SUMMARY_PATH, params={**params, "category_id": str(uuid4())})
+
+    with client_for(seeded.domain_b) as client:
+        occupied = client.get(SUMMARY_PATH, params=params)
+
+    for response in (own_category, foreign_category, unknown_category, occupied):
+        assert response.status_code == 200
+    short_window = {"start": "2026-01-01T10:00:00Z", "end": "2026-01-02T10:00:00Z"}
+    assert own_category.json() == {
+        "lots_total": 2,
+        "lots_free": 2,
+        "windows": [{**short_window, "lots_free": 2}],
+    }
+    assert occupied.json() == {
+        "lots_total": 1,
+        "lots_free": 0,
+        "windows": [{**short_window, "lots_free": 0}],
+    }
+    assert (
+        foreign_category.json()
+        == unknown_category.json()
+        == {
+            "lots_total": 0,
+            "lots_free": 0,
+            "windows": [],
+        }
+    )
+
+
+def test_summary_requires_a_bounded_timezone_aware_range(seeded: SeededAvailability) -> None:
+    with client_for(seeded.domain_a) as client:
+        for params in (
+            {"from": _iso(START)},
+            {"to": _iso(END)},
+            {"from": "2026-01-01T10:00:00", "to": _iso(END)},
+            {"from": _iso(START), "to": "2026-01-02T10:00:00"},
+            {"from": _iso(END), "to": _iso(START)},
+            {"from": _iso(START), "to": _iso(START)},
+            {"from": _iso(START), "to": _iso(START + timedelta(days=90, microseconds=1))},
+            {"from": _iso(START), "to": _iso(END), "category_id": "not-a-uuid"},
+            {"from": "0001-01-01T00:00:00+01:00", "to": "0001-01-02T00:00:00+01:00"},
+            {"from": "9999-12-30T00:00:00-01:00", "to": "9999-12-31T23:59:59-01:00"},
+        ):
+            response = client.get(SUMMARY_PATH, params=params)
+            assert response.status_code == 422
+            assert response.headers["content-type"] == "application/problem+json"
+            assert response.json()["code"] == "validation_error"
+
+        at_limit = client.get(
+            SUMMARY_PATH,
+            params={"from": "2026-01-01T13:00:00+03:00", "to": _iso(START + timedelta(days=90))},
+        )
+
+    assert at_limit.status_code == 200
+    [window] = at_limit.json()["windows"]
+    assert window["start"] == "2026-01-01T10:00:00Z"
+    assert window["end"] == "2026-04-01T10:00:00Z"
+
+
+def test_summary_counts_only_bookable_public_lots_without_a_page_cap(
+    seeded: SeededAvailability,
+) -> None:
+    category = CategoryRecord(
+        id=uuid4(), tenant_id=seeded.tenant_a, name="Scooters", slug="scooters", is_archived=False
+    )
+    archived_category = CategoryRecord(
+        id=uuid4(),
+        tenant_id=seeded.tenant_a,
+        name="Archived",
+        slug="archived",
+        is_archived=True,
+    )
+
+    async def insert_lots() -> None:
+        assert DATABASE_URL is not None
+        engine = create_engine(DATABASE_URL)
+        factory = create_session_factory(engine)
+        try:
+            async with factory() as session:
+                session.add_all([category, archived_category])
+                await session.flush()
+                eligible_lot = (category.id, "active", True, "Scooter")
+                lot_inputs = [eligible_lot] * 100 + [
+                    (category.id, "archived", True, "Archived lot"),
+                    (category.id, "maintenance", True, "Maintenance lot"),
+                    (category.id, "overdue", True, "Overdue lot"),
+                    (category.id, "active", False, "Inactive variant"),
+                    (category.id, "active", True, ""),
+                    (archived_category.id, "active", True, "Archived category"),
+                ]
+                for index, (category_id, status, variant_active, name) in enumerate(lot_inputs):
+                    session.add(
+                        LotRecord(
+                            id=uuid4(),
+                            tenant_id=seeded.tenant_a,
+                            category_id=category_id,
+                            slug=f"scooter-{index}",
+                            name=name,
+                            rental_unit="day",
+                            allowed_durations=[1],
+                            status=status,
+                            variants=[
+                                LotVariantRecord(
+                                    id=uuid4(),
+                                    tenant_id=seeded.tenant_a,
+                                    battery_count=0,
+                                    is_active=variant_active,
+                                    price_tiers=[
+                                        LotPriceTierRecord(
+                                            id=uuid4(),
+                                            tenant_id=seeded.tenant_a,
+                                            min_units=1,
+                                            price_per_unit_minor=10000,
+                                        )
+                                    ],
+                                )
+                            ],
+                        )
+                    )
+                await session.commit()
+        finally:
+            await engine.dispose()
+
+    asyncio.run(insert_lots())
+    params = {"from": _iso(START), "to": _iso(END)}
+    with client_for(seeded.domain_a) as client:
+        all_lots = client.get(SUMMARY_PATH, params=params)
+        filtered = client.get(SUMMARY_PATH, params={**params, "category_id": str(category.id)})
+
+    assert all_lots.status_code == filtered.status_code == 200
+    assert all_lots.json()["lots_total"] == all_lots.json()["lots_free"] == 102
+    assert filtered.json()["lots_total"] == filtered.json()["lots_free"] == 100
