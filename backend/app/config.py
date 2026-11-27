@@ -47,6 +47,12 @@ class Settings(BaseSettings):
     auth_rate_limit_per_minute: int = Field(default=10, ge=1, le=1000)
     auth_rate_limit_window_seconds: int = Field(default=60, ge=1, le=3600)
     auth_rate_limit_email_per_minute: int = Field(default=10, ge=1, le=1000)
+    s3_endpoint_url: str | None = Field(default=None, repr=False, exclude=True)
+    s3_region: str = "us-east-1"
+    s3_public_bucket: str | None = Field(default=None, repr=False, exclude=True)
+    s3_private_bucket: str | None = Field(default=None, repr=False, exclude=True)
+    s3_public_base_url: str | None = Field(default=None, repr=False, exclude=True)
+    s3_presign_ttl_seconds: int = Field(default=300, ge=1, le=900)
 
     @model_validator(mode="after")
     def validate_auth_settings(self) -> "Settings":
