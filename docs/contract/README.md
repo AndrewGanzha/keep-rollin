@@ -84,7 +84,7 @@ schemathesis run contract/openapi.json --url http://api:8000 --checks all   # в
 | D-12 | Политики             | `tenant_settings`: горизонт, мин/макс длительность, отмена, напоминание, лимиты                 |
 | D-13 | Уведомления          | Outbox в транзакции события; критичные — email+push; прочие — push→email                        |
 | D-14 | Аналитика            | Метрики по `start_time` аренды, бакеты по таймзоне тенанта; формулы в `contract/analytics.md`   |
-| D-15 | Кэш                  | `public`: ETag + `max-age`; `me`/`admin`: `no-store`                                            |
+| D-15 | Кэш                  | ETag для каталога. Политики кеша маршрутов приведены в §3.12.                                            |
 | D-16 | Трассировка          | `X-Request-Id` (генерируется/пробрасывается) → `trace_id` в любой ошибке                        |
 | D-17 | Enum-ы               | Строковые snake_case; значения — в §3.9; неизвестное значение клиент показывает как есть         |
 | D-18 | URL и SSR            | Человекочитаемые `slug` для tenant/category/lot; SSR-кэш ключуется по `host`                     |
@@ -246,7 +246,9 @@ ALTER TABLE occupancy ADD CONSTRAINT occupancy_no_overlap
 
 * Гость видит только `kind: "busy"`; staff — `booking|block|maintenance` + `rental_id`/`block_id`.
 * Диапазон ≤ 90 дней; `from < to`; иначе 422.
-* Агрегат по модели: `GET /public/availability?category_id=…` → `{lots_total, lots_free, windows: [...]}` (UC-2.2/7.1).
+* `GET /public/availability?from=…&to=…&category_id=…` строит сводку по видимым активным лотам с активным вариантом (UC-2.2/7.1). Обе границы обязательны, `category_id` опционален.
+* `lots_total` — число подходящих лотов. `lots_free` на верхнем уровне считает лоты, свободные весь диапазон. `windows` содержит соседние полуоткрытые интервалы `{start,end,lots_free}` с постоянным числом свободных лотов. При пустой выборке оба счётчика равны нулю, а массив окон пуст.
+* Пересечения учитывают активные записи занятости. Сводка содержит только время и счётчики.
 
 ### 3.8. Лимиты и политики (`tenant_settings`, D-12)
 
@@ -328,7 +330,7 @@ ALTER TABLE occupancy ADD CONSTRAINT occupancy_no_overlap
 
 * `X-Request-Id` принимается от клиента/прокси, иначе генерируется; возвращается в ответе и попадает в `trace_id` любых ошибок.
 * `Date`-заголовок ответа — источник для клиентского таймера (FE считает offset, не доверяет локальным часам).
-* Кэш: `GET /public/tenant` → `max-age=300`; каталог/карточка → `max-age=60, stale-while-revalidate=300`; доступность → `max-age=10`; `/me` и `/admin` → `no-store`.
+* Кэш: `GET /public/tenant` → `max-age=300`; каталог/карточка → `max-age=60, stale-while-revalidate=300`; доступность → `no-store`; `/me` и `/admin` → `no-store`.
 * Валюта одна на тенанта; мультивалютность — бэклог (ТЗ 12.1).
 * Rate limit логина — in-process, `tenant+IP` и `tenant+email`, окно и лимиты из env (`AUTH_RATE_LIMIT_*`). Это ограничение MVP: при нескольких API-инстансах эффективный лимит умножается; Redis — бэклог. `X-Forwarded-For` не используется, клиентский IP берётся из доверенного `request.client.host` (настройка `FORWARDED_ALLOW_IPS` на прокси).
 

@@ -521,6 +521,60 @@
         "title": "AvailabilityDTO",
         "type": "object"
       },
+      "AvailabilitySummaryDTO": {
+        "properties": {
+          "lots_free": {
+            "minimum": 0.0,
+            "title": "Lots Free",
+            "type": "integer"
+          },
+          "lots_total": {
+            "minimum": 0.0,
+            "title": "Lots Total",
+            "type": "integer"
+          },
+          "windows": {
+            "items": {
+              "$ref": "#/components/schemas/AvailabilityWindowDTO"
+            },
+            "title": "Windows",
+            "type": "array"
+          }
+        },
+        "required": [
+          "lots_total",
+          "lots_free",
+          "windows"
+        ],
+        "title": "AvailabilitySummaryDTO",
+        "type": "object"
+      },
+      "AvailabilityWindowDTO": {
+        "properties": {
+          "end": {
+            "format": "date-time",
+            "title": "End",
+            "type": "string"
+          },
+          "lots_free": {
+            "minimum": 0.0,
+            "title": "Lots Free",
+            "type": "integer"
+          },
+          "start": {
+            "format": "date-time",
+            "title": "Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "start",
+          "end",
+          "lots_free"
+        ],
+        "title": "AvailabilityWindowDTO",
+        "type": "object"
+      },
       "BusyIntervalDTO": {
         "properties": {
           "end": {
@@ -4030,9 +4084,102 @@
         ]
       }
     },
+    "/api/v1/public/availability": {
+      "get": {
+        "operationId": "get_availability_summary_api_v1_public_availability_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "from",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "From",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "To",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "category_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AvailabilitySummaryDTO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Availability Summary",
+        "tags": [
+          "public-availability"
+        ]
+      }
+    },
     "/api/v1/public/categories": {
       "get": {
         "operationId": "list_categories_api_v1_public_categories_get",
+        "parameters": [
+          {
+            "description": "Return 304 when an entity tag matches the current representation.",
+            "in": "header",
+            "name": "if-none-match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Return 304 when an entity tag matches the current representation.",
+              "title": "If-None-Match"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -4046,7 +4193,60 @@
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "Successful Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "example": "public, max-age=60, stale-while-revalidate=300",
+                  "type": "string"
+                }
+              },
+              "ETag": {
+                "description": "Weak representation validator.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Vary": {
+                "schema": {
+                  "example": "X-Tenant",
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not Modified",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "example": "public, max-age=60, stale-while-revalidate=300",
+                  "type": "string"
+                }
+              },
+              "ETag": {
+                "description": "Weak representation validator.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Vary": {
+                "schema": {
+                  "example": "X-Tenant",
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "List Categories",
@@ -4057,6 +4257,7 @@
     },
     "/api/v1/public/lots": {
       "get": {
+        "description": "Filter characteristics by equality with char_<code>. Numeric values compare by value. Text and select values compare exactly, and select values must be defined options. Availability bounds are both required when filtering by period.",
         "operationId": "list_lots_api_v1_public_lots_get",
         "parameters": [
           {
@@ -4115,6 +4316,77 @@
               "title": "Offset",
               "type": "integer"
             }
+          },
+          {
+            "in": "query",
+            "name": "available_from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Available From"
+            }
+          },
+          {
+            "in": "query",
+            "name": "available_to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Available To"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "default": "newest",
+              "enum": [
+                "newest",
+                "name_asc",
+                "price_asc",
+                "price_desc"
+              ],
+              "title": "Sort",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Return 304 when an entity tag matches the current representation.",
+            "in": "header",
+            "name": "if-none-match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Return 304 when an entity tag matches the current representation.",
+              "title": "If-None-Match"
+            }
           }
         ],
         "responses": {
@@ -4126,7 +4398,50 @@
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "Successful Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "example": "public, max-age=60, stale-while-revalidate=300",
+                  "type": "string"
+                }
+              },
+              "ETag": {
+                "description": "Weak representation validator.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Vary": {
+                "schema": {
+                  "example": "X-Tenant",
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not Modified",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "example": "public, max-age=60, stale-while-revalidate=300",
+                  "type": "string"
+                }
+              },
+              "ETag": {
+                "description": "Weak representation validator.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Vary": {
+                "schema": {
+                  "example": "X-Tenant",
+                  "type": "string"
+                }
+              }
+            }
           },
           "422": {
             "content": {
@@ -4157,6 +4472,27 @@
               "title": "Slug",
               "type": "string"
             }
+          },
+          {
+            "description": "Return 304 when an entity tag matches the current representation.",
+            "in": "header",
+            "name": "if-none-match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Return 304 when an entity tag matches the current representation.",
+              "title": "If-None-Match"
+            }
           }
         ],
         "responses": {
@@ -4168,7 +4504,50 @@
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "Successful Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "example": "public, max-age=60, stale-while-revalidate=300",
+                  "type": "string"
+                }
+              },
+              "ETag": {
+                "description": "Weak representation validator.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Vary": {
+                "schema": {
+                  "example": "X-Tenant",
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not Modified",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "example": "public, max-age=60, stale-while-revalidate=300",
+                  "type": "string"
+                }
+              },
+              "ETag": {
+                "description": "Weak representation validator.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Vary": {
+                "schema": {
+                  "example": "X-Tenant",
+                  "type": "string"
+                }
+              }
+            }
           },
           "422": {
             "content": {
