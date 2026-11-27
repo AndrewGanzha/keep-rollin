@@ -3,7 +3,8 @@ from uuid import UUID
 
 from src.application.dtos.lot_dto import LotDTO, LotPageDTO
 from src.application.handlers.i_handler import IHandler
-from src.application.repositories.i_lot_repository import ILotRepository, LotListFilters
+from src.application.repositories.i_lot_repository import ILotRepository, LotListFilters, LotSort
+from src.domain.value_objects.time_range import TimeRange
 
 
 @dataclass(frozen=True)
@@ -12,6 +13,9 @@ class ListLotsQuery:
     query: str | None
     limit: int
     offset: int
+    characteristics: tuple[tuple[str, str], ...] = ()
+    available_period: TimeRange | None = None
+    sort: LotSort = "newest"
 
 
 class ListLotsHandler(IHandler[ListLotsQuery, LotPageDTO]):
@@ -23,6 +27,9 @@ class ListLotsHandler(IHandler[ListLotsQuery, LotPageDTO]):
             filters=LotListFilters(
                 category_id=request.category_id,
                 query=request.query or None,
+                characteristics=request.characteristics,
+                available_period=request.available_period,
+                sort=request.sort,
             ),
             limit=request.limit,
             offset=request.offset,
