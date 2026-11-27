@@ -44,8 +44,8 @@ def current_step(timestamp: float | None = None) -> int:
 
 def normalize_code(code: str) -> str:
     normalized = code.strip().replace(" ", "")
-    if len(normalized) != CODE_DIGITS or not normalized.isdigit():
-        raise ValueError("code must contain six digits")
+    if len(normalized) != CODE_DIGITS or not all("0" <= char <= "9" for char in normalized):
+        raise ValueError("code must contain six ASCII digits")
     return normalized
 
 

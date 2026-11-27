@@ -8,6 +8,7 @@ from sqlalchemy import (
     Boolean,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     MetaData,
     SmallInteger,
@@ -67,6 +68,8 @@ class User(Base):
     __table_args__ = (
         UniqueConstraint("tenant_id", "email", name="uq_user_tenant_email"),
         UniqueConstraint("tenant_id", "id", name="uq_user_tenant_id_id"),
+        Index("ix_user_tenant_created_id", "tenant_id", "created_at", "id"),
+        Index("ix_user_tenant_role_created_id", "tenant_id", "role", "created_at", "id"),
     )
 
     id: Mapped[UUID] = mapped_column(

@@ -1,5 +1,6 @@
 """Catalog ORM records."""
 
+from src.infrastructure.postgres.models.audit_log_record import AuditLogRecord
 from src.infrastructure.postgres.models.category_record import CategoryRecord
 from src.infrastructure.postgres.models.characteristic_record import CharacteristicRecord
 from src.infrastructure.postgres.models.lot_price_tier_record import LotPriceTierRecord
@@ -17,6 +18,7 @@ from src.infrastructure.postgres.models.refresh_session_record import RefreshSes
 from src.infrastructure.postgres.models.tenant_settings_record import TenantSettingsRecord
 
 __all__ = [
+    "AuditLogRecord",
     "CategoryRecord",
     "CharacteristicRecord",
     "LotPriceTierRecord",

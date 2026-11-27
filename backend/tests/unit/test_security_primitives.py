@@ -42,6 +42,7 @@ def test_verify_rejects_malformed_and_invalid_secret_codes() -> None:
     secret = totp.generate_secret()
     assert totp.verify_code(secret, "12345") is None
     assert totp.verify_code(secret, "abcdef") is None
+    assert totp.verify_code(secret, "١٢٣٤٥٦") is None
     with pytest.raises(ValueError):
         totp.code_at("not-base32", timestamp=time.time())
 

@@ -7,13 +7,14 @@ from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import delete, select, text
+from sqlalchemy import delete, select, text, update
 from sqlalchemy.exc import DBAPIError, InvalidRequestError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from app.db import configure_session, create_engine, create_session_factory
 from app.models import Tenant, User
 from app.tenancy import DatabaseTenantResolver, TenantCandidate
+from src.infrastructure.postgres.models.audit_log_record import AuditLogRecord
 from src.infrastructure.postgres.models.mfa_challenge_record import MfaChallengeRecord
 from src.infrastructure.postgres.models.password_reset_token_record import (
     PasswordResetTokenRecord,
@@ -88,6 +89,9 @@ async def seeded(
         yield tenant_a.id, tenant_b.id, user_a_seed.email, user_b_seed.email
     finally:
         async with session_factory() as session:
+            await session.execute(
+                delete(AuditLogRecord).where(AuditLogRecord.tenant_id.in_(tenant_ids))
+            )
             await session.execute(delete(User).where(User.tenant_id.in_(tenant_ids)))
             await session.execute(delete(Tenant).where(Tenant.id.in_(tenant_ids)))
             await session.commit()
@@ -303,3 +307,79 @@ async def test_auth_hardening_tables_are_tenant_isolated(
         with pytest.raises(DBAPIError):
             await session.flush()
         await session.rollback()
+
+
+async def test_audit_log_is_rls_isolated_and_append_only(
+    session_factory: async_sessionmaker[AsyncSession],
+    seeded: tuple[UUID, UUID, str, str],
+) -> None:
+    tenant_a, tenant_b, _email_a, _email_b = seeded
+    audit_id = uuid4()
+    async with session_factory() as session:
+        configure_session(session, tenant_id=tenant_a, database_role="keep_rollin_app")
+        session.add(
+            AuditLogRecord(
+                id=audit_id,
+                tenant_id=tenant_a,
+                action="tenant.provisioned",
+                actor_id=None,
+                actor_role="platform",
+                entity_type="tenant",
+                entity_id=tenant_a,
+                metadata_json={"source": "cli"},
+            )
+        )
+        await session.commit()
+
+    async with session_factory() as session:
+        configure_session(session, tenant_id=tenant_b, database_role="keep_rollin_app")
+        assert list((await session.execute(select(AuditLogRecord))).scalars()) == []
+
+    async with session_factory() as session:
+        configure_session(session, tenant_id=tenant_a, database_role="keep_rollin_app")
+        assert [row.id for row in (await session.execute(select(AuditLogRecord))).scalars()] == [
+            audit_id
+        ]
+
+    async with session_factory() as session:
+        configure_session(session, tenant_id=tenant_a, database_role="keep_rollin_app")
+        session.add(
+            AuditLogRecord(
+                id=uuid4(),
+                tenant_id=tenant_b,
+                action="tenant.provisioned",
+                actor_id=None,
+                actor_role="platform",
+                entity_type="tenant",
+                entity_id=tenant_b,
+                metadata_json={"source": "cli"},
+            )
+        )
+        with pytest.raises(DBAPIError):
+            await session.flush()
+        await session.rollback()
+
+    async with session_factory() as session:
+        configure_session(session, tenant_id=tenant_a, database_role="keep_rollin_app")
+        with pytest.raises(DBAPIError) as update_error:
+            await session.execute(
+                update(AuditLogRecord)
+                .where(AuditLogRecord.id == audit_id)
+                .values(request_id="changed")
+            )
+        await session.rollback()
+        assert "permission denied" in str(update_error.value).casefold()
+
+    async with session_factory() as session:
+        configure_session(session, tenant_id=tenant_a, database_role="keep_rollin_app")
+        with pytest.raises(DBAPIError) as delete_error:
+            await session.execute(delete(AuditLogRecord).where(AuditLogRecord.id == audit_id))
+        await session.rollback()
+        assert "permission denied" in str(delete_error.value).casefold()
+
+    async with session_factory() as session:
+        configure_session(session, tenant_id=tenant_a, database_role="keep_rollin_app")
+        with pytest.raises(DBAPIError) as truncate_error:
+            await session.execute(text("TRUNCATE audit_log"))
+        await session.rollback()
+        assert "permission denied" in str(truncate_error.value).casefold()

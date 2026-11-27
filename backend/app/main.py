@@ -4,10 +4,12 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.api.admin_audit import router as admin_audit_router
 from app.api.admin_calendar import router as admin_calendar_router
 from app.api.admin_categories import router as admin_categories_router
 from app.api.admin_offers import router as admin_offers_router
 from app.api.admin_settings import router as admin_settings_router
+from app.api.admin_users import router as admin_users_router
 from app.api.auth import router as auth_router
 from app.api.auth_deps import get_password_hasher
 from app.api.availability import router as availability_router
@@ -95,7 +97,9 @@ def create_app(
     application.include_router(auth_router)
     application.include_router(admin_calendar_router)
     application.include_router(admin_categories_router)
+    application.include_router(admin_audit_router)
     application.include_router(admin_settings_router)
+    application.include_router(admin_users_router)
     application.include_router(admin_offers_router)
     application.include_router(catalog_router)
     application.include_router(public_offers_router)

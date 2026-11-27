@@ -3,7 +3,7 @@ import math
 import secrets
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Literal, Protocol
+from typing import Literal, NoReturn, Protocol
 from uuid import UUID, uuid4
 
 from src.application.repositories.i_auth_repository import (
@@ -472,6 +472,34 @@ class AuthService:
         state = await self._repository.get_mfa_state(user_id)
         return bool(state and state.enabled)
 
+    async def verify_step_up(self, *, user_id: UUID, code: str | None) -> None:
+        """Verify a fresh TOTP for an already-authenticated staff actor."""
+        user = await self._repository.get_by_id_for_update(user_id)
+        if user is None or not user.is_active:
+            raise InactiveUserError("User is inactive")
+        state = await self._repository.get_mfa_state(user.id)
+        if state is None or not state.enabled or state.secret_enc is None:
+            raise InvalidMfaCodeError("MFA is not enabled")
+        self._ensure_unlocked(state)
+        if not code:
+            await self._record_mfa_failure(user.id, state)
+        assert code is not None
+        secret = self._secret_box.decrypt(
+            state.secret_enc,
+            context=self._mfa_context(user.id),
+        )
+        step = verify_code(secret, code, last_step=state.last_step)
+        if step is None:
+            await self._record_mfa_failure(user.id, state)
+        await self._repository.reset_mfa_attempts(user.id, last_step=step)
+
+    async def ensure_step_up_available(self, *, user_id: UUID) -> None:
+        """Reject a locked or non-MFA actor before expensive password work."""
+        state = await self._repository.get_mfa_state(user_id)
+        if state is None or not state.enabled:
+            raise InvalidMfaCodeError("MFA is not enabled")
+        self._ensure_unlocked(state)
+
     async def request_password_reset(self, *, email: str) -> None:
         user = await self._repository.get_by_email(email.strip().lower())
         if user is None or not user.is_active or user.password_hash is None:
@@ -574,7 +602,7 @@ class AuthService:
             retry_after = max(1, math.ceil((state.locked_until - now).total_seconds()))
             raise MfaLockedError(retry_after)
 
-    async def _record_mfa_failure(self, user_id: UUID, state: MfaState | None) -> None:
+    async def _record_mfa_failure(self, user_id: UUID, state: MfaState | None) -> NoReturn:
         now = datetime.now(UTC)
         window = state.failure_window_started_at if state is not None else None
         attempts = state.failed_attempts if state is not None else 0

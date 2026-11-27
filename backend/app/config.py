@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     app_version: str = "0.1.0"
     app_env: Literal["local", "test", "production"] = "local"
     database_url: str | None = Field(default=None, repr=False, exclude=True)
+    provision_database_url: str | None = Field(default=None, repr=False, exclude=True)
+    audit_retention_days: int = Field(default=365, ge=30, le=3650)
     database_role: str = Field(default="keep_rollin_app", pattern=r"^[a-z_][a-z0-9_]*$")
     database_timeout_seconds: float = Field(default=2.0, gt=0, le=30)
     platform_domain: str = "platform.test"
