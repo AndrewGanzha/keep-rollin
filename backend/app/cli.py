@@ -15,9 +15,12 @@ from src.application.services.provisioning import (
     ProvisioningError,
     ProvisionTenantService,
 )
+from src.application.services.uploads import StorageUnavailableError
 from src.infrastructure.postgres.models.audit_log_record import AuditLogRecord
 from src.infrastructure.postgres.repositories.audit_repository import AuditRepository
+from src.infrastructure.postgres.repositories.file_repository import FileRepository
 from src.infrastructure.security.secret_box import SecretBox
+from src.infrastructure.storage.s3 import build_upload_storage
 
 
 def _settings() -> Settings:
@@ -118,6 +121,36 @@ async def _purge_audit_log(args: argparse.Namespace) -> int:
     return 0
 
 
+async def _purge_orphan_uploads(args: argparse.Namespace) -> int:
+    settings = _settings()
+    dsn = _privileged_dsn(args, settings)
+    cutoff = datetime.now(UTC) - timedelta(hours=24)
+    engine = create_engine(dsn)
+    total = 0
+    try:
+        async with create_session_factory(engine)() as session:
+            repository = FileRepository(session)
+            if not args.execute:
+                print(f"dry-run: {await repository.count_orphans(cutoff)} orphan uploads")
+                return 0
+            storage = await asyncio.to_thread(build_upload_storage, settings)
+            while candidates := await repository.lock_orphans(cutoff, limit=args.batch_size):
+                for record in candidates:
+                    record.is_ready = False
+                    record.is_purging = True
+                # Durable non-ready state prevents a new link after object deletion starts.
+                await session.commit()
+                for record in candidates:
+                    await storage.delete(record.object_key, public=record.purpose == "lot_photo")
+                    if await repository.delete_claimed_orphan(record.id):
+                        total += 1
+                    await session.commit()
+    finally:
+        await engine.dispose()
+    print(f"purged {total} orphan uploads")
+    return 0
+
+
 def _add_common_database_arg(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--database-url", default=None)
 
@@ -142,6 +175,11 @@ def build_parser() -> argparse.ArgumentParser:
     purge.add_argument("--batch-size", type=int, default=1000)
     purge.add_argument("--execute", action="store_true")
     purge.set_defaults(handler=_purge_audit_log)
+    uploads = subparsers.add_parser("purge-orphan-uploads")
+    _add_common_database_arg(uploads)
+    uploads.add_argument("--batch-size", type=int, default=100)
+    uploads.add_argument("--execute", action="store_true")
+    uploads.set_defaults(handler=_purge_orphan_uploads)
     return parser
 
 
@@ -157,6 +195,9 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     except ProvisioningError as exc:
         print(f"provisioning failed: {exc}", file=sys.stderr)
+        return 1
+    except StorageUnavailableError:
+        print("object storage unavailable", file=sys.stderr)
         return 1
     except Exception as exc:
         # Unexpected database/driver errors may embed parameters or DSNs.

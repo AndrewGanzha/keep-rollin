@@ -575,6 +575,24 @@
         "title": "AvailabilityWindowDTO",
         "type": "object"
       },
+      "Body_upload_file_api_v1_files_post": {
+        "properties": {
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          },
+          "purpose": {
+            "$ref": "#/components/schemas/UploadPurpose"
+          }
+        },
+        "required": [
+          "file",
+          "purpose"
+        ],
+        "title": "Body_upload_file_api_v1_files_post",
+        "type": "object"
+      },
       "BusyIntervalDTO": {
         "properties": {
           "end": {
@@ -933,6 +951,153 @@
           "reason"
         ],
         "title": "CreateLotBlockRequest",
+        "type": "object"
+      },
+      "CreateLotRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "allowed_durations": {
+            "items": {
+              "maximum": 365.0,
+              "minimum": 1.0,
+              "type": "integer"
+            },
+            "maxItems": 365,
+            "minItems": 1,
+            "title": "Allowed Durations",
+            "type": "array"
+          },
+          "battery_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Battery Type"
+          },
+          "category_id": {
+            "format": "uuid",
+            "title": "Category Id",
+            "type": "string"
+          },
+          "characteristics": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "title": "Characteristics",
+            "type": "object"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "file_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "maxItems": 20,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Ids"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "photos": {
+            "anyOf": [
+              {
+                "items": {
+                  "maxLength": 2048,
+                  "type": "string"
+                },
+                "maxItems": 20,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Photos"
+          },
+          "rental_unit": {
+            "enum": [
+              "day",
+              "hour"
+            ],
+            "title": "Rental Unit",
+            "type": "string"
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "minLength": 1,
+                "pattern": "^[a-z0-9-]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slug"
+          },
+          "status": {
+            "default": "active",
+            "enum": [
+              "active",
+              "archived"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "variants": {
+            "items": {
+              "$ref": "#/components/schemas/LotVariantInput"
+            },
+            "minItems": 1,
+            "title": "Variants",
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "category_id",
+          "rental_unit",
+          "variants",
+          "allowed_durations",
+          "characteristics"
+        ],
+        "title": "CreateLotRequest",
         "type": "object"
       },
       "CreateOfferRequest": {
@@ -1349,6 +1514,36 @@
         "title": "LotVariantDTO",
         "type": "object"
       },
+      "LotVariantInput": {
+        "additionalProperties": false,
+        "properties": {
+          "battery_count": {
+            "maximum": 9.223372036854776e+18,
+            "minimum": 0.0,
+            "title": "Battery Count",
+            "type": "integer"
+          },
+          "is_active": {
+            "default": true,
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "price_tiers": {
+            "items": {
+              "$ref": "#/components/schemas/PriceTier"
+            },
+            "minItems": 1,
+            "title": "Price Tiers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "battery_count",
+          "price_tiers"
+        ],
+        "title": "LotVariantInput",
+        "type": "object"
+      },
       "MessageResponse": {
         "properties": {
           "message": {
@@ -1703,6 +1898,29 @@
           "battery_count"
         ],
         "title": "PriceFromDTO",
+        "type": "object"
+      },
+      "PriceTier": {
+        "additionalProperties": false,
+        "properties": {
+          "min_units": {
+            "maximum": 9.223372036854776e+18,
+            "minimum": 1.0,
+            "title": "Min Units",
+            "type": "integer"
+          },
+          "price_per_unit_minor": {
+            "maximum": 9.223372036854776e+18,
+            "minimum": 1.0,
+            "title": "Price Per Unit Minor",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "min_units",
+          "price_per_unit_minor"
+        ],
+        "title": "PriceTier",
         "type": "object"
       },
       "PriceTierDTO": {
@@ -2305,6 +2523,203 @@
         "title": "UpdateCharacteristicsRequest",
         "type": "object"
       },
+      "UpdateLotRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "allowed_durations": {
+            "anyOf": [
+              {
+                "items": {
+                  "maximum": 365.0,
+                  "minimum": 1.0,
+                  "type": "integer"
+                },
+                "maxItems": 365,
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allowed Durations"
+          },
+          "battery_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Battery Type"
+          },
+          "category_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category Id"
+          },
+          "characteristics": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ]
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Characteristics"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "file_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "maxItems": 20,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Ids"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "photos": {
+            "anyOf": [
+              {
+                "items": {
+                  "maxLength": 2048,
+                  "type": "string"
+                },
+                "maxItems": 20,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Photos"
+          },
+          "rental_unit": {
+            "anyOf": [
+              {
+                "enum": [
+                  "day",
+                  "hour"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rental Unit"
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "minLength": 1,
+                "pattern": "^[a-z0-9-]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slug"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "active",
+                  "archived",
+                  "maintenance",
+                  "overdue"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "variants": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/LotVariantInput"
+                },
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Variants"
+          },
+          "version": {
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version"
+        ],
+        "title": "UpdateLotRequest",
+        "type": "object"
+      },
       "UpdateOfferRequest": {
         "additionalProperties": false,
         "properties": {
@@ -2407,6 +2822,35 @@
           "version"
         ],
         "title": "UpdateSettingsRequest",
+        "type": "object"
+      },
+      "UploadPurpose": {
+        "enum": [
+          "lot_photo",
+          "ticket_photo",
+          "verification_passport",
+          "verification_registration",
+          "verification_selfie"
+        ],
+        "type": "string"
+      },
+      "UploadResultDTO": {
+        "properties": {
+          "file_id": {
+            "format": "uuid",
+            "title": "File Id",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file_id",
+          "url"
+        ],
+        "title": "UploadResultDTO",
         "type": "object"
       },
       "UserDTO": {
@@ -3018,6 +3462,273 @@
         "summary": "Update Characteristics",
         "tags": [
           "admin-categories"
+        ]
+      }
+    },
+    "/api/v1/admin/lots": {
+      "get": {
+        "operationId": "list_lots_api_v1_admin_lots_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "category_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "active",
+                    "archived",
+                    "maintenance",
+                    "overdue"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 120,
+                  "pattern": "^[^\\x00]*$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "maximum": 9223372036854775807,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LotPageDTO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Lots",
+        "tags": [
+          "admin-lots"
+        ]
+      },
+      "post": {
+        "operationId": "create_lot_api_v1_admin_lots_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateLotRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LotDTO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Lot",
+        "tags": [
+          "admin-lots"
+        ]
+      }
+    },
+    "/api/v1/admin/lots/{id}": {
+      "get": {
+        "operationId": "get_lot_api_v1_admin_lots__id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LotDTO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Lot",
+        "tags": [
+          "admin-lots"
+        ]
+      },
+      "patch": {
+        "operationId": "update_lot_api_v1_admin_lots__id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateLotRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LotDTO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update Lot",
+        "tags": [
+          "admin-lots"
         ]
       }
     },
@@ -4007,6 +4718,58 @@
         "summary": "Session",
         "tags": [
           "auth"
+        ]
+      }
+    },
+    "/api/v1/files": {
+      "post": {
+        "operationId": "upload_file_api_v1_files_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_file_api_v1_files_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadResultDTO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "413": {
+            "description": "Upload exceeds the file or multipart size limit"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "Object storage is unavailable"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Upload File",
+        "tags": [
+          "files"
         ]
       }
     },

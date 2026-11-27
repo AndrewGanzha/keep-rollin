@@ -3,6 +3,7 @@
 from src.infrastructure.postgres.models.audit_log_record import AuditLogRecord
 from src.infrastructure.postgres.models.category_record import CategoryRecord
 from src.infrastructure.postgres.models.characteristic_record import CharacteristicRecord
+from src.infrastructure.postgres.models.file_record import AttachmentRecord, FileRecord
 from src.infrastructure.postgres.models.lot_price_tier_record import LotPriceTierRecord
 from src.infrastructure.postgres.models.lot_record import LotRecord
 from src.infrastructure.postgres.models.lot_variant_record import LotVariantRecord
@@ -18,9 +19,11 @@ from src.infrastructure.postgres.models.refresh_session_record import RefreshSes
 from src.infrastructure.postgres.models.tenant_settings_record import TenantSettingsRecord
 
 __all__ = [
+    "AttachmentRecord",
     "AuditLogRecord",
     "CategoryRecord",
     "CharacteristicRecord",
+    "FileRecord",
     "LotPriceTierRecord",
     "LotRecord",
     "LotVariantRecord",

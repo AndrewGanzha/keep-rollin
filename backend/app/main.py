@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.api.admin_audit import router as admin_audit_router
 from app.api.admin_calendar import router as admin_calendar_router
 from app.api.admin_categories import router as admin_categories_router
+from app.api.admin_lots import router as admin_lots_router
 from app.api.admin_offers import router as admin_offers_router
 from app.api.admin_settings import router as admin_settings_router
 from app.api.admin_users import router as admin_users_router
@@ -14,6 +15,8 @@ from app.api.auth import router as auth_router
 from app.api.auth_deps import get_password_hasher
 from app.api.availability import router as availability_router
 from app.api.catalog import router as catalog_router
+from app.api.files import UploadLengthMiddleware
+from app.api.files import router as files_router
 from app.api.health import router as health_router
 from app.api.offers import me_router as me_offers_router
 from app.api.offers import public_router as public_offers_router
@@ -92,8 +95,10 @@ def create_app(
 
     register_exception_handlers(application)
     application.add_middleware(TenantMiddleware)
+    application.add_middleware(UploadLengthMiddleware)
     application.add_middleware(RequestContextMiddleware)
     application.include_router(health_router)
+    application.include_router(files_router)
     application.include_router(auth_router)
     application.include_router(admin_calendar_router)
     application.include_router(admin_categories_router)
@@ -101,6 +106,7 @@ def create_app(
     application.include_router(admin_settings_router)
     application.include_router(admin_users_router)
     application.include_router(admin_offers_router)
+    application.include_router(admin_lots_router)
     application.include_router(catalog_router)
     application.include_router(public_offers_router)
     application.include_router(me_offers_router)
