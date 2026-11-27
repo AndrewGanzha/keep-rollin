@@ -36,3 +36,11 @@ class InvalidOccupancyError(CatalogDomainError):
 
 class OccupancyConflictError(CatalogDomainError):
     pass
+
+
+class LotUnavailableError(CatalogDomainError):
+    pass
+
+
+class LotHasActiveRentalError(CatalogDomainError):
+    pass

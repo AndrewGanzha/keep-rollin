@@ -1,10 +1,12 @@
 import re
 import unicodedata
 from collections.abc import Sequence
+from datetime import datetime
 from itertools import pairwise
 from uuid import UUID, uuid4
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import DateTime, exists, func, or_, select, update
+from sqlalchemy.dialects.postgresql import Range
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
@@ -16,18 +18,22 @@ from src.application.dtos.admin_lot_dto import (
     CreateLotRequest,
     LotPhotoInput,
     LotVariantInput,
+    ManualLotStatus,
     UpdateLotRequest,
 )
 from src.domain.entities.lot import Lot, LotStatus
 from src.domain.entities.tenant_profile import TenantPolicies
+from src.domain.exceptions import LotHasActiveRentalError, LotUnavailableError
 from src.domain.value_objects.price import PriceTier
 from src.infrastructure.postgres.models.category_record import CategoryRecord
 from src.infrastructure.postgres.models.lot_price_tier_record import LotPriceTierRecord
 from src.infrastructure.postgres.models.lot_record import LotRecord
 from src.infrastructure.postgres.models.lot_variant_record import LotVariantRecord
+from src.infrastructure.postgres.models.occupancy_record import OccupancyRecord
 from src.infrastructure.postgres.models.tenant_settings_record import TenantSettingsRecord
 from src.infrastructure.postgres.repositories.file_repository import FileRepository
 from src.infrastructure.postgres.repositories.lot_repository import LotRepository
+from src.infrastructure.postgres.repositories.occupancy_repository import insert_occupancy
 
 
 class AdminLotNotFoundError(Exception):
@@ -312,6 +318,77 @@ class AdminLotRepository:
         await self._flush_lot()
         await self._set_photos(record, payload)
         return await self.get(lot_id)
+
+    async def set_status(
+        self, lot_id: UUID, status: ManualLotStatus, *, actor_id: UUID
+    ) -> tuple[Lot, str | None]:
+        record = await self._get_record(lot_id, lock=True)
+        old_status = record.status
+        if old_status == status:
+            return LotRepository._to_domain(record, await self._currency()), None
+
+        if status == "archived" or (status == "maintenance" and old_status != "overdue"):
+            has_active_booking = await self._session.scalar(
+                select(
+                    exists().where(
+                        OccupancyRecord.tenant_id == self._tenant_id,
+                        OccupancyRecord.lot_id == lot_id,
+                        OccupancyRecord.kind == "booking",
+                        OccupancyRecord.status == "active",
+                    )
+                )
+            )
+            if has_active_booking:
+                raise LotHasActiveRentalError
+        if old_status == "overdue":
+            raise LotUnavailableError
+
+        # Read wall-clock time after acquiring the lot lock.
+        now = (
+            await self._session.execute(select(func.clock_timestamp(type_=DateTime(timezone=True))))
+        ).scalar_one()
+        if status == "maintenance":
+            await insert_occupancy(
+                self._session,
+                OccupancyRecord(
+                    tenant_id=self._tenant_id,
+                    lot_id=lot_id,
+                    kind="maintenance",
+                    ref_id=lot_id,
+                    status="active",
+                    period=Range(now, None, bounds="[)"),
+                    created_by=actor_id,
+                    created_at=now,
+                    updated_at=now,
+                ),
+            )
+        elif old_status == "maintenance":
+            await self._close_status_maintenance(lot_id, now)
+
+        record.status = status
+        record.version += 1
+        record.updated_at = now
+        await self._session.flush()
+        return LotRepository._to_domain(record, await self._currency()), old_status
+
+    async def _close_status_maintenance(self, lot_id: UUID, now: datetime) -> None:
+        start = func.lower(OccupancyRecord.period)
+        await self._session.execute(
+            update(OccupancyRecord)
+            .where(
+                OccupancyRecord.tenant_id == self._tenant_id,
+                OccupancyRecord.lot_id == lot_id,
+                OccupancyRecord.ref_id == lot_id,
+                OccupancyRecord.kind == "maintenance",
+                OccupancyRecord.status == "active",
+                func.upper_inf(OccupancyRecord.period),
+            )
+            .values(
+                status="released",
+                period=func.tstzrange(start, func.greatest(start, now), "[)"),
+                updated_at=now,
+            )
+        )
 
     async def _get_record(self, lot_id: UUID, *, lock: bool = False) -> LotRecord:
         statement = (

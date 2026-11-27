@@ -4,11 +4,18 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.auth_deps import require_permission, verify_csrf
+from app.api.audit_deps import StaffAudit
+from app.api.auth_deps import get_current_user, require_permission, verify_csrf
 from app.api.deps import get_db_session
-from src.application.dtos.admin_lot_dto import CreateLotRequest, UpdateLotRequest
+from src.application.dtos.admin_lot_dto import CreateLotRequest, LotStatusRequest, UpdateLotRequest
 from src.application.dtos.lot_dto import LotDTO, LotPageDTO
 from src.domain.entities.lot import LotStatus
+from src.domain.entities.user_account import UserAccount
+from src.domain.exceptions import (
+    LotHasActiveRentalError,
+    LotUnavailableError,
+    OccupancyConflictError,
+)
 from src.domain.value_objects.limits import MAX_DATABASE_INTEGER
 from src.infrastructure.postgres.repositories.admin_lot_repository import (
     AdminLotNotFoundError,
@@ -119,3 +126,41 @@ async def update_lot(
         return LotDTO.from_domain(await repository.update(lot_id, payload))
     except _LOT_ERRORS as exc:
         raise _lot_error(exc) from exc
+
+
+@router.post(
+    "/{id}/status",
+    response_model=LotDTO,
+    dependencies=[Depends(verify_csrf)],
+    responses={
+        401: {"description": "Authentication required"},
+        403: {"description": "Owner permission or CSRF verification required"},
+        404: {"description": "Lot not found"},
+        409: {"description": "lot_has_active_rental, lot_unavailable or slot_taken"},
+    },
+)
+async def set_lot_status(
+    lot_id: Annotated[UUID, Path(alias="id")],
+    payload: LotStatusRequest,
+    repository: Repository,
+    actor: Annotated[UserAccount, Depends(get_current_user)],
+    audit: Annotated[StaffAudit, Depends()],
+) -> LotDTO:
+    try:
+        lot, old_status = await repository.set_status(lot_id, payload.status, actor_id=actor.id)
+    except AdminLotNotFoundError as exc:
+        raise _lot_error(exc) from exc
+    except LotHasActiveRentalError as exc:
+        raise HTTPException(status_code=409, detail={"code": "lot_has_active_rental"}) from exc
+    except LotUnavailableError as exc:
+        raise HTTPException(status_code=409, detail={"code": "lot_unavailable"}) from exc
+    except OccupancyConflictError as exc:
+        raise HTTPException(status_code=409, detail={"code": "slot_taken"}) from exc
+    if old_status is not None:
+        await audit.record(
+            action="lot.status_changed",
+            entity_type="lot",
+            entity_id=lot.id,
+            metadata={"old_status": old_status, "new_status": lot.status},
+        )
+    return LotDTO.from_domain(lot)

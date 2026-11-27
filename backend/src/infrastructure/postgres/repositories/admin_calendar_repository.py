@@ -1,12 +1,10 @@
 from datetime import UTC, date, datetime, timedelta
 from datetime import time as dt_time
-from typing import cast
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy import ColumnElement, func, select, update
 from sqlalchemy.dialects.postgresql import Range
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Tenant
@@ -16,16 +14,17 @@ from src.application.repositories.i_admin_calendar_repository import (
 from src.domain.entities.occupancy import (
     BlockNotFoundError,
     Occupancy,
-    OccupancyKind,
-    OccupancyStatus,
     TooManyCalendarLotsError,
 )
-from src.domain.exceptions import InvalidTimeRangeError, OccupancyConflictError
+from src.domain.exceptions import InvalidTimeRangeError
 from src.domain.value_objects.time_range import TimeRange
 from src.infrastructure.postgres.models.lot_record import LotRecord
 from src.infrastructure.postgres.models.occupancy_record import OccupancyRecord
+from src.infrastructure.postgres.repositories.occupancy_repository import (
+    insert_occupancy,
+    occupancy_from_record,
+)
 
-EXCLUSION_VIOLATION = "23P01"
 MAX_CALENDAR_LOTS = 200
 
 
@@ -86,7 +85,7 @@ class AdminCalendarRepository(IAdminCalendarRepository):
                 OccupancyRecord.id.asc(),
             )
         )
-        return [self._to_domain(record) for record in result.scalars().all()]
+        return [occupancy_from_record(record, period) for record in result.scalars().all()]
 
     async def lot_events(
         self,
@@ -111,7 +110,7 @@ class AdminCalendarRepository(IAdminCalendarRepository):
             )
             .order_by(OccupancyRecord.period.asc(), OccupancyRecord.id.asc())
         )
-        return [self._to_domain(record) for record in result.scalars().all()]
+        return [occupancy_from_record(record, period) for record in result.scalars().all()]
 
     async def create_block(
         self,
@@ -121,11 +120,14 @@ class AdminCalendarRepository(IAdminCalendarRepository):
         reason: str,
         created_by: UUID,
     ) -> Occupancy:
+        # Use the same lock order as booking and status changes.
         exists = await self._session.scalar(
-            select(LotRecord.id).where(
+            select(LotRecord.id)
+            .where(
                 LotRecord.id == lot_id,
                 LotRecord.tenant_id == self._tenant_id(),
             )
+            .with_for_update()
         )
         if exists is None:
             raise BlockNotFoundError("Lot not found")
@@ -160,13 +162,7 @@ class AdminCalendarRepository(IAdminCalendarRepository):
             created_at=occupancy.created_at,
             updated_at=occupancy.updated_at,
         )
-        self._session.add(record)
-        try:
-            await self._session.flush()
-        except IntegrityError as exc:
-            if getattr(exc.orig, "sqlstate", None) == EXCLUSION_VIOLATION:
-                raise OccupancyConflictError("The lot is already occupied") from exc
-            raise
+        await insert_occupancy(self._session, record)
         return occupancy
 
     async def release_block(self, *, lot_id: UUID, block_id: UUID) -> bool:
@@ -242,22 +238,3 @@ class AdminCalendarRepository(IAdminCalendarRepository):
         else:
             filters.append(OccupancyRecord.status == "active")
         return filters
-
-    @staticmethod
-    def _to_domain(record: OccupancyRecord) -> Occupancy:
-        start = record.period.lower
-        end = record.period.upper
-        if start is None or end is None:
-            raise RuntimeError("occupancy period must be bounded")
-        return Occupancy(
-            id=record.id,
-            created_at=record.created_at,
-            updated_at=record.updated_at,
-            lot_id=record.lot_id,
-            kind=cast(OccupancyKind, record.kind),
-            period=TimeRange(start=start, end=end),
-            ref_id=record.ref_id,
-            status=cast(OccupancyStatus, record.status),
-            reason=record.reason,
-            created_by=record.created_by,
-        )

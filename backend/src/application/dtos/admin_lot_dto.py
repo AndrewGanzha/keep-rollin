@@ -130,6 +130,15 @@ class CreateLotRequest(LotPhotoInput):
     status: Literal["active", "archived"] = "active"
 
 
+ManualLotStatus = Literal["active", "archived", "maintenance"]
+
+
+class LotStatusRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: ManualLotStatus
+
+
 class UpdateLotRequest(LotPhotoInput):
     version: int = Field(strict=True, ge=1)
     name: LotName | None = None

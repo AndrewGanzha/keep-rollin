@@ -1482,6 +1482,25 @@
         "title": "LotPageDTO",
         "type": "object"
       },
+      "LotStatusRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "enum": [
+              "active",
+              "archived",
+              "maintenance"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "LotStatusRequest",
+        "type": "object"
+      },
       "LotVariantDTO": {
         "properties": {
           "battery_count": {
@@ -3727,6 +3746,76 @@
           }
         ],
         "summary": "Update Lot",
+        "tags": [
+          "admin-lots"
+        ]
+      }
+    },
+    "/api/v1/admin/lots/{id}/status": {
+      "post": {
+        "operationId": "set_lot_status_api_v1_admin_lots__id__status_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LotStatusRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LotDTO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Owner permission or CSRF verification required"
+          },
+          "404": {
+            "description": "Lot not found"
+          },
+          "409": {
+            "description": "lot_has_active_rental, lot_unavailable or slot_taken"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Set Lot Status",
         "tags": [
           "admin-lots"
         ]

@@ -9,11 +9,41 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.repositories.i_occupancy_repository import IOccupancyRepository
 from src.domain.entities.occupancy import Occupancy, OccupancyKind, OccupancyStatus
-from src.domain.exceptions import InvalidOccupancyError, OccupancyConflictError
+from src.domain.exceptions import LotUnavailableError, OccupancyConflictError
 from src.domain.value_objects.time_range import TimeRange
+from src.infrastructure.postgres.models.lot_record import LotRecord
 from src.infrastructure.postgres.models.occupancy_record import OccupancyRecord
 
 EXCLUSION_VIOLATION = "23P01"
+
+
+async def insert_occupancy(session: AsyncSession, record: OccupancyRecord) -> None:
+    session.add(record)
+    try:
+        await session.flush()
+    except IntegrityError as exc:
+        if getattr(exc.orig, "sqlstate", None) == EXCLUSION_VIOLATION:
+            raise OccupancyConflictError("The lot is already occupied for this period") from exc
+        raise
+
+
+def occupancy_from_record(record: OccupancyRecord, window: TimeRange) -> Occupancy:
+    start, end = record.period.lower, record.period.upper
+    if start is None or end is None:
+        start = max(start or window.start, window.start)
+        end = min(end or window.end, window.end)
+    return Occupancy(
+        id=record.id,
+        created_at=record.created_at,
+        updated_at=record.updated_at,
+        lot_id=record.lot_id,
+        kind=cast(OccupancyKind, record.kind),
+        period=TimeRange(start=start, end=end),
+        ref_id=record.ref_id,
+        status=cast(OccupancyStatus, record.status),
+        reason=record.reason,
+        created_by=record.created_by,
+    )
 
 
 class OccupancyRepository(IOccupancyRepository):
@@ -27,9 +57,18 @@ class OccupancyRepository(IOccupancyRepository):
         return UUID(str(value))
 
     async def add(self, occupancy: Occupancy) -> None:
+        tenant_id = self._tenant_id()
+        # Take the same lot lock as status changes before writing occupancy.
+        lot_status = await self._session.scalar(
+            select(LotRecord.status)
+            .where(LotRecord.tenant_id == tenant_id, LotRecord.id == occupancy.lot_id)
+            .with_for_update()
+        )
+        if occupancy.kind == "booking" and lot_status != "active":
+            raise LotUnavailableError("The lot is unavailable for booking")
         record = OccupancyRecord(
             id=occupancy.id,
-            tenant_id=self._tenant_id(),
+            tenant_id=tenant_id,
             lot_id=occupancy.lot_id,
             kind=occupancy.kind,
             period=Range(
@@ -44,13 +83,7 @@ class OccupancyRepository(IOccupancyRepository):
             created_at=occupancy.created_at,
             updated_at=occupancy.updated_at,
         )
-        self._session.add(record)
-        try:
-            await self._session.flush()
-        except IntegrityError as exc:
-            if getattr(exc.orig, "sqlstate", None) == EXCLUSION_VIOLATION:
-                raise OccupancyConflictError("The lot is already occupied for this period") from exc
-            raise
+        await insert_occupancy(self._session, record)
 
     async def list_active(self, *, lot_id: UUID, period: TimeRange) -> list[Occupancy]:
         interval = Range(period.start, period.end, bounds="[)")
@@ -64,7 +97,7 @@ class OccupancyRepository(IOccupancyRepository):
             .order_by(OccupancyRecord.period.asc(), OccupancyRecord.id.asc())
         )
         result = await self._session.execute(statement)
-        return [self._to_domain(record) for record in result.scalars().all()]
+        return [occupancy_from_record(record, period) for record in result.scalars().all()]
 
     async def release(self, occupancy_id: UUID) -> bool:
         statement = (
@@ -77,22 +110,3 @@ class OccupancyRepository(IOccupancyRepository):
         )
         result = await self._session.execute(statement)
         return bool(getattr(result, "rowcount", 0))
-
-    @staticmethod
-    def _to_domain(record: OccupancyRecord) -> Occupancy:
-        start = record.period.lower
-        end = record.period.upper
-        if start is None or end is None:
-            raise InvalidOccupancyError("Occupancy period must be bounded")
-        return Occupancy(
-            id=record.id,
-            created_at=record.created_at,
-            updated_at=record.updated_at,
-            lot_id=record.lot_id,
-            kind=cast(OccupancyKind, record.kind),
-            period=TimeRange(start=start, end=end),
-            ref_id=record.ref_id,
-            status=cast(OccupancyStatus, record.status),
-            reason=record.reason,
-            created_by=record.created_by,
-        )
