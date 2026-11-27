@@ -126,18 +126,21 @@ _Подгруппа **B3** · 4 задачи._
 **Зависит:** BE-TEN-01, BE-AUTH-03
 **Объём:** `python -m app.cli provision-tenant --name --slug --domain --owner-email`; создаёт тенанта, настройки, owner, VAPID-ключи.
 **AC:**
-- [ ] Повторный запуск идемпотентен.
-- [ ] Пароль owner выводится один раз / задаётся флагом; в логах секретов нет.
-- [ ] Документировано в `contract/README.md` (UC-12.1 без UI).
+- [x] Повторный запуск идемпотентен: существующие tenant/owner/settings/VAPID не пересоздаются и не ротируются.
+- [x] Пароль owner выводится один раз только при создании / задаётся через stdin; в логах секретов нет, ошибки не печатают DSN/параметры.
+- [x] Документировано в `contract/README.md` и `contract/api.md` (UC-12.1 без UI); `PROVISION_DATABASE_URL` — отдельный привилегированный DSN.
+- [x] VAPID P-256 private key шифруется `SecretBox` с tenant-bound AAD; public key отдаётся в `/public/tenant`.
 
 ### BE-ADM-01 · Управление администраторами
 
 **Зависит:** BE-AUTH-04, BE-TEN-02
 **Объём:** `GET /admin/users`, `POST /admin/users` (требует `mfa_code`), `POST /admin/users/{id}/deactivate`; audit.
 **AC:**
-- [ ] Создание без валидного `mfa_code` → 401 `invalid_mfa_code`.
-- [ ] Нельзя деактивировать себя и последнего owner.
-- [ ] Деактивация отзывает все сессии пользователя.
+- [x] Создание без валидного `mfa_code` → 401 `invalid_mfa_code`; lockout → 429 `rate_limited` + `Retry-After`.
+- [x] Нельзя деактивировать себя и последнего owner; чужой/неизвестный `id` → 404; повторная деактивация идемпотентна.
+- [x] Деактивация отзывает все сессии пользователя, повышает `token_version` и пишет ровно одну audit-запись.
+- [x] Мутации сериализуются tenant advisory-lock; конкурентная взаимная деактивация оставляет активного owner.
+- [x] Начальный пароль задаёт owner и он проходит политику/Argon2id; invitation/forced-change — follow-up.
 
 ### BE-OFF-01 · Оферты и принятия
 
@@ -162,7 +165,7 @@ _Подгруппа **B4** · 11 задач._
 - [x] PATCH без `version` → 422; устаревший → 409 `stale_version`.
 - [x] GET/POST/PATCH `/admin/categories` только для owner (`catalog.manage`); admin/user → 403.
 - [x] Пагинация, `include_archived`, версия и характеристики в admin-DTO.
-- [ ] Bulk `PUT /admin/categories/{id}/characteristics` — BE-CAT-02.
+- [x] Bulk `PUT /admin/categories/{id}/characteristics` — BE-CAT-02.
 
 ### BE-CAT-02 · Характеристики категории
 
@@ -253,7 +256,7 @@ _Подгруппа **B4** · 11 задач._
 - [x] Блокировка поверх аренды → 409 `slot_taken`.
 - [x] Причина 3–200 символов обязательна.
 - [x] Удаление освобождает интервал для новых броней; повтор идемпотентен.
-- [ ] Audit-запись блокировок — BE-VER-04.
+- [x] Audit-запись блокировок — BE-VER-04.
 
 ## 6.2.5. Верификация и аудит
 
@@ -290,9 +293,11 @@ _Подгруппа **B5** · 4 задачи._
 **Зависит:** BE-AUTH-04
 **Объём:** writer-хелпер, `GET /admin/audit-log` (фильтры, keyset), ретеншен.
 **AC:**
-- [ ] Все мутации staff пишут запись с actor/ролью/IP.
-- [ ] В `metadata` нет паспортных данных и телефонов.
-- [ ] Keyset-пагинация стабильна при вставках.
+- [x] Writer-хелпер и `GET /admin/audit-log` с фильтрами `actor/action/entity/period`, keyset `(created_at,id)` и stable cursor реализованы; admin-user мутации пишут audit в той же транзакции.
+- [x] Настройки, категории, характеристики, оферты и блоки календаря пишут audit в той же транзакции. Тесты проверяют все девять маршрутов, откат при сбое audit и отсутствие дублей при повторном снятии блока.
+- [x] В `metadata` нет паспортных данных/телефонов/секретов: закрытый allowlist по action/field, запрет произвольных строк.
+- [x] Keyset-пагинация стабильна при вставках; `audit_log` append-only для API-роли и RLS-изолирован.
+- [x] Ретеншен: `python -m app.cli purge-audit-log` (dry-run по умолчанию, минимум 30 дней, батчи).
 
 ## 6.2.6. Брони и аренды
 
@@ -400,7 +405,7 @@ _Подгруппа **B8** · 5 задач._
 **Зависит:** BE-NOT-01, BE-TEN-01
 **Объём:** VAPID per tenant, `pywebpush`, `GET/POST/DELETE /me/push-subscriptions`, инвалидация при 410/404, fallback на email.
 **AC:**
-- [ ] `vapid_public_key` отдаётся в `/public/tenant`.
+- [x] `vapid_public_key` отдаётся в `/public/tenant`.
 - [ ] 410 инвалидирует подписку и триггерит email.
 - [ ] Upsert по `(user_id, endpoint)` без дублей.
 

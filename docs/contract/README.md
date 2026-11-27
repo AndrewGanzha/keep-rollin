@@ -281,7 +281,7 @@ ALTER TABLE occupancy ADD CONSTRAINT occupancy_no_overlap
 | `file.purpose` | `lot_photo`, `ticket_photo`, `verification_passport`, `verification_registration`, `verification_selfie` |
 | `characteristic.type` | `number`, `text`, `select`                                        |
 | `notification.status` | `pending`, `sent`, `failed`                                       |
-| `audit.action` | фиксированный enum, пополняется миграцией: `lot.status_changed`, `rental.closed`, `rental.overdue`, `verification.decided`, `ticket.status_changed`, `offer.published`, `settings.updated`, `admin.created`, `admin.deactivated`, `lot.blocked` |
+| `audit.action` | Фиксированный enum (0011): `tenant.provisioned`, `admin.created`, `admin.deactivated`, `user.deactivated`, `settings.updated`, `category.created`, `category.updated`, `category.characteristics_updated`, `offer.created`, `offer.updated`, `offer.published`, `lot.blocked`, `lot.unblocked`, `lot.status_changed`, `verification.decided`, `rental.closed`, `rental.overdue`, `ticket.status_changed` |
 
 ### 3.10. Уведомления: события (D-13)
 
@@ -331,3 +331,15 @@ ALTER TABLE occupancy ADD CONSTRAINT occupancy_no_overlap
 * Кэш: `GET /public/tenant` → `max-age=300`; каталог/карточка → `max-age=60, stale-while-revalidate=300`; доступность → `max-age=10`; `/me` и `/admin` → `no-store`.
 * Валюта одна на тенанта; мультивалютность — бэклог (ТЗ 12.1).
 * Rate limit логина — in-process, `tenant+IP` и `tenant+email`, окно и лимиты из env (`AUTH_RATE_LIMIT_*`). Это ограничение MVP: при нескольких API-инстансах эффективный лимит умножается; Redis — бэклог. `X-Forwarded-For` не используется, клиентский IP берётся из доверенного `request.client.host` (настройка `FORWARDED_ALLOW_IPS` на прокси).
+
+### 3.13. Администраторы, аудит и провижининг
+
+- `GET /admin/users` — owner-only, фильтры `role`, `q`, `limit/offset`, безопасные поля (`id,email,name,role,is_active,mfa_enabled,created_at`).
+- `POST /admin/users` — создаёт только `admin`, требует свежий TOTP owner в `mfa_code` (нет/неверный → `401 invalid_mfa_code`, lockout → `429 rate_limited` + `Retry-After`), пароль проверяется политикой и хешируется Argon2id. Начальный пароль задаёт owner; invitation/forced-change — follow-up.
+- `POST /admin/users/{id}/deactivate` — нельзя себя и последнего активного owner; чужой `id` → 404; успех инвалидирует access/refresh и пишет audit. Мутации сериализуются advisory-lock по тенанту.
+- `audit_log` — append-only для API-роли (`SELECT, INSERT`), RLS по `tenant_id`, keyset по `(created_at DESC, id DESC)`, metadata только по закрытому allowlist без PII/секретов. `GET /admin/audit-log` — owner-only, фильтры `actor_id/action/entity_type+entity_id/from/to`, курсор привязан к фильтрам.
+- Аудит охватывает действующие изменения администраторов, настроек, категорий, характеристик, оферт и блоков календаря. Запись сохраняется в транзакции операции. Повторное снятие блока возвращает `204` без новой записи.
+- Retention по умолчанию 365 дней; `python -m app.cli purge-audit-log` — dry-run, `--execute` удаляет батчами только строки старше cutoff (минимум 30 дней) через привилегированный DSN.
+- `python -m app.cli provision-tenant` — идемпотентно создаёт tenant/settings/owner/VAPID/audit одной транзакцией; требует `PROVISION_DATABASE_URL` (не API-роль), пароль печатается один раз только при создании. VAPID private key шифруется `SecretBox` с контекстом `vapid:<tenant_id>`.
+- Для провижининга в production задайте CLI те же `APP_ENV=production` и ключи `SECURITY_KEY`, `SECURITY_KEY_ID`, `SECURITY_PREVIOUS_KEYS`, что и у API. Передавайте DSN через `PROVISION_DATABASE_URL`.
+- Привилегированный DSN должен принадлежать отдельной роли с минимальными грантами (владелец таблиц или `BYPASSRLS` + только нужные таблицы); `keep_rollin_app` для CLI не подходит.

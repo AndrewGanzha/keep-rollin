@@ -66,6 +66,8 @@
 
 ### 4.5. Верификация и оферта
 
+> Маршруты `verification-requests` ниже — planned: BE-VER-01/02/03 ещё не реализованы, поэтому их нет в текущем `contract/openapi.json`. Оферты реализованы.
+
 | Метод и путь                                    | Роли        | Назначение / заметки |
 | ----------------------------------------------- | ----------- | -------------------- |
 | `POST /me/verification-requests`                | user+       | Паспортные данные + 3 документа; Idempotency-Key |
@@ -126,3 +128,12 @@
 | `GET /admin/users`                  | `role`, `q`, пагинация |
 | `POST /admin/users`                 | Создание админа; требуется `mfa_code` (UC-4.7) |
 | `POST /admin/users/{id}/deactivate` | Нельзя себя и последнего owner |
+
+Привилегированные операции (не HTTP API):
+
+```text
+python -m app.cli provision-tenant --name "Demo Rentals" --slug demo --domain demo.example.com --owner-email owner@example.com
+python -m app.cli purge-audit-log [--older-than-days N] [--batch-size N] [--execute]
+```
+
+Обе команды требуют `PROVISION_DATABASE_URL` (отдельный привилегированный DSN, не `keep_rollin_app`). Провижининг идемпотентен. Сгенерированный пароль выводится только при первом создании. Флаг «--owner-password-stdin» читает пароль из первой строки stdin и отключает его вывод. В production CLI использует ту же конфигурацию ключей шифрования, что и API. Для удаления записей purge требуется флаг «--execute».

@@ -16,5 +16,7 @@
 | `offer_version.status` + partial unique `(tenant_id) WHERE status='active'` | UC-4.1 |
 | `rental.occupancy_id` FK | Связь брони и занятости |
 | `push_subscription`: unique `(user_id, endpoint)`, `user_agent` | UC-11.2/11.3 |
-| `audit_log`: enum `action`, `metadata` без PII | UC-4.6 |
+| **NEW `audit_log`** (append-only, RLS, keyset) | Action enum, actor/role/IP, metadata JSONB без PII, retention: UC-4.6 |
+| `user`: индексы `(tenant_id, created_at, id)` и `(tenant_id, role, created_at, id)` | Owner-список администраторов (BE-ADM-01) |
+| `tenant_settings`: `vapid_public_key`, `vapid_private_key_enc`, `vapid_key_id` | Провижининг и Web Push (BE-TEN-02) |
 | RLS на всех таблицах с `tenant_id`, включая новые | UC-12.3 |
