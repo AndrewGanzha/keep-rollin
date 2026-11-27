@@ -79,12 +79,12 @@ class DeleteBlockCommand:
     block_id: UUID
 
 
-class DeleteBlockHandler(IHandler[DeleteBlockCommand, None]):
+class DeleteBlockHandler(IHandler[DeleteBlockCommand, bool]):
     def __init__(self, repository: IAdminCalendarRepository) -> None:
         self._repository = repository
 
-    async def handle(self, request: DeleteBlockCommand) -> None:
-        await self._repository.release_block(
+    async def handle(self, request: DeleteBlockCommand) -> bool:
+        return await self._repository.release_block(
             lot_id=request.lot_id,
             block_id=request.block_id,
         )

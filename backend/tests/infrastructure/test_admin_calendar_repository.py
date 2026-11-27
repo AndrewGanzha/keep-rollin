@@ -486,7 +486,7 @@ async def test_calendar_block_conflict_release(
             lot_id=seeded.lot_a,
             block_id=block.id,
         )
-        assert await repository.release_block(
+        assert not await repository.release_block(
             lot_id=seeded.lot_a,
             block_id=block.id,
         )

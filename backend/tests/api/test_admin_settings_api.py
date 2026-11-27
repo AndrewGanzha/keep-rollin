@@ -15,6 +15,7 @@ from app.config import Settings
 from app.db import create_engine, create_session_factory
 from app.main import create_app
 from app.models import Tenant, User
+from src.infrastructure.postgres.models.audit_log_record import AuditLogRecord
 from src.infrastructure.security.password_hasher import Argon2PasswordHasher
 from tests.api.auth_helpers import enable_mfa, login_with_mfa
 
@@ -107,6 +108,9 @@ def cleanup_settings(tenant_ids: tuple[UUID, UUID]) -> None:
         factory = create_session_factory(engine)
         try:
             async with factory() as session:
+                await session.execute(
+                    delete(AuditLogRecord).where(AuditLogRecord.tenant_id.in_(tenant_ids))
+                )
                 await session.execute(delete(Tenant).where(Tenant.id.in_(tenant_ids)))
                 await session.commit()
         finally:

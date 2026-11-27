@@ -39,4 +39,5 @@ class IAdminCalendarRepository(ABC):
 
     @abstractmethod
     async def release_block(self, *, lot_id: UUID, block_id: UUID) -> bool:
+        """Return whether an active block was released. Raise if the block is missing."""
         raise NotImplementedError

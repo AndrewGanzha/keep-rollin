@@ -195,7 +195,7 @@ class AdminCalendarRepository(IAdminCalendarRepository):
         )
         if exists is None:
             raise BlockNotFoundError("Block not found")
-        return True
+        return False
 
     async def _tenant_timezone(self) -> ZoneInfo:
         timezone = await self._session.scalar(

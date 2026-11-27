@@ -4,6 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.audit_deps import StaffAudit
 from app.api.auth_deps import require_permission, verify_csrf
 from app.api.deps import get_db_session
 from src.application.dtos.offer_dto import (
@@ -100,8 +101,16 @@ async def list_offers(
 async def create_offer(
     payload: CreateOfferRequest,
     handler: Annotated[CreateOfferHandler, Depends(get_create_handler)],
+    audit: Annotated[StaffAudit, Depends()],
 ) -> OfferVersionDTO:
-    return await handler.handle(CreateOfferCommand(title=payload.title, body=payload.body))
+    offer = await handler.handle(CreateOfferCommand(title=payload.title, body=payload.body))
+    await audit.record(
+        action="offer.created",
+        entity_type="offer",
+        entity_id=offer.id,
+        metadata={"version": offer.version},
+    )
+    return offer
 
 
 @router.patch(
@@ -113,9 +122,10 @@ async def update_offer(
     offer_id: UUID,
     payload: UpdateOfferRequest,
     handler: Annotated[UpdateOfferHandler, Depends(get_update_handler)],
+    audit: Annotated[StaffAudit, Depends()],
 ) -> OfferVersionDTO:
     try:
-        return await handler.handle(
+        offer = await handler.handle(
             UpdateOfferCommand(
                 offer_id=offer_id,
                 changes=payload.model_dump(exclude_unset=True),
@@ -123,6 +133,13 @@ async def update_offer(
         )
     except (OfferNotFoundError, OfferNotEditableError) as exc:
         raise _offer_error(exc) from exc
+    await audit.record(
+        action="offer.updated",
+        entity_type="offer",
+        entity_id=offer.id,
+        metadata={"version": offer.version},
+    )
+    return offer
 
 
 @router.post(
@@ -133,11 +150,19 @@ async def update_offer(
 async def publish_offer(
     offer_id: UUID,
     handler: Annotated[PublishOfferHandler, Depends(get_publish_handler)],
+    audit: Annotated[StaffAudit, Depends()],
 ) -> OfferVersionDTO:
     try:
-        return await handler.handle(PublishOfferCommand(offer_id=offer_id))
+        offer = await handler.handle(PublishOfferCommand(offer_id=offer_id))
     except (OfferNotFoundError, OfferNotEditableError) as exc:
         raise _offer_error(exc) from exc
+    await audit.record(
+        action="offer.published",
+        entity_type="offer",
+        entity_id=offer.id,
+        metadata={"version": offer.version},
+    )
+    return offer
 
 
 __all__ = ["router"]

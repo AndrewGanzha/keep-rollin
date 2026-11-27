@@ -3,6 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.audit_deps import StaffAudit
 from app.api.auth_deps import require_permission, verify_csrf
 from app.api.deps import get_db_session
 from src.application.dtos.admin_settings_dto import AdminSettingsDTO, UpdateSettingsRequest
@@ -86,10 +87,11 @@ async def get_settings(
 async def update_settings(
     payload: UpdateSettingsRequest,
     handler: Annotated[UpdateSettingsHandler, Depends(get_update_handler)],
+    audit: Annotated[StaffAudit, Depends()],
 ) -> AdminSettingsDTO:
     changes = payload.model_dump(exclude_unset=True, exclude={"version", "policies"})
     try:
-        return await handler.handle(
+        settings = await handler.handle(
             UpdateSettingsCommand(
                 version=payload.version,
                 changes=changes,
@@ -102,6 +104,13 @@ async def update_settings(
         InvalidTenantProfileError,
     ) as exc:
         raise _settings_error(exc) from exc
+    await audit.record(
+        action="settings.updated",
+        entity_type="tenant_settings",
+        entity_id=audit.tenant_id,
+        metadata={"changed_fields": sorted(payload.model_fields_set - {"version"})},
+    )
+    return settings
 
 
 __all__ = ["router"]

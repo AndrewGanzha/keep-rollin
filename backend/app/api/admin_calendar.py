@@ -5,6 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.audit_deps import StaffAudit
 from app.api.auth_deps import require_permission, verify_csrf
 from app.api.deps import get_db_session
 from src.application.dtos.admin_calendar_dto import (
@@ -178,9 +179,10 @@ async def create_block(
     payload: CreateLotBlockRequest,
     user: Annotated[UserAccount, Depends(require_permission("calendar.block"))],
     handler: Annotated[CreateBlockHandler, Depends(get_create_block_handler)],
+    audit: Annotated[StaffAudit, Depends()],
 ) -> LotBlockDTO:
     try:
-        return await handler.handle(
+        block = await handler.handle(
             CreateBlockCommand(
                 lot_id=lot_id,
                 period=TimeRange(start=payload.start_time, end=payload.end_time),
@@ -190,6 +192,8 @@ async def create_block(
         )
     except (OccupancyConflictError, BlockNotFoundError, InvalidTimeRangeError) as exc:
         raise _calendar_error(exc) from exc
+    await audit.record(action="lot.blocked", entity_type="lot_block", entity_id=block.id)
+    return block
 
 
 @router.delete(
@@ -205,11 +209,14 @@ async def delete_block(
     lot_id: UUID,
     block_id: UUID,
     handler: Annotated[DeleteBlockHandler, Depends(get_delete_block_handler)],
+    audit: Annotated[StaffAudit, Depends()],
 ) -> Response:
     try:
-        await handler.handle(DeleteBlockCommand(lot_id=lot_id, block_id=block_id))
+        released = await handler.handle(DeleteBlockCommand(lot_id=lot_id, block_id=block_id))
     except BlockNotFoundError as exc:
         raise _calendar_error(exc) from exc
+    if released:
+        await audit.record(action="lot.unblocked", entity_type="lot_block", entity_id=block_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

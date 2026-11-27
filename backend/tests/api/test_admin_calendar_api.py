@@ -16,6 +16,7 @@ from app.config import Settings
 from app.db import create_engine, create_session_factory
 from app.main import create_app
 from app.models import Tenant, User
+from src.infrastructure.postgres.models.audit_log_record import AuditLogRecord
 from src.infrastructure.postgres.models.category_record import CategoryRecord
 from src.infrastructure.postgres.models.lot_record import LotRecord
 from src.infrastructure.postgres.models.occupancy_record import OccupancyRecord
@@ -40,6 +41,7 @@ class SeededCalendarAPI:
     tenant_b: UUID
     owner_a_id: UUID
     owner_a_email: str
+    admin_a_id: UUID
     admin_a_email: str
     user_a_email: str
     owner_b_email: str
@@ -220,6 +222,7 @@ def seed_calendar() -> SeededCalendarAPI:
         tenant_b=tenant_b.id,
         owner_a_id=owner_a.id,
         owner_a_email=owner_a.email,
+        admin_a_id=admin_a.id,
         admin_a_email=admin_a.email,
         user_a_email=user_a.email,
         owner_b_email=owner_b.email,
@@ -239,6 +242,9 @@ def cleanup_calendar(tenant_ids: tuple[UUID, UUID]) -> None:
         factory = create_session_factory(engine)
         try:
             async with factory() as session:
+                await session.execute(
+                    delete(AuditLogRecord).where(AuditLogRecord.tenant_id.in_(tenant_ids))
+                )
                 await session.execute(delete(Tenant).where(Tenant.id.in_(tenant_ids)))
                 await session.commit()
         finally:
@@ -256,7 +262,9 @@ def seeded() -> Iterator[SeededCalendarAPI]:
         cleanup_calendar((value.tenant_a, value.tenant_b))
 
 
-def client_for(domain: str, *, browser_headers: bool = True) -> TestClient:
+def client_for(
+    domain: str, *, browser_headers: bool = True, client_host: str = "testclient"
+) -> TestClient:
     assert DATABASE_URL is not None
     settings = Settings(
         database_url=DATABASE_URL,
@@ -275,7 +283,12 @@ def client_for(domain: str, *, browser_headers: bool = True) -> TestClient:
         if browser_headers
         else None
     )
-    return TestClient(create_app(settings), base_url=f"https://{domain}", headers=headers)
+    return TestClient(
+        create_app(settings),
+        base_url=f"https://{domain}",
+        headers=headers,
+        client=(client_host, 50000),
+    )
 
 
 def login(client: TestClient, email: str) -> str:

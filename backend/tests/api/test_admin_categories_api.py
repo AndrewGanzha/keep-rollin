@@ -15,6 +15,7 @@ from app.config import Settings
 from app.db import create_engine, create_session_factory
 from app.main import create_app
 from app.models import Tenant, User
+from src.infrastructure.postgres.models.audit_log_record import AuditLogRecord
 from src.infrastructure.postgres.models.category_record import CategoryRecord
 from src.infrastructure.postgres.models.lot_price_tier_record import LotPriceTierRecord
 from src.infrastructure.postgres.models.lot_record import LotRecord
@@ -222,6 +223,9 @@ def cleanup_admin_categories(tenant_ids: tuple[UUID, UUID]) -> None:
         factory = create_session_factory(engine)
         try:
             async with factory() as session:
+                await session.execute(
+                    delete(AuditLogRecord).where(AuditLogRecord.tenant_id.in_(tenant_ids))
+                )
                 await session.execute(delete(Tenant).where(Tenant.id.in_(tenant_ids)))
                 await session.commit()
         finally:

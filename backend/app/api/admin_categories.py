@@ -4,6 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.audit_deps import StaffAudit
 from app.api.auth_deps import require_permission, verify_csrf
 from app.api.deps import get_db_session
 from src.application.dtos.admin_category_dto import (
@@ -123,9 +124,10 @@ async def list_categories(
 async def create_category(
     payload: CreateCategoryRequest,
     handler: Annotated[CreateCategoryHandler, Depends(get_create_handler)],
+    audit: Annotated[StaffAudit, Depends()],
 ) -> AdminCategoryDTO:
     try:
-        return await handler.handle(
+        category = await handler.handle(
             CreateCategoryCommand(
                 name=payload.name,
                 slug=payload.slug,
@@ -134,6 +136,13 @@ async def create_category(
         )
     except (CategoryNotFoundError, CategorySlugTakenError, CategoryVersionConflictError) as exc:
         raise _category_error(exc) from exc
+    await audit.record(
+        action="category.created",
+        entity_type="category",
+        entity_id=category.id,
+        metadata={"is_archived": category.is_archived},
+    )
+    return category
 
 
 @router.patch(
@@ -145,11 +154,12 @@ async def update_category(
     category_id: UUID,
     payload: UpdateCategoryRequest,
     handler: Annotated[UpdateCategoryHandler, Depends(get_update_handler)],
+    audit: Annotated[StaffAudit, Depends()],
 ) -> AdminCategoryDTO:
     changes = payload.model_dump(exclude_unset=True)
     changes.pop("version")
     try:
-        return await handler.handle(
+        category = await handler.handle(
             UpdateCategoryCommand(
                 category_id=category_id,
                 version=payload.version,
@@ -158,6 +168,13 @@ async def update_category(
         )
     except (CategoryNotFoundError, CategorySlugTakenError, CategoryVersionConflictError) as exc:
         raise _category_error(exc) from exc
+    await audit.record(
+        action="category.updated",
+        entity_type="category",
+        entity_id=category.id,
+        metadata={"changed_fields": sorted(changes), "is_archived": category.is_archived},
+    )
+    return category
 
 
 @router.put(
@@ -172,6 +189,7 @@ async def update_characteristics(
         UpdateCategoryCharacteristicsHandler,
         Depends(get_update_characteristics_handler),
     ],
+    audit: Annotated[StaffAudit, Depends()],
 ) -> AdminCategoryDTO:
     definitions = [
         CharacteristicUpsert(
@@ -187,7 +205,7 @@ async def update_characteristics(
         for item in payload.items
     ]
     try:
-        return await handler.handle(
+        category = await handler.handle(
             UpdateCategoryCharacteristicsCommand(
                 category_id=category_id,
                 version=payload.version,
@@ -200,6 +218,13 @@ async def update_characteristics(
         CharacteristicInUseError,
     ) as exc:
         raise _category_error(exc) from exc
+    await audit.record(
+        action="category.characteristics_updated",
+        entity_type="category",
+        entity_id=category.id,
+        metadata={"count": len(definitions)},
+    )
+    return category
 
 
 __all__ = ["router"]
