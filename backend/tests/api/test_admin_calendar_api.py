@@ -6,6 +6,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
+from zoneinfo import ZoneInfo
 
 import pytest
 from fastapi.testclient import TestClient
@@ -31,6 +32,8 @@ pytestmark = pytest.mark.skipif(
 JWT_SECRET = "test-secret-keep-rollin-0123456789abcdef"
 PASSWORD = "Bike-Rider-2026!"
 NOW = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
+BOOKING_START_OFFSET = timedelta(hours=1)
+BOOKING_END_OFFSET = timedelta(hours=2)
 
 
 @dataclass(frozen=True)
@@ -172,7 +175,7 @@ def seed_calendar() -> SeededCalendarAPI:
         tenant_id=tenant_a.id,
         lot_id=lot_a.id,
         kind="booking",
-        period=Range(NOW + timedelta(hours=1), NOW + timedelta(hours=2), bounds="[)"),
+        period=Range(NOW + BOOKING_START_OFFSET, NOW + BOOKING_END_OFFSET, bounds="[)"),
         ref_id=booking_ref_id,
         status="active",
     )
@@ -416,8 +419,8 @@ def test_block_create_conflict_delete_and_validation(seeded: SeededCalendarAPI) 
     with client_for(seeded.domain_a) as client:
         owner_token = login(client, seeded.owner_a_email)
         headers = auth(owner_token)
-        free_start = datetime(2026, 12, 10, 12, tzinfo=UTC)
-        free_end = datetime(2026, 12, 10, 13, tzinfo=UTC)
+        free_start = NOW + timedelta(days=14)
+        free_end = free_start + timedelta(hours=1)
 
         created = client.post(
             f"/api/v1/admin/lots/{seeded.lot_a_id}/blocks",
@@ -462,12 +465,13 @@ def test_block_create_conflict_delete_and_validation(seeded: SeededCalendarAPI) 
             f"/api/v1/admin/lots/{seeded.lot_a_id}/blocks",
             headers=headers,
             json={
-                "start_time": NOW.isoformat(),
-                "end_time": (NOW + timedelta(hours=1)).isoformat(),
+                "start_time": (NOW + BOOKING_START_OFFSET).isoformat(),
+                "end_time": (NOW + BOOKING_END_OFFSET).isoformat(),
                 "reason": "Пересечение",
             },
         )
         assert overlap_booking.status_code == 409
+        assert overlap_booking.json()["code"] == "slot_taken"
 
         short_reason = client.post(
             f"/api/v1/admin/lots/{seeded.lot_a_id}/blocks",
@@ -518,18 +522,24 @@ def test_block_create_conflict_delete_and_validation(seeded: SeededCalendarAPI) 
         )
         assert recreated.status_code == 201
 
+        aligned_start = (
+            (NOW + timedelta(days=21))
+            .astimezone(ZoneInfo("Europe/Moscow"))
+            .replace(hour=0, minute=0, second=0, microsecond=0)
+        )
+        aligned_end = aligned_start + timedelta(days=1)
         aligned = client.post(
             f"/api/v1/admin/lots/{seeded.lot_a_id}/blocks",
             headers=headers,
             json={
-                "start_time": "2026-12-14T21:00:00Z",
-                "end_time": "2026-12-15T21:00:00Z",
+                "start_time": aligned_start.astimezone(UTC).isoformat(),
+                "end_time": aligned_end.astimezone(UTC).isoformat(),
                 "reason": "Целые сутки",
             },
         )
         assert aligned.status_code == 201
-        assert aligned.json()["start_time"].startswith("2026-12-14T21:00:00")
-        assert aligned.json()["end_time"].startswith("2026-12-15T21:00:00")
+        assert datetime.fromisoformat(aligned.json()["start_time"]) == aligned_start
+        assert datetime.fromisoformat(aligned.json()["end_time"]) == aligned_end
 
 
 def test_calendar_tenant_isolation_and_csrf(seeded: SeededCalendarAPI) -> None:
