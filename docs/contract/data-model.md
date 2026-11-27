@@ -6,7 +6,7 @@
 | --------- | -------------------------- |
 | **NEW `occupancy`** (lot_id, kind, period `tstzrange`, ref_id, status) + EXCLUDE | Единая защита от пересечений: UC-7.3 A1, UC-2.4, UC-9.4, UC-10.4 (D-11) |
 | **NEW `tenant_settings`** | UC-1.7, UC-8.2, лимиты §3.8 |
-| **NEW `file` + `attachment`** (вместо `photo_urls jsonb`) | Приватные документы, TTL, лимиты, антивирус-хук: UC-5.3, UC-8.3, UC-1.4 |
+| **NEW `file` + `attachment`** | Метаданные загрузки и упорядоченные привязки фото к лотам. У файлов и привязок есть RLS и составные FK по тенанту. Существующие публичные URL сохраняются в лоте. Привязки заявок и тикетов относятся к соответствующим модулям. |
 | **NEW `refresh_session`, `password_reset_token`, `mfa_challenge`** | D-03 (ротация, reuse detection), D-04 (одноразовый enrollment/login challenge), сброс пароля |
 | **NEW `idempotency_key`** | D-08 |
 | `user`: `mfa_secret_enc`, `mfa_enabled`, `mfa_last_step`, `mfa_failed_attempts`, `mfa_failure_window_started_at`, `mfa_locked_until`, `mfa_recovery_hashes`, `notification_preferences jsonb`, `is_active` | UC-4.7, UC-11.4; TOTP-секрет шифруется, recovery-коды — keyed-хеши |
