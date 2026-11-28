@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.api.admin_analytics import router as admin_analytics_router
 from app.api.admin_audit import router as admin_audit_router
 from app.api.admin_batteries import router as admin_batteries_router
 from app.api.admin_calendar import router as admin_calendar_router
@@ -113,6 +114,7 @@ def create_app(
     application.include_router(auth_router)
     application.include_router(notification_preferences_router)
     application.include_router(push_subscriptions_router)
+    application.include_router(admin_analytics_router)
     application.include_router(admin_calendar_router)
     application.include_router(admin_categories_router)
     application.include_router(admin_audit_router)

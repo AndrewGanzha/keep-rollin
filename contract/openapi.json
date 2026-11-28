@@ -707,6 +707,298 @@
         "title": "AdminVerificationRequestSummary",
         "type": "object"
       },
+      "AnalyticsBucket": {
+        "properties": {
+          "cancelled_count": {
+            "title": "Cancelled Count",
+            "type": "integer"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "rentals_count": {
+            "title": "Rentals Count",
+            "type": "integer"
+          },
+          "revenue_minor": {
+            "title": "Revenue Minor",
+            "type": "integer"
+          },
+          "utilization_pct": {
+            "title": "Utilization Pct",
+            "type": "number"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "rentals_count",
+          "cancelled_count",
+          "revenue_minor",
+          "utilization_pct"
+        ],
+        "title": "AnalyticsBucket",
+        "type": "object"
+      },
+      "AnalyticsComparison": {
+        "properties": {
+          "current": {
+            "$ref": "#/components/schemas/AnalyticsSummary"
+          },
+          "delta": {
+            "$ref": "#/components/schemas/AnalyticsMetrics"
+          },
+          "previous": {
+            "$ref": "#/components/schemas/AnalyticsSummary"
+          }
+        },
+        "required": [
+          "current",
+          "previous",
+          "delta"
+        ],
+        "title": "AnalyticsComparison",
+        "type": "object"
+      },
+      "AnalyticsLotDetail": {
+        "properties": {
+          "daily": {
+            "items": {
+              "$ref": "#/components/schemas/AnalyticsBucket"
+            },
+            "title": "Daily",
+            "type": "array"
+          },
+          "from": {
+            "format": "date-time",
+            "title": "From",
+            "type": "string"
+          },
+          "lot": {
+            "$ref": "#/components/schemas/AnalyticsLotRef"
+          },
+          "rentals": {
+            "items": {
+              "$ref": "#/components/schemas/AnalyticsRental"
+            },
+            "title": "Rentals",
+            "type": "array"
+          },
+          "rentals_total": {
+            "title": "Rentals Total",
+            "type": "integer"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/AnalyticsSummary"
+          },
+          "to": {
+            "format": "date-time",
+            "title": "To",
+            "type": "string"
+          }
+        },
+        "required": [
+          "lot",
+          "from",
+          "to",
+          "summary",
+          "daily",
+          "rentals",
+          "rentals_total"
+        ],
+        "title": "AnalyticsLotDetail",
+        "type": "object"
+      },
+      "AnalyticsLotRef": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "AnalyticsLotRef",
+        "type": "object"
+      },
+      "AnalyticsMetrics": {
+        "properties": {
+          "avg_rental_minor": {
+            "title": "Avg Rental Minor",
+            "type": "integer"
+          },
+          "cancelled_count": {
+            "title": "Cancelled Count",
+            "type": "integer"
+          },
+          "overdue_count": {
+            "title": "Overdue Count",
+            "type": "integer"
+          },
+          "rentals_count": {
+            "title": "Rentals Count",
+            "type": "integer"
+          },
+          "revenue_minor": {
+            "title": "Revenue Minor",
+            "type": "integer"
+          },
+          "utilization_pct": {
+            "title": "Utilization Pct",
+            "type": "number"
+          }
+        },
+        "required": [
+          "revenue_minor",
+          "rentals_count",
+          "cancelled_count",
+          "overdue_count",
+          "avg_rental_minor",
+          "utilization_pct"
+        ],
+        "title": "AnalyticsMetrics",
+        "type": "object"
+      },
+      "AnalyticsRental": {
+        "properties": {
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "end_time": {
+            "format": "date-time",
+            "title": "End Time",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "price_minor": {
+            "title": "Price Minor",
+            "type": "integer"
+          },
+          "start_time": {
+            "format": "date-time",
+            "title": "Start Time",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "booked",
+              "active",
+              "overdue",
+              "completed",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "user": {
+            "$ref": "#/components/schemas/AdminUserRef"
+          }
+        },
+        "required": [
+          "id",
+          "start_time",
+          "end_time",
+          "status",
+          "price_minor",
+          "currency",
+          "user"
+        ],
+        "title": "AnalyticsRental",
+        "type": "object"
+      },
+      "AnalyticsRevenue": {
+        "properties": {
+          "buckets": {
+            "items": {
+              "$ref": "#/components/schemas/AnalyticsBucket"
+            },
+            "title": "Buckets",
+            "type": "array"
+          },
+          "group_by": {
+            "enum": [
+              "category",
+              "lot",
+              "day"
+            ],
+            "title": "Group By",
+            "type": "string"
+          }
+        },
+        "required": [
+          "group_by",
+          "buckets"
+        ],
+        "title": "AnalyticsRevenue",
+        "type": "object"
+      },
+      "AnalyticsSummary": {
+        "properties": {
+          "avg_rental_minor": {
+            "title": "Avg Rental Minor",
+            "type": "integer"
+          },
+          "cancelled_count": {
+            "title": "Cancelled Count",
+            "type": "integer"
+          },
+          "from": {
+            "format": "date-time",
+            "title": "From",
+            "type": "string"
+          },
+          "overdue_count": {
+            "title": "Overdue Count",
+            "type": "integer"
+          },
+          "rentals_count": {
+            "title": "Rentals Count",
+            "type": "integer"
+          },
+          "revenue_minor": {
+            "title": "Revenue Minor",
+            "type": "integer"
+          },
+          "to": {
+            "format": "date-time",
+            "title": "To",
+            "type": "string"
+          },
+          "utilization_pct": {
+            "title": "Utilization Pct",
+            "type": "number"
+          }
+        },
+        "required": [
+          "revenue_minor",
+          "rentals_count",
+          "cancelled_count",
+          "overdue_count",
+          "avg_rental_minor",
+          "utilization_pct",
+          "from",
+          "to"
+        ],
+        "title": "AnalyticsSummary",
+        "type": "object"
+      },
       "AuditLogEntryDTO": {
         "properties": {
           "action": {
@@ -4820,6 +5112,573 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/admin/analytics/compare": {
+      "get": {
+        "operationId": "compareAnalytics",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "compare_from",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "Compare From",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "compare_to",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "Compare To",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "category_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "From",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "To",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsComparison"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Analytics permission required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Analytics Compare",
+        "tags": [
+          "admin-analytics"
+        ]
+      }
+    },
+    "/api/v1/admin/analytics/export": {
+      "get": {
+        "operationId": "exportAnalytics",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "report",
+            "required": true,
+            "schema": {
+              "const": "rentals",
+              "title": "Report",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "format",
+            "required": false,
+            "schema": {
+              "const": "csv",
+              "default": "csv",
+              "title": "Format",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "From",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "To",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/csv": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Rental CSV report",
+            "headers": {
+              "Content-Disposition": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Analytics permission required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Analytics Export",
+        "tags": [
+          "admin-analytics"
+        ]
+      }
+    },
+    "/api/v1/admin/analytics/lots/{lot_id}": {
+      "get": {
+        "operationId": "getAnalyticsLot",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "lot_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Lot Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "maximum": 9223372036854775807,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "From",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "To",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsLotDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Analytics permission required"
+          },
+          "404": {
+            "description": "Lot not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Analytics Lot",
+        "tags": [
+          "admin-analytics"
+        ]
+      }
+    },
+    "/api/v1/admin/analytics/revenue": {
+      "get": {
+        "operationId": "getAnalyticsRevenue",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "group_by",
+            "required": true,
+            "schema": {
+              "enum": [
+                "category",
+                "lot",
+                "day"
+              ],
+              "title": "Group By",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "category_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "From",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "To",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsRevenue"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Analytics permission required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Analytics Revenue",
+        "tags": [
+          "admin-analytics"
+        ]
+      }
+    },
+    "/api/v1/admin/analytics/summary": {
+      "get": {
+        "operationId": "getAnalyticsSummary",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "category_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "From",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "To",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Analytics permission required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Analytics Summary",
+        "tags": [
+          "admin-analytics"
+        ]
+      }
+    },
+    "/api/v1/admin/analytics/utilization": {
+      "get": {
+        "operationId": "getAnalyticsUtilization",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "group_by",
+            "required": false,
+            "schema": {
+              "default": "lot",
+              "enum": [
+                "category",
+                "lot",
+                "day"
+              ],
+              "title": "Group By",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "category_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "From",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "To",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsRevenue"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Analytics permission required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Analytics Utilization",
+        "tags": [
+          "admin-analytics"
+        ]
+      }
+    },
     "/api/v1/admin/audit-log": {
       "get": {
         "operationId": "list_audit_log_api_v1_admin_audit_log_get",

@@ -323,7 +323,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** KPI за период */
+        /** Analytics Summary */
         get: operations["getAnalyticsSummary"];
         put?: never;
         post?: never;
@@ -340,7 +340,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Выручка с группировкой */
+        /** Analytics Revenue */
         get: operations["getAnalyticsRevenue"];
         put?: never;
         post?: never;
@@ -357,7 +357,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Доходность лота за период */
+        /** Analytics Lot */
         get: operations["getAnalyticsLot"];
         put?: never;
         post?: never;
@@ -664,6 +664,57 @@ export interface paths {
         };
         /** Get Admin Rental */
         get: operations["getAdminRental"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/analytics/utilization": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Analytics Utilization */
+        get: operations["getAnalyticsUtilization"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/analytics/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Analytics Export */
+        get: operations["exportAnalytics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/analytics/compare": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Analytics Compare */
+        get: operations["compareAnalytics"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1195,53 +1246,104 @@ export interface components {
             /** Format: date-time */
             end_time: string;
         };
+        /** AnalyticsSummary */
         AnalyticsSummary: {
-            /** Format: date-time */
-            from: string;
-            /** Format: date-time */
-            to: string;
-            revenue_minor: number;
-            rentals_count: number;
-            cancelled_count: number;
-            overdue_count: number;
+            /** Avg Rental Minor */
             avg_rental_minor: number;
-            utilization_pct: number;
-        };
-        AnalyticsBucket: {
-            key: string;
-            label: string;
-            rentals_count: number;
+            /** Cancelled Count */
             cancelled_count: number;
+            /**
+             * From
+             * Format: date-time
+             */
+            from: string;
+            /** Overdue Count */
+            overdue_count: number;
+            /** Rentals Count */
+            rentals_count: number;
+            /** Revenue Minor */
             revenue_minor: number;
+            /**
+             * To
+             * Format: date-time
+             */
+            to: string;
+            /** Utilization Pct */
             utilization_pct: number;
         };
-        AnalyticsRevenue: {
-            /** @enum {string} */
-            group_by: "lot" | "category" | "day";
-            buckets: components["schemas"]["AnalyticsBucket"][];
+        /** AnalyticsBucket */
+        AnalyticsBucket: {
+            /** Cancelled Count */
+            cancelled_count: number;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Rentals Count */
+            rentals_count: number;
+            /** Revenue Minor */
+            revenue_minor: number;
+            /** Utilization Pct */
+            utilization_pct: number;
         };
+        /** AnalyticsRevenue */
+        AnalyticsRevenue: {
+            /** Buckets */
+            buckets: components["schemas"]["AnalyticsBucket"][];
+            /**
+             * Group By
+             * @enum {string}
+             */
+            group_by: "category" | "lot" | "day";
+        };
+        /** AnalyticsRental */
         AnalyticsRental: {
-            /** Format: uuid */
-            id: string;
-            /** Format: date-time */
-            start_time: string;
-            /** Format: date-time */
-            end_time: string;
-            /** @enum {string} */
-            status: "booked" | "active" | "overdue" | "completed" | "cancelled";
-            price_minor: number;
+            /** Currency */
             currency: string;
+            /**
+             * End Time
+             * Format: date-time
+             */
+            end_time: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Price Minor */
+            price_minor: number;
+            /**
+             * Start Time
+             * Format: date-time
+             */
+            start_time: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "booked" | "active" | "overdue" | "completed" | "cancelled";
             user: components["schemas"]["AdminUserRef"];
         };
+        /** AnalyticsLotDetail */
         AnalyticsLotDetail: {
-            lot: components["schemas"]["Lot"];
-            /** Format: date-time */
-            from: string;
-            /** Format: date-time */
-            to: string;
-            summary: components["schemas"]["AnalyticsSummary"];
+            /** Daily */
             daily: components["schemas"]["AnalyticsBucket"][];
+            /**
+             * From
+             * Format: date-time
+             */
+            from: string;
+            lot: components["schemas"]["AnalyticsLotRef"];
+            /** Rentals */
             rentals: components["schemas"]["AnalyticsRental"][];
+            /** Rentals Total */
+            rentals_total: number;
+            summary: components["schemas"]["AnalyticsSummary"];
+            /**
+             * To
+             * Format: date-time
+             */
+            to: string;
         };
         CreateLotRequest: {
             name: string;
@@ -1491,6 +1593,37 @@ export interface components {
             user: components["schemas"]["AdminUserRef"];
             /** Version */
             version: number;
+        };
+        /** AnalyticsMetrics */
+        AnalyticsMetrics: {
+            /** Avg Rental Minor */
+            avg_rental_minor: number;
+            /** Cancelled Count */
+            cancelled_count: number;
+            /** Overdue Count */
+            overdue_count: number;
+            /** Rentals Count */
+            rentals_count: number;
+            /** Revenue Minor */
+            revenue_minor: number;
+            /** Utilization Pct */
+            utilization_pct: number;
+        };
+        /** AnalyticsLotRef */
+        AnalyticsLotRef: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+        };
+        /** AnalyticsComparison */
+        AnalyticsComparison: {
+            current: components["schemas"]["AnalyticsSummary"];
+            delta: components["schemas"]["AnalyticsMetrics"];
+            previous: components["schemas"]["AnalyticsSummary"];
         };
     };
     responses: {
@@ -2189,6 +2322,7 @@ export interface operations {
     getAnalyticsSummary: {
         parameters: {
             query: {
+                category_id?: string | null;
                 from: string;
                 to: string;
             };
@@ -2198,7 +2332,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description KPI */
+            /** @description Successful Response */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -2207,17 +2341,38 @@ export interface operations {
                     "application/json": components["schemas"]["AnalyticsSummary"];
                 };
             };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            422: components["responses"]["Validation"];
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Analytics permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
         };
     };
     getAnalyticsRevenue: {
         parameters: {
             query: {
+                group_by: "category" | "lot" | "day";
+                category_id?: string | null;
                 from: string;
                 to: string;
-                group_by: "lot" | "category" | "day";
             };
             header?: never;
             path?: never;
@@ -2225,7 +2380,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Выручка */
+            /** @description Successful Response */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -2234,14 +2389,36 @@ export interface operations {
                     "application/json": components["schemas"]["AnalyticsRevenue"];
                 };
             };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            422: components["responses"]["Validation"];
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Analytics permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
         };
     };
     getAnalyticsLot: {
         parameters: {
             query: {
+                limit?: number;
+                offset?: number;
                 from: string;
                 to: string;
             };
@@ -2253,7 +2430,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Детализация по лоту */
+            /** @description Successful Response */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -2262,10 +2439,36 @@ export interface operations {
                     "application/json": components["schemas"]["AnalyticsLotDetail"];
                 };
             };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            422: components["responses"]["Validation"];
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Analytics permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Lot not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
         };
     };
     listAdminLots: {
@@ -2839,6 +3042,152 @@ export interface operations {
             };
             /** @description Rental was not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    getAnalyticsUtilization: {
+        parameters: {
+            query: {
+                group_by?: "category" | "lot" | "day";
+                category_id?: string | null;
+                from: string;
+                to: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalyticsRevenue"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Analytics permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    exportAnalytics: {
+        parameters: {
+            query: {
+                report: "rentals";
+                format?: "csv";
+                from: string;
+                to: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Rental CSV report */
+            200: {
+                headers: {
+                    "Content-Disposition"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": string;
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Analytics permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    compareAnalytics: {
+        parameters: {
+            query: {
+                compare_from: string;
+                compare_to: string;
+                category_id?: string | null;
+                from: string;
+                to: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalyticsComparison"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Analytics permission required */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import { mock, rest } from 'mock-config-server'
 import { addDays, dayKeyOf, zonedDayStartIso } from './app/shared/lib/calendar'
 import type { components } from './app/shared/api/schema'
+import { createMockAnalytics, parseAnalyticsRange } from './mock/analytics'
 import { peakUsage, type BatteryCommit } from './mock/capacity'
 import {
   computePrice,
@@ -41,8 +42,6 @@ type RentalPage = components['schemas']['RentalPage']
 type CreateRentalRequest = components['schemas']['CreateRentalRequest']
 type CreateLotRequest = components['schemas']['CreateLotRequest']
 type LotStatusRequest = components['schemas']['LotStatusRequest']
-type AnalyticsSummary = components['schemas']['AnalyticsSummary']
-type AnalyticsBucket = components['schemas']['AnalyticsBucket']
 type AnalyticsRevenue = components['schemas']['AnalyticsRevenue']
 type AnalyticsLotDetail = components['schemas']['AnalyticsLotDetail']
 type AdminRental = components['schemas']['AdminRental']
@@ -853,153 +852,28 @@ lots.forEach((lot, lotIndex) => {
   }
 })
 
-const REVENUE_STATUSES: Rental['status'][] = ['active', 'overdue', 'completed']
+const analytics = createMockAnalytics(lots, categories, rentals, tenant.timezone)
 
-const dayKeyFor = (timeMs: number): string => {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: tenant.timezone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(new Date(timeMs))
-  const read = (type: string): string => parts.find(part => part.type === type)?.value ?? ''
-
-  return `${read('year')}-${read('month')}-${read('day')}`
+const analyticsAccessProblem = (params: Responder & AuthorizedRequest): Problem | null => {
+  const user = currentUser(params)
+  if (!user) return fail(params, 401, problem('token_invalid', 401, 'Требуется вход'))
+  return user.role === 'admin' || user.role === 'owner'
+    ? null
+    : fail(params, 403, problem('forbidden_role', 403, 'Недостаточно прав'))
 }
 
-const rentalsInPeriod = (fromMs: number, toMs: number, lotId?: string): Rental[] =>
-  rentals.filter(rental =>
-    Date.parse(rental.start_time) >= fromMs
-    && Date.parse(rental.start_time) < toMs
-    && (!lotId || rental.lot.id === lotId),
-  )
+const analyticsPeriodProblem = (params: Responder) =>
+  fail(params, 422, problem('validation_error', 422, 'Проверьте период'))
 
-const billed = (list: Rental[]): Rental[] => list.filter(rental => REVENUE_STATUSES.includes(rental.status))
-
-const occupancyMinutes = (list: Rental[], fromMs: number, toMs: number): number =>
-  billed(list).reduce((sum, rental) => {
-    const start = Math.max(Date.parse(rental.start_time), fromMs)
-    const end = Math.min(Date.parse(rental.end_time), toMs)
-
-    return sum + Math.max(end - start, 0) / 60000
-  }, 0)
-
-const utilization = (
-  scoped: Rental[],
-  fromMs: number,
-  toMs: number,
-  fleetSize: number,
-): number => {
-  const available = Math.max(((toMs - fromMs) / 60000) * Math.max(fleetSize, 1), 1)
-
-  return Math.min(100, Math.round((occupancyMinutes(scoped, fromMs, toMs) / available) * 1000) / 10)
-}
-
-const analyticsSummary = (fromMs: number, toMs: number, lotId?: string): AnalyticsSummary => {
-  const scoped = rentalsInPeriod(fromMs, toMs, lotId)
-  const revenue = billed(scoped).reduce((sum, rental) => sum + rental.price_minor, 0)
-  const cancelled = scoped.filter(rental => rental.status === 'cancelled').length
-  const billableCount = scoped.length - cancelled
-  const fleetSize = lotId ? 1 : lots.filter(lot => lot.status !== 'archived').length
-
-  return {
-    from: new Date(fromMs).toISOString(),
-    to: new Date(toMs).toISOString(),
-    revenue_minor: revenue,
-    rentals_count: scoped.length,
-    cancelled_count: cancelled,
-    overdue_count: scoped.filter(rental => rental.status === 'overdue').length,
-    avg_rental_minor: billableCount > 0 ? Math.round(revenue / billableCount) : 0,
-    utilization_pct: utilization(scoped, fromMs, toMs, fleetSize),
+const analyticsGrouped = (
+  params: Responder,
+  range: NonNullable<ReturnType<typeof parseAnalyticsRange>>,
+  groupBy: unknown,
+): AnalyticsRevenue | Problem => {
+  if (groupBy !== 'lot' && groupBy !== 'category' && groupBy !== 'day') {
+    return fail(params, 422, problem('validation_error', 422, 'Недопустимая группировка'))
   }
-}
-
-const makeBucket = (
-  key: string,
-  label: string,
-  scoped: Rental[],
-  fromMs: number,
-  toMs: number,
-  fleetSize: number,
-): AnalyticsBucket => ({
-  key,
-  label,
-  rentals_count: scoped.length,
-  cancelled_count: scoped.filter(rental => rental.status === 'cancelled').length,
-  revenue_minor: billed(scoped).reduce((sum, rental) => sum + rental.price_minor, 0),
-  utilization_pct: utilization(scoped, fromMs, toMs, fleetSize),
-})
-
-const analyticsBuckets = (
-  groupBy: 'lot' | 'category' | 'day',
-  fromMs: number,
-  toMs: number,
-  lotId?: string,
-): AnalyticsBucket[] => {
-  if (groupBy === 'lot') {
-    return lots
-      .map(lot => makeBucket(
-        lot.id,
-        lot.name,
-        rentalsInPeriod(fromMs, toMs, lot.id),
-        fromMs,
-        toMs,
-        1,
-      ))
-      .sort((left, right) => right.revenue_minor - left.revenue_minor)
-  }
-
-  if (groupBy === 'category') {
-    return categories
-      .map(category => makeBucket(
-        category.id,
-        category.name,
-        rentalsInPeriod(fromMs, toMs, lotId).filter(rental =>
-          lots.find(lot => lot.id === rental.lot.id)?.category_id === category.id,
-        ),
-        fromMs,
-        toMs,
-        Math.max(lots.filter(lot => lot.category_id === category.id && lot.status !== 'archived').length, 1),
-      ))
-      .sort((left, right) => right.revenue_minor - left.revenue_minor)
-  }
-
-  const buckets: AnalyticsBucket[] = []
-  let cursor = fromMs
-
-  while (cursor < toMs) {
-    const next = Math.min(cursor + 24 * HOUR, toMs)
-    const key = dayKeyFor(cursor)
-
-    buckets.push(makeBucket(
-      key,
-      key,
-      rentalsInPeriod(cursor, next, lotId),
-      cursor,
-      next,
-      1,
-    ))
-    cursor = next
-  }
-
-  return buckets
-}
-
-const parseAnalyticsRange = (
-  query: Record<string, unknown>,
-): { fromMs: number; toMs: number } | null => {
-  const fromMs = typeof query.from === 'string' ? Date.parse(query.from) : Number.NaN
-  const toMs = typeof query.to === 'string' ? Date.parse(query.to) : Number.NaN
-
-  if (!Number.isFinite(fromMs) || !Number.isFinite(toMs)) {
-    return null
-  }
-
-  if (toMs <= fromMs || toMs - fromMs > 366 * 24 * HOUR) {
-    return null
-  }
-
-  return { fromMs, toMs }
+  return { group_by: groupBy, buckets: analytics.buckets(groupBy, range) }
 }
 
 export default mock(
@@ -1567,96 +1441,93 @@ export default mock(
       }, { delay: 80 }),
 
       rest.get('/api/v1/admin/analytics/summary', (params) => {
-        const user = currentUser(params)
+        const problem = analyticsAccessProblem(params)
+        if (problem) return problem
 
-        if (!user) {
-          return fail(params, 401, problem('token_invalid', 401, 'Требуется вход'))
-        }
-
-        if (user.role !== 'admin' && user.role !== 'owner') {
-          return fail(params, 403, problem('forbidden_role', 403, 'Недостаточно прав'))
-        }
-
-        const query = params.request.queries as Record<string, unknown>
-        const range = parseAnalyticsRange(query)
-
-        if (!range) {
-          return fail(params, 422, problem('validation_error', 422, 'Проверьте период'))
-        }
-
-        return analyticsSummary(range.fromMs, range.toMs)
+        const { from, to } = params.request.queries
+        const range = parseAnalyticsRange(from, to)
+        return range ? analytics.summary(range) : analyticsPeriodProblem(params)
       }, { delay: 100 }),
 
       rest.get('/api/v1/admin/analytics/revenue', (params) => {
-        const user = currentUser(params)
+        const problem = analyticsAccessProblem(params)
+        if (problem) return problem
 
-        if (!user) {
-          return fail(params, 401, problem('token_invalid', 401, 'Требуется вход'))
+        const { from, to, group_by: groupBy } = params.request.queries
+        const range = parseAnalyticsRange(from, to)
+        if (!range) return analyticsPeriodProblem(params)
+
+        return analyticsGrouped(params, range, groupBy)
+      }, { delay: 100 }),
+
+      rest.get('/api/v1/admin/analytics/utilization', (params) => {
+        const problem = analyticsAccessProblem(params)
+        if (problem) return problem
+
+        const { from, to, group_by: groupBy = 'lot' } = params.request.queries
+        const range = parseAnalyticsRange(from, to)
+        if (!range) return analyticsPeriodProblem(params)
+
+        return analyticsGrouped(params, range, groupBy)
+      }, { delay: 100 }),
+
+      rest.get('/api/v1/admin/analytics/compare', (params) => {
+        const problem = analyticsAccessProblem(params)
+        if (problem) return problem
+
+        const { from, to, compare_from: compareFrom, compare_to: compareTo } = params.request.queries
+        const current = parseAnalyticsRange(from, to)
+        const previous = parseAnalyticsRange(compareFrom, compareTo)
+        return current && previous ? analytics.compare(current, previous) : analyticsPeriodProblem(params)
+      }, { delay: 100 }),
+
+      rest.get('/api/v1/admin/analytics/export', (params) => {
+        const accessProblem = analyticsAccessProblem(params)
+        if (accessProblem) return accessProblem
+
+        const { from, to, report, format = 'csv' } = params.request.queries
+        const range = parseAnalyticsRange(from, to)
+        if (!range) return analyticsPeriodProblem(params)
+
+        if (report !== 'rentals' || format !== 'csv') {
+          return fail(params, 422, problem('validation_error', 422, 'Недопустимый формат отчёта'))
         }
 
-        if (user.role !== 'admin' && user.role !== 'owner') {
-          return fail(params, 403, problem('forbidden_role', 403, 'Недостаточно прав'))
-        }
-
-        const query = params.request.queries as Record<string, unknown>
-        const range = parseAnalyticsRange(query)
-        const groupBy = query.group_by
-
-        if (!range) {
-          return fail(params, 422, problem('validation_error', 422, 'Проверьте период'))
-        }
-
-        if (groupBy !== 'lot' && groupBy !== 'category' && groupBy !== 'day') {
-          return fail(
-            params,
-            422,
-            problem('validation_error', 422, 'Проверьте поля', undefined, { group_by: 'Недопустимая группировка' }),
-          )
-        }
-
-        const response: AnalyticsRevenue = {
-          group_by: groupBy,
-          buckets: analyticsBuckets(groupBy, range.fromMs, range.toMs),
-        }
-
-        return response
+        const first = dayKeyOf(new Date(range.fromMs), tenant.timezone)
+        const last = dayKeyOf(new Date(range.toMs - 1), tenant.timezone)
+        params.attachment(`${tenant.slug}_rentals_${first}_${last}.csv`)
+        params.setHeader('Content-Type', 'text/csv; charset=utf-8')
+        return analytics.csv(range)
       }, { delay: 100 }),
 
       rest.get('/api/v1/admin/analytics/lots/:lot_id', (params) => {
-        const user = currentUser(params)
+        const accessProblem = analyticsAccessProblem(params)
+        if (accessProblem) return accessProblem
 
-        if (!user) {
-          return fail(params, 401, problem('token_invalid', 401, 'Требуется вход'))
-        }
+        const { from, to, limit = '100', offset = '0' } = params.request.queries
+        const range = parseAnalyticsRange(from, to)
+        if (!range) return analyticsPeriodProblem(params)
 
-        if (user.role !== 'admin' && user.role !== 'owner') {
-          return fail(params, 403, problem('forbidden_role', 403, 'Недостаточно прав'))
-        }
-
-        const query = params.request.queries as Record<string, unknown>
-        const range = parseAnalyticsRange(query)
-
-        if (!range) {
-          return fail(params, 422, problem('validation_error', 422, 'Проверьте период'))
+        const pageSize = Number(limit)
+        const start = Number(offset)
+        if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > 100
+          || !Number.isInteger(start) || start < 0 || start > 2147483647) {
+          return fail(params, 422, problem('validation_error', 422, 'Недопустимые параметры страницы'))
         }
 
         const lot = lots.find(item => item.id === params.request.params.lot_id)
+        if (!lot) return fail(params, 404, problem('not_found', 404, 'Лот не найден'))
 
-        if (!lot) {
-          return fail(params, 404, problem('not_found', 404, 'Лот не найден'))
-        }
-
-        const scoped = rentalsInPeriod(range.fromMs, range.toMs, lot.id)
-          .slice()
-          .sort((left, right) => right.start_time.localeCompare(left.start_time))
-
+        const scoped = analytics.inPeriod(range, lot.id)
+          .sort((left, right) => right.start_time.localeCompare(left.start_time) || right.id.localeCompare(left.id))
         const detail: AnalyticsLotDetail = {
-          lot: toLot(lot),
+          lot: { id: lot.id, name: lot.name },
           from: new Date(range.fromMs).toISOString(),
           to: new Date(range.toMs).toISOString(),
-          summary: analyticsSummary(range.fromMs, range.toMs, lot.id),
-          daily: analyticsBuckets('day', range.fromMs, range.toMs, lot.id),
-          rentals: scoped.map(rental => ({
+          summary: analytics.summary(range, [lot]),
+          daily: analytics.buckets('day', range, [lot]),
+          rentals_total: scoped.length,
+          rentals: scoped.slice(start, start + pageSize).map(rental => ({
             id: rental.id,
             start_time: rental.start_time,
             end_time: rental.end_time,

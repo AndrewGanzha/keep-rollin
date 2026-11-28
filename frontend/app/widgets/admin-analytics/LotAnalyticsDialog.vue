@@ -9,8 +9,14 @@ import { useTenant } from '~/entities/tenant'
 import { formatDateTime, formatMoney } from '~/shared/lib'
 import { EmptyState } from '~/shared/ui'
 
-const props = defineProps<{ detail: AnalyticsLotDetail | null }>()
-const emit = defineEmits<{ close: [] }>()
+const props = defineProps<{
+  detail: AnalyticsLotDetail | null
+  currency?: string
+  loading: boolean
+  offset: number
+  pageSize: number
+}>()
+const emit = defineEmits<{ close: []; page: [offset: number] }>()
 
 const tenant = useTenant()
 const timeZone = computed(() => tenant.value?.timezone)
@@ -44,7 +50,7 @@ const rentalStatusLabel = (rental: AnalyticsRental) => rentalStatusLabels[rental
       <div class="kpis">
         <div class="kpi">
           <span class="muted">Выручка</span>
-          <strong>{{ formatMoney(summary.revenue_minor) }}</strong>
+          <strong>{{ formatMoney(summary.revenue_minor, currency) }}</strong>
         </div>
         <div class="kpi">
           <span class="muted">Аренд</span>
@@ -52,7 +58,7 @@ const rentalStatusLabel = (rental: AnalyticsRental) => rentalStatusLabels[rental
         </div>
         <div class="kpi">
           <span class="muted">Средний чек</span>
-          <strong>{{ formatMoney(summary.avg_rental_minor) }}</strong>
+          <strong>{{ formatMoney(summary.avg_rental_minor, currency) }}</strong>
         </div>
         <div class="kpi">
           <span class="muted">Загрузка</span>
@@ -64,7 +70,10 @@ const rentalStatusLabel = (rental: AnalyticsRental) => rentalStatusLabels[rental
         <h3 class="section-title detail__title">
           Выручка по дням
         </h3>
-        <RevenueBars :buckets="detail.daily" />
+        <RevenueBars
+          :buckets="detail.daily"
+          :currency="currency"
+        />
       </div>
 
       <div>
@@ -73,11 +82,18 @@ const rentalStatusLabel = (rental: AnalyticsRental) => rentalStatusLabels[rental
         </h3>
         <DataTable
           :value="detail.rentals"
+          :loading="loading"
+          :paginator="detail.rentals_total > pageSize"
+          :rows="pageSize"
+          :first="offset"
+          :total-records="detail.rentals_total"
+          lazy
           data-key="id"
           striped-rows
           size="small"
           scrollable
           class="admin-table"
+          @page="emit('page', $event.first)"
         >
           <template #empty>
             <EmptyState

@@ -2,7 +2,7 @@
 import type { AnalyticsBucket } from '~/entities/analytics'
 import { formatMoney } from '~/shared/lib'
 
-const props = defineProps<{ buckets: AnalyticsBucket[] }>()
+const props = defineProps<{ buckets: AnalyticsBucket[]; currency?: string }>()
 
 const total = computed(() =>
   props.buckets.reduce((sum, bucket) => sum + bucket.revenue_minor, 0),
@@ -39,7 +39,7 @@ const share = (bucket: AnalyticsBucket): number =>
         >
           <div class="category__head">
             <span>{{ bucket.label }}</span>
-            <strong>{{ formatMoney(bucket.revenue_minor) }}</strong>
+            <strong>{{ formatMoney(bucket.revenue_minor, currency) }}</strong>
           </div>
           <div class="category__bar">
             <div

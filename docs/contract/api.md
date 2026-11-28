@@ -154,8 +154,10 @@
 | `GET /admin/analytics/revenue`                   | `group_by` = `category` / `lot` / `day` |
 | `GET /admin/analytics/lots/{lot_id}`             | Доходность лота |
 | `GET /admin/analytics/utilization`               | Загрузка парка |
-| `GET /admin/analytics/compare`                   | Два периода, дельты |
-| `GET /admin/analytics/export`                    | `report`, `format=csv`; поток |
+| `GET /admin/analytics/compare`                   | `from`, `to`, `compare_from`, `compare_to`; два периода и дельты |
+| `GET /admin/analytics/export`                    | `report=rentals`, `format=csv`; поток |
+
+Формулы, доступ и формат выгрузки описаны в [контракте аналитики](../../contract/analytics.md).
 
 ### 4.9. Тенант и пользователи (owner)
 

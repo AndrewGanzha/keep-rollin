@@ -51,7 +51,7 @@ async def finalize_session(response: Response, session: AsyncSession) -> Respons
 
     BaseHTTPMiddleware exposes every response as a body iterator. For the MVP we
     buffer that body so commit/rollback and close happen before headers are sent.
-    A future true-streaming endpoint must use its own session lifecycle.
+    Endpoints with an independent read session can opt into streaming.
     """
     body_iterator = getattr(response, "body_iterator", None)
     if body_iterator is None:
@@ -175,5 +175,10 @@ class TenantMiddleware(BaseHTTPMiddleware):
             raise
 
         if session is not None:
+            if response.status_code < 400 and getattr(
+                request.state, "stream_with_own_session", False
+            ):
+                await commit_and_close(session)
+                return response
             return await finalize_session(response, session)
         return response

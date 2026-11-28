@@ -1,5 +1,5 @@
 export {
   periodPresets,
   useAdminAnalytics,
-  type PeriodPreset,
 } from './model/useAdminAnalytics'
+export type { PeriodPreset } from './model/analytics-period'
