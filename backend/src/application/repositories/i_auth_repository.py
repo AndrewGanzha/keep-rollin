@@ -126,6 +126,12 @@ class IAuthRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    async def has_recent_password_reset(
+        self, *, user_id: UUID, issued_after: datetime, now: datetime
+    ) -> bool:
+        raise NotImplementedError
+
+    @abstractmethod
     async def create_password_reset_token(
         self,
         *,

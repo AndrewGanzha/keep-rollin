@@ -74,7 +74,22 @@ def test_email_renderer_requires_canonical_https_origin(origin: str) -> None:
 
 def test_email_renderer_rejects_unsupported_event() -> None:
     with pytest.raises(ValueError, match=r"^unsupported_email_event$"):
-        NotificationEmailRenderer().render("auth.password_reset", tenant_origin=TENANT_ORIGIN)
+        NotificationEmailRenderer().render("future.event", tenant_origin=TENANT_ORIGIN)
+
+
+def test_password_reset_email_uses_an_https_fragment_and_stays_out_of_business_events() -> None:
+    renderer = NotificationEmailRenderer()
+    token = "Ab_-" * 10 + "ABC"
+    email = renderer.render_password_reset(tenant_origin=TENANT_ORIGIN, token=token)
+    link = f"{TENANT_ORIGIN}/password/reset#token={token}"
+    assert email.text.splitlines()[-1] == link
+    assert f'href="{link}"' in email.html
+    assert token not in email.subject
+    assert "auth.password_reset" not in EMAIL_EVENT_TYPES
+    with pytest.raises(ValueError, match=r"^invalid_password_reset_token$"):
+        renderer.render_password_reset(tenant_origin=TENANT_ORIGIN, token=f"{token}&other=1")
+    with pytest.raises(ValueError, match=r"^invalid_email_origin$"):
+        renderer.render_password_reset(tenant_origin="http://example.test", token=token)
 
 
 @pytest.mark.parametrize("security", ["plain", "starttls", "tls"])

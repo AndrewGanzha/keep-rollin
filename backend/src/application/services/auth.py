@@ -39,6 +39,7 @@ MFA_MAX_FAILURES = 5
 MFA_LOCKOUT_SECONDS = 300
 MFA_FAILURE_WINDOW_SECONDS = 300
 PASSWORD_RESET_TTL_SECONDS = 3600
+PASSWORD_RESET_COOLDOWN = timedelta(minutes=1)
 STAFF_ROLES = ("owner", "admin")
 
 MfaPurpose = Literal["login", "enroll"]
@@ -501,8 +502,14 @@ class AuthService:
         self._ensure_unlocked(state)
 
     async def request_password_reset(self, *, email: str) -> None:
-        user = await self._repository.get_by_email(email.strip().lower())
+        # Share the cooldown across API workers and keep the token and its email in one transaction.
+        user = await self._repository.get_by_email_for_update(email.strip().lower())
         if user is None or not user.is_active or user.password_hash is None:
+            return
+        now = datetime.now(UTC)
+        if await self._repository.has_recent_password_reset(
+            user_id=user.id, issued_after=now - PASSWORD_RESET_COOLDOWN, now=now
+        ):
             return
         raw_token = secrets.token_urlsafe(32)
         token_id = await self._repository.create_password_reset_token(
@@ -512,7 +519,7 @@ class AuthService:
                 raw_token,
                 context=self._reset_context(user.id),
             ),
-            expires_at=datetime.now(UTC) + timedelta(seconds=self._password_reset_ttl_seconds),
+            expires_at=now + timedelta(seconds=self._password_reset_ttl_seconds),
         )
         if self._outbox is not None:
             await self._outbox.enqueue(

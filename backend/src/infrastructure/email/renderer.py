@@ -7,6 +7,7 @@ _HOST_LABEL = r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?"
 _HTTPS_ORIGIN = re.compile(rf"https://{_HOST_LABEL}(?:\.{_HOST_LABEL})*")
 _ACCOUNT_RENTALS = "/account/rentals"
 _ACCOUNT_TICKETS = "/account/tickets"
+PASSWORD_RESET_EVENT = "auth.password_reset"
 
 
 @dataclass(frozen=True)
@@ -93,6 +94,13 @@ _NOTIFICATIONS = {
     ),
 }
 EMAIL_EVENT_TYPES = frozenset(_NOTIFICATIONS)
+_PASSWORD_RESET = _Notification(
+    "Сброс пароля",  # noqa: RUF001
+    "Ссылка для смены пароля действует один час. Если вы её не запрашивали, "
+    "проигнорируйте это письмо.",
+    "/password/reset",
+    "Сменить пароль",
+)
 
 
 def push_content(event_type: str) -> tuple[str, str, str]:
@@ -114,6 +122,18 @@ class NotificationEmailRenderer:
         notification = _NOTIFICATIONS.get(event_type)
         if notification is None:
             raise ValueError("unsupported_email_event")
+        return self._render(notification, tenant_origin=tenant_origin)
+
+    def render_password_reset(self, *, tenant_origin: str, token: str) -> RenderedEmail:
+        if not re.fullmatch(r"[A-Za-z0-9_-]{43}", token):
+            raise ValueError("invalid_password_reset_token")
+        return self._render(
+            _PASSWORD_RESET, tenant_origin=tenant_origin, fragment=f"#token={token}"
+        )
+
+    def _render(
+        self, notification: _Notification, *, tenant_origin: str, fragment: str = ""
+    ) -> RenderedEmail:
         if not _HTTPS_ORIGIN.fullmatch(tenant_origin):
             raise ValueError("invalid_email_origin")
 
@@ -121,7 +141,7 @@ class NotificationEmailRenderer:
             "subject": notification.subject,
             "text": notification.text,
             "action": notification.action,
-            "link": f"{tenant_origin}{notification.path}",
+            "link": f"{tenant_origin}{notification.path}{fragment}",
         }
         return RenderedEmail(
             subject=notification.subject,

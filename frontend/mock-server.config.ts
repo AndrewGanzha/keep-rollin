@@ -412,6 +412,11 @@ const seedUsers: User[] = [
 ]
 
 const tokens = new Map<string, User>()
+const mfaChallenges = new Map<string, { user: User; setup: boolean; expiresAt: number }>()
+const mfaEnabled = new Set<string>([uid(901)])
+const recoveryCodes = new Map<string, Set<string>>()
+const mockMfaSecret = 'JBSWY3DPEHPK3PXP'
+let mockResetToken: string | null = null
 const notificationPreferences = new Map<string, NotificationPreferences>()
 const pushSubscriptions = new Map<string, Map<string, PushSubscriptionMetadata>>()
 
@@ -801,6 +806,23 @@ const currentUser = (request: AuthorizedRequest): User | null => {
   return tokens.get(token) ?? null
 }
 
+const loginResponse = (user: User): LoginResponse => {
+  const token = `mock-${randomUUID()}`
+  tokens.set(token, user)
+  return { access_token: token, expires_in: 900, user, role: user.role, permissions: permissions(user) }
+}
+
+const getMfaChallenge = (token: string | undefined, setup: boolean) => {
+  if (!token) return undefined
+  const challenge = mfaChallenges.get(token)
+  if (!challenge) return undefined
+  if (challenge.expiresAt <= Date.now()) {
+    mfaChallenges.delete(token)
+    return undefined
+  }
+  return challenge.setup === setup ? challenge : undefined
+}
+
 const withRemaining = (rental: Rental): Rental => ({
   ...rental,
   remaining_seconds: Math.round((Date.parse(rental.end_time) - Date.now()) / 1000),
@@ -1037,18 +1059,67 @@ export default mock(
 
         const user: User = seedUsers.find(item => item.email === body.email)
           ?? { ...mockUser, email: body.email }
-        const token = `mock-${Math.random().toString(36).slice(2, 10)}`
-        tokens.set(token, user)
+        if (user.role === 'user') return loginResponse(user)
 
-        const response: LoginResponse = {
-          access_token: token,
-          expires_in: 900,
-          user,
-          role: user.role,
-          permissions: permissions(user),
+        const setup = !mfaEnabled.has(user.id)
+        const token = `mock-challenge-${randomUUID()}`
+        mfaChallenges.set(token, { user, setup, expiresAt: Date.now() + 300_000 })
+        return {
+          expires_in: 300, mfa_required: !setup, mfa_setup_required: setup, mfa_token: token,
+        } satisfies LoginResponse
+      }),
+
+      rest.post('/api/v1/auth/mfa/setup', (params) => {
+        const { mfa_token: token } = (params.request.body ?? {}) as Partial<components['schemas']['MfaTokenRequest']>
+        const challenge = getMfaChallenge(token, true)
+        if (!challenge) return fail(params, 401, problem('token_invalid', 401, 'Начните вход заново'))
+
+        return {
+          secret: mockMfaSecret,
+          otpauth_uri: `otpauth://totp/Keep%20Rollin:${encodeURIComponent(challenge.user.email)}?secret=${mockMfaSecret}&issuer=Keep%20Rollin`,
+        }
+      }),
+
+      rest.post('/api/v1/auth/mfa/confirm', (params) => {
+        const { mfa_token: token, code } = (params.request.body ?? {}) as Partial<components['schemas']['MfaCodeRequest']>
+        const challenge = getMfaChallenge(token, true)
+        if (!token || !challenge) return fail(params, 401, problem('token_invalid', 401, 'Начните вход заново'))
+        if (code !== '123456') return fail(params, 401, problem('invalid_mfa_code', 401, 'Код неверен'))
+
+        mfaChallenges.delete(token)
+        mfaEnabled.add(challenge.user.id)
+        const codes = Array.from({ length: 10 }, () => randomUUID().slice(0, 13))
+        recoveryCodes.set(challenge.user.id, new Set(codes))
+        return { ...loginResponse(challenge.user), recovery_codes: codes }
+      }),
+
+      rest.post('/api/v1/auth/mfa/verify', (params) => {
+        const { mfa_token: token, code } = (params.request.body ?? {}) as Partial<components['schemas']['MfaCodeRequest']>
+        const challenge = getMfaChallenge(token, false)
+        if (!token || !challenge) return fail(params, 401, problem('token_invalid', 401, 'Начните вход заново'))
+        if (!code || (code !== '123456' && !recoveryCodes.get(challenge.user.id)?.delete(code))) {
+          return fail(params, 401, problem('invalid_mfa_code', 401, 'Код неверен'))
         }
 
-        return response
+        mfaChallenges.delete(token)
+        return loginResponse(challenge.user)
+      }),
+
+      rest.post('/api/v1/auth/password/forgot', (params) => {
+        mockResetToken = 'mock-password-reset-token'
+        params.setStatusCode(202)
+        return { message: 'If the account exists, password reset instructions will be sent.' }
+      }),
+
+      rest.post('/api/v1/auth/password/reset', (params) => {
+        const { token, password } = (params.request.body ?? {}) as Partial<components['schemas']['PasswordResetRequest']>
+        if (!token || token !== mockResetToken) return fail(params, 401, problem('token_invalid', 401, 'Ссылка недействительна'))
+        if (!password || password.length < 8 || password.length > 128) {
+          return fail(params, 422, problem('validation_error', 422, 'Проверьте пароль'))
+        }
+        mockResetToken = null
+        params.setStatusCode(204)
+        return undefined
       }),
 
       rest.get('/api/v1/auth/session', (params) => {

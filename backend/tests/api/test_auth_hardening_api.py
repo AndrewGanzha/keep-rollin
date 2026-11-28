@@ -14,7 +14,7 @@ from uuid import UUID, uuid4
 import jwt
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 
 import app.api.auth_deps as auth_deps
 from app.config import Settings
@@ -23,6 +23,7 @@ from app.main import create_app
 from app.models import Tenant, User
 from src.application.services.auth import hash_refresh_token
 from src.infrastructure.postgres.models.mfa_challenge_record import MfaChallengeRecord
+from src.infrastructure.postgres.models.outbox_message_record import OutboxMessageRecord
 from src.infrastructure.postgres.models.password_reset_token_record import (
     PasswordResetTokenRecord,
 )
@@ -318,6 +319,35 @@ def _read_reset_tokens(tenant_id: UUID, user_id: UUID) -> list[str]:
             await engine.dispose()
 
     return asyncio.run(run())
+
+
+def _age_reset_requests(tenant_id: UUID, user_id: UUID, *, expected_messages: int) -> None:
+    assert DATABASE_URL is not None
+
+    async def run() -> None:
+        engine = create_engine(DATABASE_URL)
+        try:
+            async with create_session_factory(engine).begin() as session:
+                event_ids = await session.scalars(
+                    select(OutboxMessageRecord.id).where(
+                        OutboxMessageRecord.tenant_id == tenant_id,
+                        OutboxMessageRecord.user_id == user_id,
+                        OutboxMessageRecord.event_type == "auth.password_reset",
+                    )
+                )
+                assert len(event_ids.all()) == expected_messages
+                await session.execute(
+                    update(PasswordResetTokenRecord)
+                    .where(
+                        PasswordResetTokenRecord.tenant_id == tenant_id,
+                        PasswordResetTokenRecord.user_id == user_id,
+                    )
+                    .values(created_at=datetime.now(UTC) - timedelta(minutes=2))
+                )
+        finally:
+            await engine.dispose()
+
+    asyncio.run(run())
 
 
 def _count_challenges(tenant_id: UUID) -> int:
@@ -758,12 +788,11 @@ def test_concurrent_reset_token_has_one_winner(seeded: SeededHardening) -> None:
 
 def test_two_distinct_reset_tokens_have_one_winner(seeded: SeededHardening) -> None:
     with client_for(seeded.domain_a) as client:
-        for _ in range(2):
-            response = client.post(
-                "/api/v1/auth/password/forgot",
-                json={"email": seeded.owner_email},
-            )
-            assert response.status_code == 202
+        response = client.post("/api/v1/auth/password/forgot", json={"email": seeded.owner_email})
+        assert response.status_code == 202
+        _age_reset_requests(seeded.tenant_a, seeded.owner_id, expected_messages=1)
+        response = client.post("/api/v1/auth/password/forgot", json={"email": seeded.owner_email})
+        assert response.status_code == 202
     tokens = _read_reset_tokens(seeded.tenant_a, seeded.owner_id)
     assert len(tokens) == 2
 
@@ -788,6 +817,34 @@ def test_two_distinct_reset_tokens_have_one_winner(seeded: SeededHardening) -> N
         )
 
     assert sorted(statuses) == [204, 401]
+
+
+def test_concurrent_forgot_requests_queue_one_email(seeded: SeededHardening) -> None:
+    def request(email: str) -> tuple[int, dict[str, str]]:
+        with client_for(seeded.domain_a) as client:
+            response = client.post("/api/v1/auth/password/forgot", json={"email": email})
+            return response.status_code, cast(dict[str, str], response.json())
+
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        receipts = list(
+            executor.map(
+                request,
+                [
+                    seeded.owner_email,
+                    seeded.owner_email.upper(),
+                    seeded.owner_email,
+                    "missing@example.com",
+                ],
+            )
+        )
+
+    assert all(receipt == receipts[0] for receipt in receipts)
+    assert receipts[0][0] == 202
+    assert len(_read_reset_tokens(seeded.tenant_a, seeded.owner_id)) == 1
+    _age_reset_requests(seeded.tenant_a, seeded.owner_id, expected_messages=1)
+    assert request(seeded.owner_email) == receipts[0]
+    assert len(_read_reset_tokens(seeded.tenant_a, seeded.owner_id)) == 2
+    _age_reset_requests(seeded.tenant_a, seeded.owner_id, expected_messages=2)
 
 
 def test_expired_and_consumed_reset_tokens_are_rejected(seeded: SeededHardening) -> None:

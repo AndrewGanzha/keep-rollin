@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import type { LoginResponse, Session, User } from '../model/session.types'
+import type { Session, User } from '../model/session.types'
 
 export interface SessionState {
   user: User | null
@@ -18,11 +18,11 @@ export const useSessionStore = defineStore('session', () => {
   const isStaff = computed(() => role.value === 'admin' || role.value === 'owner')
   const can = (permission: string): boolean => permissions.value.includes(permission)
 
-  const setSession = (session: Session | LoginResponse): void => {
+  const setSession = (session: Session): void => {
     user.value = session.user
     role.value = session.role
     permissions.value = session.permissions
-    offerAccepted.value = 'offer_accepted' in session ? session.offer_accepted : false
+    offerAccepted.value = session.offer_accepted
   }
 
   const clear = (): void => {

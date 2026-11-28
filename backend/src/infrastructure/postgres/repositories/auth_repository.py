@@ -215,6 +215,21 @@ class AuthRepository(IAuthRepository):
             values["mfa_recovery_hashes"] = list(recovery_hashes)
         await self._session.execute(update(User).where(User.id == user_id).values(**values))
 
+    async def has_recent_password_reset(
+        self, *, user_id: UUID, issued_after: datetime, now: datetime
+    ) -> bool:
+        token_id = await self._session.scalar(
+            select(PasswordResetTokenRecord.id)
+            .where(
+                PasswordResetTokenRecord.tenant_id == self._tenant_id(),
+                PasswordResetTokenRecord.user_id == user_id,
+                PasswordResetTokenRecord.expires_at > now,
+                PasswordResetTokenRecord.created_at > issued_after,
+            )
+            .limit(1)
+        )
+        return token_id is not None
+
     async def create_password_reset_token(
         self,
         *,
