@@ -196,6 +196,8 @@ POST /api/v1/auth/mfa/confirm {"mfa_token": "...", "code": "123456"}
 | `already_processed`       | 409  | Решение по заявке уже принято                                  |
 | `characteristic_in_use`   | 409  | Смена типа/удаление характеристики с данными                   |
 | `email_taken`             | 409  | Регистрация на занятый email                                   |
+| `battery_unavailable`      | 409  | Недостаточно аккумуляторов выбранного типа                      |
+| `stock_below_committed`    | 409  | Количество меньше занятого пика                                 |
 | `idempotency_conflict`    | 422  | Тот же ключ, другой body                                       |
 | `upload_invalid`          | 422  | MIME/размер/назначение файла не валидны                        |
 | `critical_channel_locked` | 422  | Попытка отключить критичное уведомление                        |
@@ -284,7 +286,7 @@ ALTER TABLE occupancy ADD CONSTRAINT occupancy_no_overlap
 | `file.purpose` | `lot_photo`, `ticket_photo`, `verification_passport`, `verification_registration`, `verification_selfie` |
 | `characteristic.type` | `number`, `text`, `select`                                        |
 | `notification.status` | `pending`, `sent`, `failed`                                       |
-| `audit.action` | Фиксированный enum (0011): `tenant.provisioned`, `admin.created`, `admin.deactivated`, `user.deactivated`, `settings.updated`, `category.created`, `category.updated`, `category.characteristics_updated`, `offer.created`, `offer.updated`, `offer.published`, `lot.blocked`, `lot.unblocked`, `lot.status_changed`, `verification.decided`, `rental.closed`, `rental.overdue`, `ticket.status_changed` |
+| `audit.action` | Фиксированный enum: `tenant.provisioned`, `admin.created`, `admin.deactivated`, `user.deactivated`, `settings.updated`, `category.created`, `category.updated`, `category.characteristics_updated`, `offer.created`, `offer.updated`, `offer.published`, `lot.blocked`, `lot.unblocked`, `lot.status_changed`, `verification.decided`, `rental.booked`, `rental.cancelled`, `battery_stock.created`, `battery_stock.updated`, `battery_stock.deleted`, `rental.closed`, `rental.overdue`, `ticket.status_changed` |
 
 ### 3.10. Уведомления: события (D-13)
 
@@ -293,6 +295,7 @@ ALTER TABLE occupancy ADD CONSTRAINT occupancy_no_overlap
 | `verification.approved`    | ❌        | push → email          | user       |
 | `verification.rejected`    | ✅        | email + push          | user       |
 | `booking.confirmed`        | ❌        | push → email          | user       |
+| `rental.closed`             | ❌        | push → email          | user       |
 | `booking.cancelled`        | ❌        | push → email          | user       |
 | `rental.ending_soon`       | ❌        | push → email          | user       |
 | `rental.overdue.user`      | ✅        | email + push          | user       |

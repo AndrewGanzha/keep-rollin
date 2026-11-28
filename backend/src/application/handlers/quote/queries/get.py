@@ -1,6 +1,7 @@
 from dataclasses import dataclass
+from typing import Protocol
 
-from src.application.dtos.quote_dto import QuoteDTO, QuoteVariantDTO
+from src.application.dtos.quote_dto import QuoteDTO, QuoteVariantDTO, UnavailableReason
 from src.application.handlers.i_handler import IHandler
 from src.application.repositories.i_lot_repository import ILotRepository
 from src.application.repositories.i_occupancy_repository import IOccupancyRepository
@@ -16,14 +17,20 @@ class GetLotQuoteQuery:
     period: TimeRange
 
 
+class BatteryCapacity(Protocol):
+    async def capacity(self, battery_type: str, period: TimeRange) -> int: ...
+
+
 class GetLotQuoteHandler(IHandler[GetLotQuoteQuery, QuoteDTO | None]):
     def __init__(
         self,
         lot_repository: ILotRepository,
         occupancy_repository: IOccupancyRepository,
+        battery_capacity: BatteryCapacity | None = None,
     ) -> None:
         self._lot_repository = lot_repository
         self._occupancy_repository = occupancy_repository
+        self._battery_capacity = battery_capacity
 
     async def handle(self, request: GetLotQuoteQuery) -> QuoteDTO | None:
         try:
@@ -43,6 +50,7 @@ class GetLotQuoteHandler(IHandler[GetLotQuoteQuery, QuoteDTO | None]):
             )
         )
         variants = []
+        available_batteries: int | None = None
         for variant in lot.variants:
             if not variant.is_active:
                 continue
@@ -51,15 +59,26 @@ class GetLotQuoteHandler(IHandler[GetLotQuoteQuery, QuoteDTO | None]):
                 units=units,
                 allowed_durations=lot.allowed_durations,
             )
+            battery_count = variant.battery_count.value
+            unavailable_reason: UnavailableReason | None = None
+            if occupied:
+                unavailable_reason = "slot_taken"
+            elif battery_count > 0 and self._battery_capacity is not None and lot.battery_type:
+                if available_batteries is None:
+                    available_batteries = await self._battery_capacity.capacity(
+                        lot.battery_type, request.period
+                    )
+                if battery_count > available_batteries:
+                    unavailable_reason = "battery_unavailable"
             variants.append(
                 QuoteVariantDTO(
                     variant_id=variant.id,
-                    battery_count=variant.battery_count.value,
+                    battery_count=battery_count,
                     price_total_minor=price.total_minor,
                     currency=lot.currency,
                     tier_min_units=price.tier_min_units,
-                    available=not occupied,
-                    unavailable_reason="slot_taken" if occupied else None,
+                    available=unavailable_reason is None,
+                    unavailable_reason=unavailable_reason,
                 )
             )
 

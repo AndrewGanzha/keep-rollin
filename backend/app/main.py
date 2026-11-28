@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.api.admin_audit import router as admin_audit_router
+from app.api.admin_batteries import router as admin_batteries_router
 from app.api.admin_calendar import router as admin_calendar_router
 from app.api.admin_categories import router as admin_categories_router
 from app.api.admin_lots import router as admin_lots_router
@@ -21,6 +22,10 @@ from app.api.health import router as health_router
 from app.api.offers import me_router as me_offers_router
 from app.api.offers import public_router as public_offers_router
 from app.api.quote import router as quote_router
+from app.api.rental_reads import admin_router as admin_rental_reads_router
+from app.api.rental_reads import me_router as me_rental_reads_router
+from app.api.rentals import admin_router as admin_rentals_router
+from app.api.rentals import router as rentals_router
 from app.api.tenant import router as tenant_router
 from app.api.verification import admin_router as admin_verification_router
 from app.api.verification import me_router as me_verification_router
@@ -105,6 +110,7 @@ def create_app(
     application.include_router(admin_calendar_router)
     application.include_router(admin_categories_router)
     application.include_router(admin_audit_router)
+    application.include_router(admin_batteries_router)
     application.include_router(admin_settings_router)
     application.include_router(admin_users_router)
     application.include_router(admin_offers_router)
@@ -116,6 +122,10 @@ def create_app(
     application.include_router(admin_verification_router)
     application.include_router(availability_router)
     application.include_router(quote_router)
+    application.include_router(rentals_router)
+    application.include_router(admin_rentals_router)
+    application.include_router(me_rental_reads_router)
+    application.include_router(admin_rental_reads_router)
     application.include_router(tenant_router)
     return application
 

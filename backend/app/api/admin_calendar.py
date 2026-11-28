@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
@@ -35,6 +35,7 @@ from src.infrastructure.postgres.repositories.admin_calendar_repository import (
 )
 
 MAX_CALENDAR_DAYS = 90
+CalendarStatusFilter = Literal["booked", "active", "overdue", "completed", "cancelled", "released"]
 
 router = APIRouter(prefix="/api/v1/admin", tags=["admin-calendar"])
 
@@ -127,10 +128,7 @@ async def get_calendar(
     to: datetime,
     category_id: Annotated[UUID | None, Query()] = None,
     lot_id: Annotated[UUID | None, Query()] = None,
-    status_filter: Annotated[
-        str | None,
-        Query(alias="status", pattern=r"^(booked|active|released)$"),
-    ] = None,
+    status_filter: Annotated[CalendarStatusFilter | None, Query(alias="status")] = None,
 ) -> list[CalendarEventDTO]:
     try:
         return await handler.handle(

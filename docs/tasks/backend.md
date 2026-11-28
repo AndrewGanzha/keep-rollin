@@ -309,36 +309,37 @@ _Подгруппа **B6** · 5 задач._
 **Зависит:** BE-AVA-01, BE-VER-03, BE-OFF-01
 **Объём:** `POST /rentals`: проверки (верификация, оферта, статус лота, горизонт, длительность), расчёт цены, `occupancy`+`rental` в одной транзакции, outbox `booking.confirmed`, audit.
 **AC:**
-- [ ] Цена, присланная клиентом, игнорируется (нет такого поля).
-- [ ] Две параллельные брони → один 201, один 409 `slot_taken`.
-- [ ] `cancellation_deadline` рассчитывается по policy тенанта.
+- [x] Цена, присланная клиентом, игнорируется (нет такого поля).
+- [x] Две параллельные брони → один 201, один 409 `slot_taken`.
+- [x] `cancellation_deadline` рассчитывается по policy тенанта.
 
 ### BE-BOOK-02 · Отмена брони
 
 **Зависит:** BE-BOOK-01
 **Объём:** `POST /me/rentals/{id}/cancel` по дедлайну; `POST /admin/rentals/{id}/cancel` с причиной; освобождение `occupancy`.
 **AC:**
-- [ ] После дедлайна пользователь → 409 `cancellation_not_allowed`.
-- [ ] Админ может отменить в любом статусе `booked`/`active` (причина обязательна).
-- [ ] Повторная отмена идемпотентна; слот освобождён.
+- [x] После дедлайна пользователь → 409 `cancellation_not_allowed`.
+- [x] Админ может отменить в любом статусе `booked`/`active` (причина обязательна).
+- [x] Повторная отмена идемпотентна; слот освобождён.
 
 ### BE-BOOK-03 · Мои аренды
 
 **Зависит:** BE-BOOK-01
 **Объём:** `GET /me/rentals[/{id}]`: `remaining_seconds`, `cancellation_deadline`, лот, тикеты.
+Тикеты подключаются в BE-TIC-01; сейчас карточка отдаёт `tickets: []`.
 **AC:**
-- [ ] `remaining_seconds` считается серверным `now`.
-- [ ] Для `overdue` — отрицательный `remaining_seconds` (или `0` + флаг), согласовано с FE.
-- [ ] Фильтр по статусу + пагинация.
+- [x] `remaining_seconds` считается серверным `now`.
+- [x] После окончания интервала `remaining_seconds` отрицателен, в том числе у `overdue`.
+- [x] Фильтр по статусу + пагинация.
 
 ### BE-BOOK-04 · Админ-аренды и закрытие
 
 **Зависит:** BE-BOOK-03
 **Объём:** `GET /admin/rentals[/{id}]`, `POST /admin/rentals/{id}/close` `{comment, lot_status}`, audit, уведомления.
 **AC:**
-- [ ] Закрытие `overdue` освобождает слот и переводит лот в `active`/`maintenance` (UC-10.5).
-- [ ] Повторное закрытие → 409 `rental_already_closed`.
-- [ ] `completed_at` и `closed_by` сохраняются.
+- [x] Закрытие `overdue` освобождает слот и переводит лот в `active`/`maintenance` (UC-10.5).
+- [x] Повторное закрытие → 409 `rental_already_closed`.
+- [x] `completed_at` и `closed_by` сохраняются.
 
 ### BE-BOOK-05 · Калькулятор цены
 

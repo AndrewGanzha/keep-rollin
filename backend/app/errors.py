@@ -23,6 +23,7 @@ ERROR_TITLES: dict[str, str] = {
     "forbidden_role": "Forbidden",
     "token_invalid": "Unauthorized",
     "conflict": "Conflict",
+    "stock_below_committed": "Battery stock below committed capacity",
     "method_not_allowed": "Method not allowed",
     "rate_limited": "Too many requests",
     "payload_too_large": "Payload too large",
@@ -65,7 +66,10 @@ def problem_response(
         content=payload,
         media_type=PROBLEM_CONTENT_TYPE,
     )
-    if request.url.path.startswith(("/api/v1/auth", "/api/v1/me", "/api/v1/admin")):
+    path = request.url.path
+    if path == "/api/v1/rentals" or path.startswith(
+        ("/api/v1/auth", "/api/v1/me", "/api/v1/admin")
+    ):
         response.headers["Cache-Control"] = "no-store"
     if isinstance(headers, Mapping):
         response.headers.update(headers)

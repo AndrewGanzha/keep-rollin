@@ -15,6 +15,7 @@ from pydantic import (
     model_validator,
 )
 
+from src.application.dtos.battery_stock_dto import BatteryType
 from src.application.dtos.lot_dto import LotDTO, RentalUnit
 from src.domain.entities.lot import LotStatus
 from src.domain.value_objects.limits import MAX_DATABASE_INTEGER
@@ -129,7 +130,7 @@ class CreateLotRequest(LotPhotoInput):
     description: str | None = None
     slug: LotSlug | None = None
     rental_unit: RentalUnit
-    battery_type: str | None = None
+    battery_type: BatteryType | None = None
     variants: VariantsInput
     allowed_durations: AllowedDurationsInput
     characteristics: CharacteristicsInput
@@ -163,7 +164,7 @@ class UpdateLotRequest(LotPhotoInput):
     description: str | None = None
     slug: LotSlug | None = None
     rental_unit: RentalUnit | None = None
-    battery_type: str | None = None
+    battery_type: BatteryType | None = None
     variants: VariantsInput | None = None
     allowed_durations: AllowedDurationsInput | None = None
     characteristics: CharacteristicsInput | None = None

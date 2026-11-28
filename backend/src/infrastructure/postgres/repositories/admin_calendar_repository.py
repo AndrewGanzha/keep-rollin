@@ -1,9 +1,10 @@
+from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from datetime import time as dt_time
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from sqlalchemy import ColumnElement, func, select, update
+from sqlalchemy import ColumnElement, and_, case, func, select, update
 from sqlalchemy.dialects.postgresql import Range
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,12 +21,20 @@ from src.domain.exceptions import InvalidTimeRangeError
 from src.domain.value_objects.time_range import TimeRange
 from src.infrastructure.postgres.models.lot_record import LotRecord
 from src.infrastructure.postgres.models.occupancy_record import OccupancyRecord
+from src.infrastructure.postgres.models.rental_record import RentalRecord
 from src.infrastructure.postgres.repositories.occupancy_repository import (
     insert_occupancy,
     occupancy_from_record,
 )
 
 MAX_CALENDAR_LOTS = 200
+_RENTAL_LINK = and_(
+    OccupancyRecord.kind == "booking",
+    RentalRecord.tenant_id == OccupancyRecord.tenant_id,
+    RentalRecord.lot_id == OccupancyRecord.lot_id,
+    RentalRecord.occupancy_id == OccupancyRecord.id,
+    RentalRecord.id == OccupancyRecord.ref_id,
+)
 
 
 def _align_block_period(period: TimeRange, timezone: ZoneInfo) -> TimeRange:
@@ -69,15 +78,19 @@ class AdminCalendarRepository(IAdminCalendarRepository):
         distinct_lots = (
             await self._session.execute(
                 select(func.count(func.distinct(OccupancyRecord.lot_id)))
+                .select_from(OccupancyRecord)
                 .join(LotRecord, LotRecord.id == OccupancyRecord.lot_id)
+                .outerjoin(RentalRecord, _RENTAL_LINK)
                 .where(*filters)
             )
         ).scalar_one()
         if int(distinct_lots or 0) > MAX_CALENDAR_LOTS:
             raise TooManyCalendarLotsError("calendar filter matches too many lots")
         result = await self._session.execute(
-            select(OccupancyRecord)
+            select(OccupancyRecord, RentalRecord.status)
+            .select_from(OccupancyRecord)
             .join(LotRecord, LotRecord.id == OccupancyRecord.lot_id)
+            .outerjoin(RentalRecord, _RENTAL_LINK)
             .where(*filters)
             .order_by(
                 OccupancyRecord.period.asc(),
@@ -85,7 +98,10 @@ class AdminCalendarRepository(IAdminCalendarRepository):
                 OccupancyRecord.id.asc(),
             )
         )
-        return [occupancy_from_record(record, period) for record in result.scalars().all()]
+        return [
+            replace(occupancy_from_record(record, period), rental_status=rental_status)
+            for record, rental_status in result
+        ]
 
     async def lot_events(
         self,
@@ -102,15 +118,21 @@ class AdminCalendarRepository(IAdminCalendarRepository):
         if exists is None:
             return None
         result = await self._session.execute(
-            select(OccupancyRecord)
+            select(OccupancyRecord, RentalRecord.status)
+            .select_from(OccupancyRecord)
+            .outerjoin(RentalRecord, _RENTAL_LINK)
             .where(
+                OccupancyRecord.tenant_id == self._tenant_id(),
                 OccupancyRecord.lot_id == lot_id,
                 OccupancyRecord.status == "active",
                 OccupancyRecord.period.overlaps(Range(period.start, period.end, bounds="[)")),
             )
             .order_by(OccupancyRecord.period.asc(), OccupancyRecord.id.asc())
         )
-        return [occupancy_from_record(record, period) for record in result.scalars().all()]
+        return [
+            replace(occupancy_from_record(record, period), rental_status=rental_status)
+            for record, rental_status in result
+        ]
 
     async def create_block(
         self,
@@ -219,22 +241,18 @@ class AdminCalendarRepository(IAdminCalendarRepository):
             filters.append(LotRecord.category_id == category_id)
         if lot_id is not None:
             filters.append(OccupancyRecord.lot_id == lot_id)
-        if status == "booked":
-            filters.extend(
-                [
-                    OccupancyRecord.status == "active",
-                    OccupancyRecord.kind == "booking",
-                ]
-            )
-        elif status == "active":
-            filters.extend(
-                [
-                    OccupancyRecord.status == "active",
-                    OccupancyRecord.kind.in_(("block", "maintenance")),
-                ]
-            )
+        if status is None:
+            filters.append(OccupancyRecord.status == "active")
         elif status == "released":
             filters.append(OccupancyRecord.status == "released")
         else:
-            filters.append(OccupancyRecord.status == "active")
+            event_status = case(
+                (RentalRecord.id.is_not(None), RentalRecord.status),
+                (
+                    and_(OccupancyRecord.kind == "booking", OccupancyRecord.status == "active"),
+                    "booked",
+                ),
+                else_=OccupancyRecord.status,
+            )
+            filters.append(event_status == status)
         return filters

@@ -1,6 +1,7 @@
 """Catalog ORM records."""
 
 from src.infrastructure.postgres.models.audit_log_record import AuditLogRecord
+from src.infrastructure.postgres.models.battery_stock_record import BatteryStockRecord
 from src.infrastructure.postgres.models.category_record import CategoryRecord
 from src.infrastructure.postgres.models.characteristic_record import CharacteristicRecord
 from src.infrastructure.postgres.models.file_record import AttachmentRecord, FileRecord
@@ -17,6 +18,7 @@ from src.infrastructure.postgres.models.password_reset_token_record import (
     PasswordResetTokenRecord,
 )
 from src.infrastructure.postgres.models.refresh_session_record import RefreshSessionRecord
+from src.infrastructure.postgres.models.rental_record import RentalRecord
 from src.infrastructure.postgres.models.tenant_settings_record import TenantSettingsRecord
 from src.infrastructure.postgres.models.verification_request_record import (
     VerificationDocumentRecord,
@@ -26,6 +28,7 @@ from src.infrastructure.postgres.models.verification_request_record import (
 __all__ = [
     "AttachmentRecord",
     "AuditLogRecord",
+    "BatteryStockRecord",
     "CategoryRecord",
     "CharacteristicRecord",
     "FileRecord",
@@ -40,6 +43,7 @@ __all__ = [
     "OutboxMessageRecord",
     "PasswordResetTokenRecord",
     "RefreshSessionRecord",
+    "RentalRecord",
     "TenantSettingsRecord",
     "VerificationDocumentRecord",
     "VerificationRequestRecord",

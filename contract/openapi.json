@@ -170,6 +170,221 @@
         "title": "AdminCharacteristicDTO",
         "type": "object"
       },
+      "AdminRental": {
+        "properties": {
+          "cancellation_deadline": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cancellation Deadline"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "end_time": {
+            "format": "date-time",
+            "title": "End Time",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "lot": {
+            "$ref": "#/components/schemas/RentalLot"
+          },
+          "price_minor": {
+            "title": "Price Minor",
+            "type": "integer"
+          },
+          "remaining_seconds": {
+            "title": "Remaining Seconds",
+            "type": "integer"
+          },
+          "start_time": {
+            "format": "date-time",
+            "title": "Start Time",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "booked",
+              "active",
+              "overdue",
+              "completed",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "user": {
+            "$ref": "#/components/schemas/AdminUserRef"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "lot",
+          "status",
+          "start_time",
+          "end_time",
+          "price_minor",
+          "currency",
+          "remaining_seconds",
+          "cancellation_deadline",
+          "user",
+          "version"
+        ],
+        "title": "AdminRental",
+        "type": "object"
+      },
+      "AdminRentalDetail": {
+        "properties": {
+          "cancellation_deadline": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cancellation Deadline"
+          },
+          "closed_by": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed By"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "end_time": {
+            "format": "date-time",
+            "title": "End Time",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "lot": {
+            "$ref": "#/components/schemas/RentalLot"
+          },
+          "price_minor": {
+            "title": "Price Minor",
+            "type": "integer"
+          },
+          "remaining_seconds": {
+            "title": "Remaining Seconds",
+            "type": "integer"
+          },
+          "start_time": {
+            "format": "date-time",
+            "title": "Start Time",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "booked",
+              "active",
+              "overdue",
+              "completed",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "user": {
+            "$ref": "#/components/schemas/AdminUserRef"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "lot",
+          "status",
+          "start_time",
+          "end_time",
+          "price_minor",
+          "currency",
+          "remaining_seconds",
+          "cancellation_deadline",
+          "user",
+          "version",
+          "completed_at",
+          "closed_by"
+        ],
+        "title": "AdminRentalDetail",
+        "type": "object"
+      },
+      "AdminRentalPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AdminRental"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "AdminRentalPage",
+        "type": "object"
+      },
       "AdminSettingsDTO": {
         "properties": {
           "currency": {
@@ -663,6 +878,34 @@
         "title": "AvailabilityWindowDTO",
         "type": "object"
       },
+      "BatteryStock": {
+        "properties": {
+          "battery_type": {
+            "title": "Battery Type",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "peak_committed": {
+            "title": "Peak Committed",
+            "type": "integer"
+          },
+          "quantity": {
+            "title": "Quantity",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "battery_type",
+          "name",
+          "quantity",
+          "peak_committed"
+        ],
+        "title": "BatteryStock",
+        "type": "object"
+      },
       "Body_upload_file_api_v1_files_post": {
         "properties": {
           "file": {
@@ -831,6 +1074,23 @@
           "reason"
         ],
         "title": "CalendarEventDTO",
+        "type": "object"
+      },
+      "CancelAdminRentalRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "maxLength": 200,
+            "minLength": 3,
+            "pattern": "^[^\\x00]*$",
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "CancelAdminRentalRequest",
         "type": "object"
       },
       "CategoryDTO": {
@@ -1016,6 +1276,61 @@
         "title": "CharacteristicDefinitionInput",
         "type": "object"
       },
+      "CloseRentalRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "comment": {
+            "maxLength": 200,
+            "minLength": 3,
+            "pattern": "^[^\\x00]*$",
+            "title": "Comment",
+            "type": "string"
+          },
+          "lot_status": {
+            "enum": [
+              "active",
+              "maintenance"
+            ],
+            "title": "Lot Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "comment",
+          "lot_status"
+        ],
+        "title": "CloseRentalRequest",
+        "type": "object"
+      },
+      "CreateBatteryStockRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "battery_type": {
+            "maxLength": 256,
+            "pattern": "^[^\\x00]+$",
+            "title": "Battery Type",
+            "type": "string"
+          },
+          "name": {
+            "pattern": "^[^\\x00]+$",
+            "title": "Name",
+            "type": "string"
+          },
+          "quantity": {
+            "maximum": 9.223372036854776e+18,
+            "minimum": 0.0,
+            "title": "Quantity",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "quantity",
+          "battery_type",
+          "name"
+        ],
+        "title": "CreateBatteryStockRequest",
+        "type": "object"
+      },
       "CreateCategoryRequest": {
         "properties": {
           "description": {
@@ -1094,6 +1409,8 @@
           "battery_type": {
             "anyOf": [
               {
+                "maxLength": 256,
+                "pattern": "^[^\\x00]+$",
                 "type": "string"
               },
               {
@@ -1245,6 +1562,38 @@
           "body"
         ],
         "title": "CreateOfferRequest",
+        "type": "object"
+      },
+      "CreateRentalRequest": {
+        "properties": {
+          "end_time": {
+            "format": "date-time",
+            "title": "End Time",
+            "type": "string"
+          },
+          "lot_id": {
+            "format": "uuid",
+            "title": "Lot Id",
+            "type": "string"
+          },
+          "start_time": {
+            "format": "date-time",
+            "title": "Start Time",
+            "type": "string"
+          },
+          "variant_id": {
+            "format": "uuid",
+            "title": "Variant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "lot_id",
+          "variant_id",
+          "start_time",
+          "end_time"
+        ],
+        "title": "CreateRentalRequest",
         "type": "object"
       },
       "CreateVerificationRequest": {
@@ -2391,6 +2740,223 @@
         "title": "RegisterRequest",
         "type": "object"
       },
+      "Rental": {
+        "properties": {
+          "cancellation_deadline": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cancellation Deadline"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "end_time": {
+            "format": "date-time",
+            "title": "End Time",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "lot": {
+            "$ref": "#/components/schemas/RentalLot"
+          },
+          "price_minor": {
+            "title": "Price Minor",
+            "type": "integer"
+          },
+          "remaining_seconds": {
+            "title": "Remaining Seconds",
+            "type": "integer"
+          },
+          "start_time": {
+            "format": "date-time",
+            "title": "Start Time",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "booked",
+              "active",
+              "overdue",
+              "completed",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "lot",
+          "status",
+          "start_time",
+          "end_time",
+          "price_minor",
+          "currency",
+          "remaining_seconds",
+          "cancellation_deadline"
+        ],
+        "title": "Rental",
+        "type": "object"
+      },
+      "RentalDetail": {
+        "properties": {
+          "cancellation_deadline": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cancellation Deadline"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "end_time": {
+            "format": "date-time",
+            "title": "End Time",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "lot": {
+            "$ref": "#/components/schemas/RentalLot"
+          },
+          "price_minor": {
+            "title": "Price Minor",
+            "type": "integer"
+          },
+          "remaining_seconds": {
+            "title": "Remaining Seconds",
+            "type": "integer"
+          },
+          "start_time": {
+            "format": "date-time",
+            "title": "Start Time",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "booked",
+              "active",
+              "overdue",
+              "completed",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "tickets": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Tickets",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "lot",
+          "status",
+          "start_time",
+          "end_time",
+          "price_minor",
+          "currency",
+          "remaining_seconds",
+          "cancellation_deadline",
+          "tickets"
+        ],
+        "title": "RentalDetail",
+        "type": "object"
+      },
+      "RentalLot": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "photo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "format": "uri",
+            "title": "Photo Url"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "slug",
+          "name",
+          "photo_url"
+        ],
+        "title": "RentalLot",
+        "type": "object"
+      },
+      "RentalPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Rental"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "RentalPage",
+        "type": "object"
+      },
       "SessionDTO": {
         "properties": {
           "mfa_enabled": {
@@ -2663,6 +3229,22 @@
         "title": "TenantPoliciesDTO",
         "type": "object"
       },
+      "UpdateBatteryStockRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "quantity": {
+            "maximum": 9.223372036854776e+18,
+            "minimum": 0.0,
+            "title": "Quantity",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "quantity"
+        ],
+        "title": "UpdateBatteryStockRequest",
+        "type": "object"
+      },
       "UpdateCategoryRequest": {
         "properties": {
           "description": {
@@ -2775,6 +3357,8 @@
           "battery_type": {
             "anyOf": [
               {
+                "maxLength": 256,
+                "pattern": "^[^\\x00]+$",
                 "type": "string"
               },
               {
@@ -3670,6 +4254,218 @@
         ]
       }
     },
+    "/api/v1/admin/batteries": {
+      "get": {
+        "operationId": "listBatteryStock",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/BatteryStock"
+                  },
+                  "title": "Response Listbatterystock",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Owner access required. Writes require CSRF verification."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Battery Stock",
+        "tags": [
+          "admin-batteries"
+        ]
+      },
+      "post": {
+        "operationId": "create_battery_stock_api_v1_admin_batteries_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateBatteryStockRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatteryStock"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Owner access required. Writes require CSRF verification."
+          },
+          "409": {
+            "description": "Stock already exists for this battery type"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Battery Stock",
+        "tags": [
+          "admin-batteries"
+        ]
+      }
+    },
+    "/api/v1/admin/batteries/{battery_type}": {
+      "delete": {
+        "operationId": "delete_battery_stock_api_v1_admin_batteries__battery_type__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "battery_type",
+            "required": true,
+            "schema": {
+              "maxLength": 256,
+              "pattern": "^[^\\x00]+$",
+              "title": "Battery Type",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Owner access required. Writes require CSRF verification."
+          },
+          "404": {
+            "description": "Battery type not found"
+          },
+          "409": {
+            "description": "Battery type is referenced by rental history"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Battery Stock",
+        "tags": [
+          "admin-batteries"
+        ]
+      },
+      "patch": {
+        "operationId": "updateBatteryStock",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "battery_type",
+            "required": true,
+            "schema": {
+              "maxLength": 256,
+              "pattern": "^[^\\x00]+$",
+              "title": "Battery Type",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateBatteryStockRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatteryStock"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Owner access required. Writes require CSRF verification."
+          },
+          "404": {
+            "description": "Battery type not found"
+          },
+          "409": {
+            "description": "stock_below_committed"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update Battery Stock",
+        "tags": [
+          "admin-batteries"
+        ]
+      }
+    },
     "/api/v1/admin/calendar": {
       "get": {
         "operationId": "get_calendar_api_v1_admin_calendar_get",
@@ -3735,7 +4531,14 @@
             "schema": {
               "anyOf": [
                 {
-                  "pattern": "^(booked|active|released)$",
+                  "enum": [
+                    "booked",
+                    "active",
+                    "overdue",
+                    "completed",
+                    "cancelled",
+                    "released"
+                  ],
                   "type": "string"
                 },
                 {
@@ -4826,6 +5629,362 @@
         ]
       }
     },
+    "/api/v1/admin/rentals": {
+      "get": {
+        "operationId": "listAdminRentals",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "booked",
+                    "active",
+                    "overdue",
+                    "completed",
+                    "cancelled"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "user_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "User Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "lot_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Lot Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "From"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "To"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "maximum": 9223372036854775807,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminRentalPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Staff permission required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Admin Rentals",
+        "tags": [
+          "admin-rentals"
+        ]
+      }
+    },
+    "/api/v1/admin/rentals/{id}": {
+      "get": {
+        "operationId": "getAdminRental",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminRentalDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Staff permission required"
+          },
+          "404": {
+            "description": "Rental was not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Admin Rental",
+        "tags": [
+          "admin-rentals"
+        ]
+      }
+    },
+    "/api/v1/admin/rentals/{id}/cancel": {
+      "post": {
+        "operationId": "cancelAdminRental",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelAdminRentalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminRental"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Permission, eligibility or CSRF check failed"
+          },
+          "404": {
+            "description": "Lot or rental was not found"
+          },
+          "409": {
+            "description": "rental_not_active"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Cancel Admin Rental",
+        "tags": [
+          "admin-rentals"
+        ]
+      }
+    },
+    "/api/v1/admin/rentals/{id}/close": {
+      "post": {
+        "operationId": "closeAdminRental",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CloseRentalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminRental"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Permission, eligibility or CSRF check failed"
+          },
+          "404": {
+            "description": "Lot or rental was not found"
+          },
+          "409": {
+            "description": "rental_already_closed, lot_has_active_rental or slot_taken"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Close Rental",
+        "tags": [
+          "admin-rentals"
+        ]
+      }
+    },
     "/api/v1/admin/settings": {
       "get": {
         "operationId": "get_settings_api_v1_admin_settings_get",
@@ -5746,6 +6905,214 @@
         ]
       }
     },
+    "/api/v1/me/rentals": {
+      "get": {
+        "operationId": "listMyRentals",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "booked",
+                    "active",
+                    "overdue",
+                    "completed",
+                    "cancelled"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "maximum": 9223372036854775807,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RentalPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Tenant or session access denied"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List My Rentals",
+        "tags": [
+          "rentals"
+        ]
+      }
+    },
+    "/api/v1/me/rentals/{id}": {
+      "get": {
+        "operationId": "getMyRental",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RentalDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Tenant or session access denied"
+          },
+          "404": {
+            "description": "Rental was not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get My Rental",
+        "tags": [
+          "rentals"
+        ]
+      }
+    },
+    "/api/v1/me/rentals/{id}/cancel": {
+      "post": {
+        "operationId": "cancelRental",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rental"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Permission, eligibility or CSRF check failed"
+          },
+          "404": {
+            "description": "Lot or rental was not found"
+          },
+          "409": {
+            "description": "cancellation_not_allowed or rental_not_active"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Cancel Rental",
+        "tags": [
+          "rentals"
+        ]
+      }
+    },
     "/api/v1/me/verification-requests": {
       "get": {
         "operationId": "listMyVerificationRequests",
@@ -6574,6 +7941,87 @@
         "summary": "Get Public Tenant",
         "tags": [
           "public-tenant"
+        ]
+      }
+    },
+    "/api/v1/rentals": {
+      "post": {
+        "operationId": "createRental",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "format": "uuid4",
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRentalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rental"
+                }
+              }
+            },
+            "description": "Successful Response",
+            "headers": {
+              "Idempotent-Replayed": {
+                "description": "Present with value true when a stored response is replayed.",
+                "schema": {
+                  "enum": [
+                    "true"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Permission, eligibility or CSRF check failed"
+          },
+          "404": {
+            "description": "Lot or rental was not found"
+          },
+          "409": {
+            "description": "slot_taken, lot_unavailable or battery_unavailable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Rental",
+        "tags": [
+          "rentals"
         ]
       }
     },

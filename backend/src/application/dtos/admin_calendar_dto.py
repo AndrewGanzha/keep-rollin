@@ -26,7 +26,8 @@ class CalendarEventDTO(BaseModel):
             kind=occupancy.kind,
             rental_id=occupancy.ref_id if occupancy.kind == "booking" else None,
             block_id=(occupancy.id if occupancy.kind in ("block", "maintenance") else None),
-            status=(
+            status=occupancy.rental_status
+            or (
                 "booked"
                 if occupancy.kind == "booking" and occupancy.status == "active"
                 else occupancy.status

@@ -27,6 +27,7 @@ class Occupancy(Entity):
     status: OccupancyStatus
     reason: str | None = None
     created_by: UUID | None = None
+    rental_status: str | None = None
 
     def __post_init__(self) -> None:
         super().__post_init__()

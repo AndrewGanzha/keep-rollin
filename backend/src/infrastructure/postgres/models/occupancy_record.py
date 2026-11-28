@@ -10,6 +10,7 @@ from sqlalchemy import (
     ForeignKeyConstraint,
     Index,
     Text,
+    UniqueConstraint,
     func,
     text,
 )
@@ -24,6 +25,7 @@ from src.infrastructure.postgres.base import Base
 class OccupancyRecord(Base):
     __tablename__ = "occupancy"
     __table_args__ = (
+        UniqueConstraint("tenant_id", "lot_id", "id", name="uq_occupancy_tenant_lot_id"),
         ForeignKeyConstraint(
             ["tenant_id", "lot_id"],
             ["lot.tenant_id", "lot.id"],

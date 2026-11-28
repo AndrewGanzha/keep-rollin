@@ -16,6 +16,7 @@ from app.config import Settings
 from app.db import create_engine, create_session_factory
 from app.main import create_app
 from app.models import Tenant
+from src.infrastructure.postgres.models.battery_stock_record import BatteryStockRecord
 from src.infrastructure.postgres.models.category_record import CategoryRecord
 from src.infrastructure.postgres.models.lot_price_tier_record import LotPriceTierRecord
 from src.infrastructure.postgres.models.lot_record import LotRecord
@@ -163,6 +164,14 @@ def seed_catalog() -> SeededAvailability:
             async with factory() as session:
                 session.add_all([tenant_a, tenant_b])
                 await session.flush()
+                session.add_all(
+                    [
+                        BatteryStockRecord(
+                            tenant_id=tenant.id, battery_type="48v", name="48V", quantity=3
+                        )
+                        for tenant in (tenant_a, tenant_b)
+                    ]
+                )
                 session.add_all([category_a, category_b])
                 await session.flush()
                 session.add_all([lot_a, strict_lot, lot_b])

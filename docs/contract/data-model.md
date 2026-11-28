@@ -14,7 +14,7 @@
 | `characteristic.code` (immutable slug) + `is_archived` | Фильтры `char_<code>`, безопасное удаление (UC-1.3) |
 | `slug` у `tenant`/`category`/`lot` (unique per tenant) | SEO/SSR, URL (D-18) |
 | `offer_version.status` + partial unique `(tenant_id) WHERE status='active'` | UC-4.1 |
-| `rental.occupancy_id` FK | Связь брони и занятости |
+| `rental` + `battery_stock` (0015) | Аренда хранит замороженные цену, валюту, вариант и параметры АКБ. Составной FK связывает её с интервалом того же тенанта и лота. Остаток по типу задаётся владельцем. |
 | `push_subscription`: unique `(user_id, endpoint)`, `user_agent` | UC-11.2/11.3 |
 | **NEW `audit_log`** (append-only, RLS, keyset) | Action enum, actor/role/IP, metadata JSONB без PII, retention: UC-4.6 |
 | `user`: индексы `(tenant_id, created_at, id)` и `(tenant_id, role, created_at, id)` | Owner-список администраторов (BE-ADM-01) |

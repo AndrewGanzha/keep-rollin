@@ -35,6 +35,11 @@ AUDIT_ACTIONS = (
     "lot.unblocked",
     "lot.status_changed",
     "verification.decided",
+    "rental.booked",
+    "rental.cancelled",
+    "battery_stock.created",
+    "battery_stock.updated",
+    "battery_stock.deleted",
     "rental.closed",
     "rental.overdue",
     "ticket.status_changed",
@@ -49,6 +54,7 @@ AUDIT_ENTITY_TYPES = (
     "lot_block",
     "verification_request",
     "rental",
+    "battery_stock",
     "ticket",
 )
 _ACTION_SQL = ", ".join(f"'{action}'" for action in AUDIT_ACTIONS)
@@ -70,13 +76,18 @@ class AuditLogRecord(Base):
             name="entity_type",
         ),
         CheckConstraint(
-            "actor_role IN ('owner', 'admin', 'system', 'platform')",
+            "actor_role IN ('owner', 'admin', 'user', 'system', 'platform')",
             name="actor_role",
         ),
         CheckConstraint(
-            "(actor_role IN ('owner', 'admin') AND actor_id IS NOT NULL) "
+            "(actor_role IN ('owner', 'admin', 'user') AND actor_id IS NOT NULL) "
             "OR (actor_role IN ('system', 'platform') AND actor_id IS NULL)",
             name="actor",
+        ),
+        CheckConstraint(
+            "actor_role <> 'user' OR (entity_type = 'rental' "
+            "AND action IN ('rental.booked', 'rental.cancelled'))",
+            name="user_action",
         ),
         CheckConstraint(
             "jsonb_typeof(metadata) = 'object' AND pg_column_size(metadata) <= 4096",

@@ -26,6 +26,11 @@ ALLOWED_ACTIONS = frozenset(
         "lot.unblocked",
         "lot.status_changed",
         "verification.decided",
+        "rental.booked",
+        "rental.cancelled",
+        "battery_stock.created",
+        "battery_stock.updated",
+        "battery_stock.deleted",
         "rental.closed",
         "rental.overdue",
         "ticket.status_changed",
@@ -42,10 +47,11 @@ ALLOWED_ENTITY_TYPES = frozenset(
         "lot_block",
         "verification_request",
         "rental",
+        "battery_stock",
         "ticket",
     }
 )
-ALLOWED_ROLES = frozenset({"owner", "admin", "system", "platform"})
+ALLOWED_ROLES = frozenset({"owner", "admin", "user", "system", "platform"})
 ACTION_METADATA_KEYS: dict[str, frozenset[str]] = {
     "tenant.provisioned": frozenset({"source"}),
     "admin.created": frozenset({"role"}),
@@ -166,8 +172,12 @@ def validate_audit_event(
         raise AuditError("unknown audit entity type")
     if actor_role not in ALLOWED_ROLES:
         raise AuditError("invalid audit actor role")
-    if actor_role in ("owner", "admin") and actor_id is None:
-        raise AuditError("staff audit requires an actor id")
+    if actor_role in ("owner", "admin", "user") and actor_id is None:
+        raise AuditError("account audit requires an actor id")
+    if actor_role == "user" and (
+        entity_type != "rental" or action not in ("rental.booked", "rental.cancelled")
+    ):
+        raise AuditError("invalid audit action for a user actor")
     if actor_role in ("system", "platform") and actor_id is not None:
         raise AuditError("system audit must not have an actor id")
     if len(metadata) > METADATA_MAX_KEYS:
