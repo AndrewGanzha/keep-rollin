@@ -23,8 +23,8 @@ RECIPIENT = "recipient@example.test"
 
 def test_every_notification_has_distinct_russian_copy_and_tenant_link() -> None:
     paths = {
-        "verification.approved": "/account/rentals",
-        "verification.rejected": "/account/rentals",
+        "verification.approved": "/account/verification",
+        "verification.rejected": "/account/verification",
         "booking.confirmed": "/account/rentals",
         "rental.closed": "/account/rentals",
         "booking.cancelled": "/account/rentals",

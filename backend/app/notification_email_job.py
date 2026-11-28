@@ -17,6 +17,9 @@ from src.domain.entities.outbox_message import OutboxMessage
 from src.infrastructure.email import EMAIL_EVENT_TYPES, NotificationEmailRenderer, SmtpEmailSender
 from src.infrastructure.email.smtp import SmtpDeliveryError
 from src.infrastructure.postgres.repositories.outbox_repository import OutboxRepository
+from src.infrastructure.postgres.repositories.rental_reminder_repository import (
+    RentalReminderRepository,
+)
 
 
 class SmtpSettings(BaseSettings):
@@ -84,6 +87,8 @@ class EmailOutboxHandler:
 
         try:
             rendered = self._renderer.render(message.event_type, tenant_origin=f"https://{domain}")
+            if not await RentalReminderRepository(self._session).can_deliver(message):
+                return
             await self._sender.send(recipient=email, email=rendered, message_id=message.id)
             self.sent = True
         except SmtpDeliveryError:

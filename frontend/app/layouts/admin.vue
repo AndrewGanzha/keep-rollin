@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { useSessionStore } from '~/entities/session'
+import { useBrowserPushLifecycle } from '~/features/notifications'
 import { AppHeader } from '~/widgets/app-header'
 
 const session = useSessionStore()
+useBrowserPushLifecycle()
 </script>
 
 <template>

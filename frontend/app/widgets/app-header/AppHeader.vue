@@ -62,6 +62,13 @@ const toggleTheme = () => {
           Мои обращения
         </NuxtLink>
         <NuxtLink
+          v-if="session.isAuthenticated"
+          to="/account/notifications"
+          class="header__link"
+        >
+          Уведомления
+        </NuxtLink>
+        <NuxtLink
           v-if="session.isStaff"
           to="/admin"
           class="header__link"

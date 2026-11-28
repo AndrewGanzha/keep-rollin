@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@pinia/nuxt": "^1.0.3",
+    "node-fetch-native": "1.6.7",
     "nuxt": "^4.6.4",
     "openapi-fetch": "^0.17.0",
     "pinia": "^4.1.0",

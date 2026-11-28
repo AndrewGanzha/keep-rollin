@@ -28,6 +28,9 @@ from src.infrastructure.postgres.repositories.outbox_repository import OutboxRep
 from src.infrastructure.postgres.repositories.push_subscription_repository import (
     PushSubscriptionRepository,
 )
+from src.infrastructure.postgres.repositories.rental_reminder_repository import (
+    RentalReminderRepository,
+)
 from src.infrastructure.push.sender import PushSendKind, WebPushSender
 from src.infrastructure.security.secret_box import SecretBox, decode_key
 
@@ -130,6 +133,8 @@ class NotificationRouter:
         recipient = await recipient_settings(self._session, message)
         if recipient is None:
             return
+        if not await RentalReminderRepository(self._session).can_deliver(message):
+            return
         role, preferences = recipient
         event = message.event_type
         critical = event in locked_events(role)
@@ -165,10 +170,14 @@ class PushOutboxHandler:
         recipient = await recipient_settings(self._session, message)
         if recipient is None or message.user_id is None:
             return
+        if not await RentalReminderRepository(self._session).can_deliver(message):
+            return
         role, preferences = recipient
         critical = message.event_type in locked_events(role)
         if critical or push_enabled(preferences):
             result = await self._send(message, message.user_id)
+            if result == "expired":
+                return
             if result == "sent":
                 self.outcome = "sent"
                 return
@@ -194,7 +203,7 @@ class PushOutboxHandler:
 
     async def _send(
         self, message: OutboxMessage, user_id: UUID
-    ) -> Literal["sent", "retry", "rejected", "unavailable"]:
+    ) -> Literal["sent", "retry", "rejected", "unavailable", "expired"]:
         subscriptions = await self._subscriptions.list_active(user_id, now=self._now)
         if not subscriptions:
             return "unavailable"
@@ -219,6 +228,8 @@ class PushOutboxHandler:
         retryable = False
         rejected = False
         for subscription in subscriptions:
+            if not await RentalReminderRepository(self._session).can_deliver(message):
+                return "expired"
             result = await self._sender.send(
                 endpoint=subscription.endpoint,
                 p256dh=subscription.p256dh,

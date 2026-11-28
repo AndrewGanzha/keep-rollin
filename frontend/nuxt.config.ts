@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url'
 import Aura from '@primevue/themes/aura'
 import type { PrimeVueLocaleOptions } from '@primevue/core/config'
 import ru from 'primelocale/ru.json'
@@ -28,6 +29,10 @@ export default defineNuxtConfig({
     head: {
       htmlAttrs: { lang: 'ru' },
       title: 'Keep Rollin',
+      link: [
+        { rel: 'manifest', href: '/manifest.webmanifest' },
+        { rel: 'apple-touch-icon', href: '/icons/app-192.png' },
+      ],
       meta: [
         { name: 'viewport', content: 'width=device-width, initial-scale=1' },
         { name: 'description', content: 'Аренда электробайков и аккумуляторов' },
@@ -43,6 +48,8 @@ export default defineNuxtConfig({
   },
 
   nitro: {
+    // Nitro aliases the package root to native fetch. Keep the Node entry explicit.
+    alias: { 'node-fetch-native/node': fileURLToPath(import.meta.resolve('node-fetch-native/node')) },
     devProxy: {
       '/api': { target: `${mockOrigin}/api`, changeOrigin: true },
     },

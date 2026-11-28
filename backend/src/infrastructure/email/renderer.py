@@ -28,14 +28,14 @@ _NOTIFICATIONS = {
     "verification.approved": _Notification(
         "Верификация пройдена",
         "Ваша заявка одобрена. Теперь вы можете бронировать.",
-        _ACCOUNT_RENTALS,
-        "Открыть личный кабинет",
+        "/account/verification",
+        "Открыть статус верификации",
     ),
     "verification.rejected": _Notification(
         "Заявка на верификацию отклонена",
         "Ваша заявка на верификацию отклонена.",
-        _ACCOUNT_RENTALS,
-        "Открыть личный кабинет",
+        "/account/verification",
+        "Открыть статус верификации",
     ),
     "booking.confirmed": _Notification(
         "Бронь подтверждена",

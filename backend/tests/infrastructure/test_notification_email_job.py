@@ -11,6 +11,7 @@ import pytest
 from prometheus_client import generate_latest
 from pydantic import SecretStr, ValidationError
 from sqlalchemy import delete
+from sqlalchemy.dialects.postgresql.ranges import Range
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from app.db import create_engine, create_session_factory
@@ -19,7 +20,11 @@ from app.notification_email_job import SmtpSettings, create_email_job
 from app.worker import Worker, WorkerSettings, worker_session
 from src.infrastructure.email import EMAIL_EVENT_TYPES, RenderedEmail, SmtpEmailSender
 from src.infrastructure.email.smtp import SmtpDeliveryError
+from src.infrastructure.postgres.models.category_record import CategoryRecord
+from src.infrastructure.postgres.models.lot_record import LotRecord
+from src.infrastructure.postgres.models.occupancy_record import OccupancyRecord
 from src.infrastructure.postgres.models.outbox_message_record import OutboxMessageRecord
+from src.infrastructure.postgres.models.rental_record import RentalRecord
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 SMTP_PORT = os.getenv("MAILHOG_SMTP_PORT")
@@ -266,6 +271,53 @@ async def test_worker_delivers_multipart_message_to_mailhog(
             event_type: message(tenant, user_id, event_type, available_at=datetime.now(UTC))
             for event_type in EMAIL_EVENT_TYPES
         }
+        category, lot, occupancy = uuid4(), uuid4(), uuid4()
+        session.add(CategoryRecord(id=category, tenant_id=tenant, name="Demo", slug="demo"))
+        await session.flush()
+        session.add(
+            LotRecord(
+                id=lot,
+                tenant_id=tenant,
+                category_id=category,
+                slug="demo",
+                name="Demo",
+                rental_unit="hour",
+                allowed_durations=[1],
+                status="active",
+            )
+        )
+        await session.flush()
+        reminder = events["rental.ending_soon"]
+        assert reminder.entity_id is not None
+        start = datetime.now(UTC) - timedelta(minutes=40)
+        end = start + timedelta(hours=1)
+        session.add(
+            OccupancyRecord(
+                id=occupancy,
+                tenant_id=tenant,
+                lot_id=lot,
+                kind="booking",
+                period=Range(start, end, bounds="[)"),
+                ref_id=reminder.entity_id,
+            )
+        )
+        session.add(
+            RentalRecord(
+                id=reminder.entity_id,
+                tenant_id=tenant,
+                user_id=user_id,
+                lot_id=lot,
+                occupancy_id=occupancy,
+                variant_id=uuid4(),
+                battery_count=0,
+                status="active",
+                start_time=start,
+                end_time=end,
+                price_minor=100,
+                currency="RUB",
+                cancellation_deadline=start - timedelta(hours=24),
+            )
+        )
         session.add_all(events.values())
     worker = Worker(
         engine,
@@ -295,6 +347,8 @@ async def test_worker_delivers_multipart_message_to_mailhog(
         }
         assert len(by_id) == len(events) == 11
         paths = {
+            "verification.approved": "/account/verification",
+            "verification.rejected": "/account/verification",
             "rental.overdue.admin": "/admin/rentals",
             "ticket.created.admin": "/admin/tickets",
             "ticket.updated.user": "/account/tickets",

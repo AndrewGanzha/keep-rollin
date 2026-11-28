@@ -1,3 +1,5 @@
+import { fetch } from 'node-fetch-native/node'
+
 /**
  * Production proxy for same-origin `/api/**` calls.
  *
@@ -23,5 +25,11 @@ export default defineEventHandler((event) => {
     throw createError({ statusCode: 404, statusMessage: 'API proxy is not configured' })
   }
 
-  return proxyRequest(event, `${target.replace(/\/$/, '')}${event.path}`)
+  // h3 omits Host by default for an absolute target, but FastAPI uses it for tenant routing.
+  const host = getRequestHeader(event, 'host')
+  return proxyRequest(event, `${target.replace(/\/$/, '')}${event.path}`, {
+    fetch,
+    headers: host ? { host } : undefined,
+    fetchOptions: { redirect: 'manual' },
+  })
 })

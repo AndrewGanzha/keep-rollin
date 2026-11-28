@@ -6,6 +6,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.infrastructure.postgres.repositories.rental_lifecycle_repository import (
     RentalLifecycleRepository,
 )
+from src.infrastructure.postgres.repositories.rental_reminder_repository import (
+    RentalReminderRepository,
+)
 from src.infrastructure.postgres.repositories.worker_maintenance_repository import (
     WorkerMaintenanceRepository,
 )
@@ -38,7 +41,14 @@ async def expire_idempotency_keys(
     )
 
 
+async def enqueue_rental_reminders(
+    session: AsyncSession, now: datetime, batch_size: int, trace_id: str
+) -> int:
+    return await RentalReminderRepository(session).enqueue_due(now=now, limit=batch_size)
+
+
 JOBS: dict[str, Job] = {
+    "rental_reminders": enqueue_rental_reminders,
     "rental_lifecycle": transition_rentals,
     "maintenance_expiry": return_maintenance_lots,
     "idempotency_expiry": expire_idempotency_keys,

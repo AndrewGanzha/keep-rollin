@@ -1,3 +1,4 @@
+import { createHash, randomUUID } from 'node:crypto'
 import { mock, rest } from 'mock-config-server'
 import { addDays, dayKeyOf, zonedDayStartIso } from './app/shared/lib/calendar'
 import type { components } from './app/shared/api/schema'
@@ -55,6 +56,10 @@ type TicketPage = components['schemas']['TicketPage']
 type TicketReceipt = components['schemas']['TicketReceipt']
 type CreateTicketRequest = components['schemas']['CreateTicketRequest']
 type UpdateBatteryStockRequest = components['schemas']['UpdateBatteryStockRequest']
+type NotificationPreferences = components['schemas']['NotificationPreferencesResponse']
+type UpdateNotificationPreferences = components['schemas']['UpdateNotificationPreferencesRequest']
+type PushSubscriptionMetadata = components['schemas']['PushSubscriptionResponse']
+type UpsertPushSubscription = components['schemas']['UpsertPushSubscriptionRequest']
 
 /** Лот в состоянии мока: `price_from` всегда вычисляется при выдаче. */
 type MockLot = Omit<Lot, 'price_from'>
@@ -85,7 +90,7 @@ const tenant: Tenant = {
   primary_color: '#0f766e',
   timezone: 'Europe/Moscow',
   currency: 'RUB',
-  vapid_public_key: null,
+  vapid_public_key: process.env.MOCK_VAPID_PUBLIC_KEY ?? null,
   policies: {
     booking_horizon_days: 60,
     min_rental_minutes: 60,
@@ -408,6 +413,23 @@ const seedUsers: User[] = [
 ]
 
 const tokens = new Map<string, User>()
+const notificationPreferences = new Map<string, NotificationPreferences>()
+const pushSubscriptions = new Map<string, Map<string, PushSubscriptionMetadata>>()
+
+const preferencesFor = (user: User): NotificationPreferences => {
+  const saved = notificationPreferences.get(user.id)
+  if (saved) return saved
+  const locked = ['verification.rejected', 'rental.overdue.user', 'ticket.resolved.user']
+  if (user.role !== 'user') locked.push('rental.overdue.admin', 'ticket.created.admin')
+  return {
+    push_enabled: true,
+    email_by_event: Object.fromEntries([
+      'verification.approved', 'booking.confirmed', 'rental.closed', 'booking.cancelled',
+      'rental.ending_soon', 'ticket.updated.user', ...locked,
+    ].map(event => [event, true])),
+    locked_events: locked,
+  }
+}
 
 const rentalLot = (lot: Pick<Lot, 'id' | 'slug' | 'name' | 'photos'>): Rental['lot'] => ({
   id: lot.id,
@@ -1167,9 +1189,77 @@ export default mock(
           role: user.role,
           permissions: permissions(user),
           offer_accepted: true,
+          prefs_summary: { push_enabled: preferencesFor(user).push_enabled },
         }
 
         return session
+      }),
+      rest.get('/api/v1/me/notification-preferences', (params) => {
+        const user = currentUser(params)
+        if (!user) return fail(params, 401, problem('token_invalid', 401, 'Требуется вход'))
+        return preferencesFor(user)
+      }),
+      rest.put('/api/v1/me/notification-preferences', (params) => {
+        const user = currentUser(params)
+        if (!user) return fail(params, 401, problem('token_invalid', 401, 'Требуется вход'))
+        const state = preferencesFor(user)
+        const patch = (params.request.body ?? {}) as UpdateNotificationPreferences
+        const changes = patch.email_by_event ?? {}
+        if (state.locked_events.some(event => changes[event] === false)) {
+          return fail(params, 422, problem('critical_channel_locked', 422, 'Письмо обязательно'))
+        }
+        if (Object.keys(changes).some(event => !(event in state.email_by_event))) {
+          return fail(params, 422, problem('validation_error', 422, 'Неизвестное событие'))
+        }
+        const next = {
+          ...state,
+          push_enabled: patch.push_enabled ?? state.push_enabled,
+          email_by_event: { ...state.email_by_event, ...changes },
+        }
+        notificationPreferences.set(user.id, next)
+        return next
+      }),
+      rest.get('/api/v1/me/push-subscriptions', (params) => {
+        const user = currentUser(params)
+        if (!user) return fail(params, 401, problem('token_invalid', 401, 'Требуется вход'))
+        return [...(pushSubscriptions.get(user.id)?.values() ?? [])]
+      }),
+      rest.post('/api/v1/me/push-subscriptions', (params) => {
+        const user = currentUser(params)
+        if (!user) return fail(params, 401, problem('token_invalid', 401, 'Требуется вход'))
+        const body = (params.request.body ?? {}) as Partial<UpsertPushSubscription>
+        if (!body.endpoint || !body.keys?.p256dh || !body.keys.auth) {
+          return fail(params, 422, problem('validation_error', 422, 'Подписка неполная'))
+        }
+        const hash = createHash('sha256').update(body.endpoint).digest('hex')
+        if ([...pushSubscriptions].some(([owner, rows]) => owner !== user.id && rows.has(hash))) {
+          return fail(params, 409, problem('conflict', 409, 'Подписка занята'))
+        }
+        const rows = pushSubscriptions.get(user.id) ?? new Map<string, PushSubscriptionMetadata>()
+        const previous = rows.get(hash)
+        const now = new Date().toISOString()
+        const row = {
+          id: previous?.id ?? randomUUID(),
+          endpoint_hash: hash,
+          user_agent: null,
+          expiration_time: body.expirationTime ? new Date(body.expirationTime).toISOString() : null,
+          created_at: previous?.created_at ?? now,
+          updated_at: now,
+        }
+        rows.set(hash, row)
+        pushSubscriptions.set(user.id, rows)
+        return row
+      }),
+      rest.delete('/api/v1/me/push-subscriptions/:subscription_id', (params) => {
+        const user = currentUser(params)
+        if (!user) return fail(params, 401, problem('token_invalid', 401, 'Требуется вход'))
+        const rows = pushSubscriptions.get(user.id)
+        if (rows) {
+          for (const [hash, row] of rows) {
+            if (row.id === params.request.params.subscription_id) rows.delete(hash)
+          }
+        }
+        params.setStatusCode(204)
       }),
 
       rest.get('/api/v1/me/rentals', (params) => {
