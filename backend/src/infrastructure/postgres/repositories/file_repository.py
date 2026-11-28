@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
 from src.infrastructure.postgres.models.file_record import AttachmentRecord, FileRecord
+from src.infrastructure.postgres.models.ticket_record import TicketAttachmentRecord
 from src.infrastructure.postgres.models.verification_request_record import (
     VerificationDocumentRecord,
 )
@@ -102,7 +103,14 @@ class FileRepository:
             VerificationDocumentRecord.tenant_id == FileRecord.tenant_id,
             VerificationDocumentRecord.file_id == FileRecord.id,
         )
-        return FileRecord.created_at < cutoff, ~attached & ~verification_document
+        ticket_attachment = exists().where(
+            TicketAttachmentRecord.tenant_id == FileRecord.tenant_id,
+            TicketAttachmentRecord.file_id == FileRecord.id,
+        )
+        return (
+            FileRecord.created_at < cutoff,
+            ~attached & ~verification_document & ~ticket_attachment,
+        )
 
     async def count_orphans(self, cutoff: datetime) -> int:
         cutoff_filter, unattached = self._unattached_before(cutoff)

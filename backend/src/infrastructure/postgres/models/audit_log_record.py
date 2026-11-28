@@ -42,6 +42,7 @@ AUDIT_ACTIONS = (
     "battery_stock.deleted",
     "rental.closed",
     "rental.overdue",
+    "ticket.created",
     "ticket.status_changed",
 )
 AUDIT_ENTITY_TYPES = (
@@ -86,7 +87,8 @@ class AuditLogRecord(Base):
         ),
         CheckConstraint(
             "actor_role <> 'user' OR (entity_type = 'rental' "
-            "AND action IN ('rental.booked', 'rental.cancelled'))",
+            "AND action IN ('rental.booked', 'rental.cancelled')) "
+            "OR (entity_type = 'ticket' AND action = 'ticket.created')",
             name="user_action",
         ),
         CheckConstraint(

@@ -9,7 +9,8 @@ definePageMeta({ layout: 'admin', middleware: ['auth', 'role'] })
 
 useHead({ title: 'Тикеты — админка' })
 
-const { data, pending, error, refresh, status, updating, update } = await useTicketQueue()
+const { data, pending, error, refresh, status, updating, update, details, loadDetails, clearDetails } =
+  await useTicketQueue()
 const tenant = useTenant()
 const timeZone = computed(() => tenant.value?.timezone)
 
@@ -49,7 +50,10 @@ const statusOptions: { label: string; value: TicketStatus }[] = [
       :loading="pending"
       :pending="updating"
       :time-zone="timeZone"
+      :details="details"
       @apply="update"
+      @load-details="loadDetails"
+      @clear-details="clearDetails"
     />
   </div>
 </template>

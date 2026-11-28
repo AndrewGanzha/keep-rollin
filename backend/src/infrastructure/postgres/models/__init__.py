@@ -20,6 +20,7 @@ from src.infrastructure.postgres.models.password_reset_token_record import (
 from src.infrastructure.postgres.models.refresh_session_record import RefreshSessionRecord
 from src.infrastructure.postgres.models.rental_record import RentalRecord
 from src.infrastructure.postgres.models.tenant_settings_record import TenantSettingsRecord
+from src.infrastructure.postgres.models.ticket_record import TicketAttachmentRecord, TicketRecord
 from src.infrastructure.postgres.models.verification_request_record import (
     VerificationDocumentRecord,
     VerificationRequestRecord,
@@ -45,6 +46,8 @@ __all__ = [
     "RefreshSessionRecord",
     "RentalRecord",
     "TenantSettingsRecord",
+    "TicketAttachmentRecord",
+    "TicketRecord",
     "VerificationDocumentRecord",
     "VerificationRequestRecord",
 ]

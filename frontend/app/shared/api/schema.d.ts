@@ -203,7 +203,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Сообщить о неполадке по активной аренде */
+        /** Сообщить о неполадке по активной или просроченной аренде */
         post: operations["createRentalTicket"];
         delete?: never;
         options?: never;
@@ -222,6 +222,38 @@ export interface paths {
         get: operations["listMyTickets"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/tickets/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getMyTicket"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["upload_file_api_v1_files_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -560,7 +592,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        get: operations["getAdminTicket"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1058,7 +1090,29 @@ export interface components {
             /** @enum {string} */
             category: "no_power" | "no_drive" | "battery" | "damage" | "other";
             description: string;
-            photo_urls?: string[];
+            file_ids?: string[];
+            photo_upload_failures?: number;
+        };
+        TicketReceipt: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            rental_id: string;
+            /** Format: date-time */
+            created_at: string;
+            skipped_photo_count: number;
+            status: "submitted";
+            version: number;
+        };
+        Body_upload_file_api_v1_files_post: {
+            file: Blob;
+            purpose: components["schemas"]["UploadPurpose"];
+        };
+        UploadPurpose: "lot_photo" | "ticket_photo" | "verification_passport" | "verification_registration" | "verification_selfie";
+        UploadResultDTO: {
+            /** Format: uuid */
+            file_id: string;
+            url: string;
         };
         AdminUserRef: {
             /** Format: uuid */
@@ -1152,13 +1206,16 @@ export interface components {
             category: "no_power" | "no_drive" | "battery" | "damage" | "other";
             description: string;
             photo_urls: string[];
+            skipped_photo_count: number;
             /** @enum {string} */
             status: "submitted" | "in_progress" | "resolved";
-            admin_comment?: string | null;
+            admin_comment: string | null;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
-            resolved_at?: string | null;
+            updated_at: string;
+            /** Format: date-time */
+            resolved_at: string | null;
             version: number;
         };
         TicketPage: {
@@ -1170,8 +1227,10 @@ export interface components {
         TicketPatchRequest: {
             /** @enum {string} */
             status: "in_progress" | "resolved";
-            admin_comment?: string;
+            admin_comment?: string | null;
             version: number;
+            put_lot_maintenance?: boolean;
+            maintenance_until?: string | null;
         };
     };
     responses: {
@@ -1567,7 +1626,9 @@ export interface operations {
     createRentalTicket: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
             path: {
                 id: string;
             };
@@ -1585,7 +1646,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Ticket"];
+                    "application/json": components["schemas"]["TicketReceipt"];
                 };
             };
             401: components["responses"]["Unauthorized"];
@@ -1619,6 +1680,35 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+        };
+    };
+    getMyTicket: operations["getAdminTicket"];
+    upload_file_api_v1_files_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_file_api_v1_files_post"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadResultDTO"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            413: { headers: { [name: string]: unknown }; content?: never };
+            422: components["responses"]["Validation"];
+            503: { headers: { [name: string]: unknown }; content?: never };
         };
     };
     getAnalyticsSummary: {
@@ -2136,6 +2226,10 @@ export interface operations {
         parameters: {
             query?: {
                 status?: "submitted" | "in_progress" | "resolved";
+                lot_id?: string;
+                rental_id?: string;
+                from?: string;
+                to?: string;
                 limit?: number;
                 offset?: number;
             };
@@ -2156,6 +2250,32 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+        };
+    };
+    getAdminTicket: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Ticket"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["Validation"];
+            503: { headers: { [name: string]: unknown }; content?: never };
         };
     };
     updateAdminTicket: {

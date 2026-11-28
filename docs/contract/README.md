@@ -204,7 +204,7 @@ POST /api/v1/auth/mfa/confirm {"mfa_token": "...", "code": "123456"}
 | `payload_too_large`       | 413  | Файл/тело больше лимита                                        |
 | `unsupported_media_type`  | 415  | Неподдерживаемый тип                                           |
 | `rate_limited`            | 429  | Лимит запросов (есть `Retry-After`)                            |
-| `issue_limit_exceeded`    | 429  | > 5 тикетов на аренду в сутки                                  |
+| `issue_limit_exceeded`    | 429  | Лимит тикетов на аренду за последние 24 ч                                  |
 | `internal_error`          | 500  | Необработанная ошибка (с `trace_id`)                           |
 | `service_unavailable`     | 503  | Зависимость (БД/S3/SMTP) недоступна                            |
 
@@ -286,7 +286,7 @@ ALTER TABLE occupancy ADD CONSTRAINT occupancy_no_overlap
 | `file.purpose` | `lot_photo`, `ticket_photo`, `verification_passport`, `verification_registration`, `verification_selfie` |
 | `characteristic.type` | `number`, `text`, `select`                                        |
 | `notification.status` | `pending`, `sent`, `failed`                                       |
-| `audit.action` | Фиксированный enum: `tenant.provisioned`, `admin.created`, `admin.deactivated`, `user.deactivated`, `settings.updated`, `category.created`, `category.updated`, `category.characteristics_updated`, `offer.created`, `offer.updated`, `offer.published`, `lot.blocked`, `lot.unblocked`, `lot.status_changed`, `verification.decided`, `rental.booked`, `rental.cancelled`, `battery_stock.created`, `battery_stock.updated`, `battery_stock.deleted`, `rental.closed`, `rental.overdue`, `ticket.status_changed` |
+| `audit.action` | Фиксированный enum: `tenant.provisioned`, `admin.created`, `admin.deactivated`, `user.deactivated`, `settings.updated`, `category.created`, `category.updated`, `category.characteristics_updated`, `offer.created`, `offer.updated`, `offer.published`, `lot.blocked`, `lot.unblocked`, `lot.status_changed`, `verification.decided`, `rental.booked`, `rental.cancelled`, `battery_stock.created`, `battery_stock.updated`, `battery_stock.deleted`, `rental.closed`, `rental.overdue`, `ticket.created`, `ticket.status_changed` |
 
 ### 3.10. Уведомления: события (D-13)
 

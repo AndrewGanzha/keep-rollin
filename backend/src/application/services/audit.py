@@ -33,6 +33,7 @@ ALLOWED_ACTIONS = frozenset(
         "battery_stock.deleted",
         "rental.closed",
         "rental.overdue",
+        "ticket.created",
         "ticket.status_changed",
     }
 )
@@ -174,9 +175,11 @@ def validate_audit_event(
         raise AuditError("invalid audit actor role")
     if actor_role in ("owner", "admin", "user") and actor_id is None:
         raise AuditError("account audit requires an actor id")
-    if actor_role == "user" and (
-        entity_type != "rental" or action not in ("rental.booked", "rental.cancelled")
-    ):
+    if actor_role == "user" and (action, entity_type) not in {
+        ("rental.booked", "rental"),
+        ("rental.cancelled", "rental"),
+        ("ticket.created", "ticket"),
+    }:
         raise AuditError("invalid audit action for a user actor")
     if actor_role in ("system", "platform") and actor_id is not None:
         raise AuditError("system audit must not have an actor id")

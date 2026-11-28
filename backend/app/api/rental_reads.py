@@ -15,11 +15,13 @@ from src.application.dtos.rental_dto import (
     Rental,
     RentalDetail,
     RentalPage,
+    RentalTicket,
 )
 from src.domain.entities.user_account import UserAccount
 from src.domain.value_objects.limits import MAX_DATABASE_INTEGER
 from src.infrastructure.postgres.models.rental_record import RentalStatus
 from src.infrastructure.postgres.repositories.rental_repository import RentalRepository
+from src.infrastructure.postgres.repositories.ticket_repository import TicketRepository
 
 
 def no_store(response: Response) -> None:
@@ -90,7 +92,11 @@ async def get_my_rental(id: UUID, actor: Actor, session: Session) -> RentalDetai
         raise HTTPException(status_code=404, detail={"code": "not_found"})
     rental, lot, _ = details
     summary = Rental.from_records(rental, lot, now=datetime.now(UTC))
-    return RentalDetail(**summary.model_dump(), tickets=[])
+    tickets = await TicketRepository(session).list_for_rental(id, user_id=actor.id)
+    return RentalDetail(
+        **summary.model_dump(),
+        tickets=[RentalTicket.model_validate(ticket) for ticket, _, _ in tickets],
+    )
 
 
 @admin_router.get("", operation_id="listAdminRentals")

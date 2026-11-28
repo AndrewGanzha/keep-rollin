@@ -401,7 +401,9 @@ class AdminLotRepository:
                 OccupancyRecord.ref_id == lot_id,
                 OccupancyRecord.kind == "maintenance",
                 OccupancyRecord.status == "active",
-                func.upper_inf(OccupancyRecord.period),
+                or_(
+                    func.upper_inf(OccupancyRecord.period), func.upper(OccupancyRecord.period) > now
+                ),
             )
             .values(
                 status="released",

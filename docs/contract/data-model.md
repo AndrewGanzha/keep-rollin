@@ -14,6 +14,7 @@
 | `characteristic.code` (immutable slug) + `is_archived` | Фильтры `char_<code>`, безопасное удаление (UC-1.3) |
 | `slug` у `tenant`/`category`/`lot` (unique per tenant) | SEO/SSR, URL (D-18) |
 | `offer_version.status` + partial unique `(tenant_id) WHERE status='active'` | UC-4.1 |
+| `ticket` + `ticket_attachment` (0017) | Лот и владелец определяются через аренду того же тенанта. Приватные фото связаны составными ключами и исключены из очистки непривязанных файлов. Откат миграций 0017–0018 с тикетами или событиями создания требует плана переноса данных. |
 | `rental` + `battery_stock` (0015) | Аренда хранит замороженные цену, валюту, вариант и параметры АКБ. Составной FK связывает её с интервалом того же тенанта и лота. Остаток по типу задаётся владельцем. |
 | `push_subscription`: unique `(user_id, endpoint)`, `user_agent` | UC-11.2/11.3 |
 | **NEW `audit_log`** (append-only, RLS, keyset) | Action enum, actor/role/IP, metadata JSONB без PII, retention: UC-4.6 |

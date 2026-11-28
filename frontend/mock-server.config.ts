@@ -52,6 +52,8 @@ type AdminVerificationRequestSummary = components['schemas']['AdminVerificationR
 type VerificationRequestPage = components['schemas']['VerificationRequestPage']
 type Ticket = components['schemas']['Ticket']
 type TicketPage = components['schemas']['TicketPage']
+type TicketReceipt = components['schemas']['TicketReceipt']
+type CreateTicketRequest = components['schemas']['CreateTicketRequest']
 type UpdateBatteryStockRequest = components['schemas']['UpdateBatteryStockRequest']
 
 /** Лот в состоянии мока: `price_from` всегда вычисляется при выдаче. */
@@ -512,7 +514,7 @@ const userRef = (user: User): AdminUserRef => ({ id: user.id, name: user.name, e
 const rentalOwners = new Map<string, User>([
   [uid(301), userById(uid(900))],
   [uid(302), userById(uid(900))],
-  [uid(303), userById(uid(903))],
+  [uid(303), userById(uid(900))],
   [uid(304), userById(uid(904))],
   [uid(305), userById(uid(903))],
   [uid(306), userById(uid(904))],
@@ -676,6 +678,11 @@ const toVerificationSummary = (request: VerificationRequest): AdminVerificationR
 })
 
 let ticketSeq = 700
+let ticketPhotoSeq = 6000
+const ticketPhotoOwners = new Map<string, string>()
+const ticketRequests = new Map<string, { fingerprint: string; receipt: TicketReceipt }>()
+const mockTicketPhoto = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAASCAIAAADOjonJAAAALElEQVR4nGNY9+ASGhIpzkNDxKhhGDWIjgaRpw1TzahB9DRo8KWjUYMIqgEAtUjP17FBDTMAAAAASUVORK5CYII='
+const withoutTicketPhotos = (ticket: Ticket): Ticket => ({ ...ticket, photo_urls: [] })
 
 const tickets: Ticket[] = [
   {
@@ -685,10 +692,12 @@ const tickets: Ticket[] = [
     user: userRef(userById(uid(900))),
     category: 'no_power',
     description: 'Батарея не включается после зарядки, индикатор мигает красным',
-    photo_urls: ['https://example.com/tickets/601-1.jpg'],
+    photo_urls: [mockTicketPhoto],
+    skipped_photo_count: 0,
     status: 'submitted',
     admin_comment: null,
     created_at: iso(-2 * HOUR),
+    updated_at: iso(-2 * HOUR),
     resolved_at: null,
     version: 1,
   },
@@ -700,9 +709,11 @@ const tickets: Ticket[] = [
     category: 'battery',
     description: 'Аккумулятор держит заряд примерно вдвое меньше заявленного',
     photo_urls: [],
+    skipped_photo_count: 0,
     status: 'in_progress',
     admin_comment: 'Проверяем состояние на складе',
     created_at: iso(-20 * HOUR),
+    updated_at: iso(-18 * HOUR),
     resolved_at: null,
     version: 2,
   },
@@ -713,10 +724,12 @@ const tickets: Ticket[] = [
     user: userRef(userById(uid(900))),
     category: 'damage',
     description: 'На раме обнаружена трещина возле крепления двигателя',
-    photo_urls: ['https://example.com/tickets/603-1.jpg', 'https://example.com/tickets/603-2.jpg'],
+    photo_urls: [mockTicketPhoto, mockTicketPhoto],
+    skipped_photo_count: 0,
     status: 'resolved',
     admin_comment: 'Лот переведён в обслуживание',
     created_at: iso(-96 * HOUR),
+    updated_at: iso(-90 * HOUR),
     resolved_at: iso(-90 * HOUR),
     version: 3,
   },
@@ -1307,6 +1320,25 @@ export default mock(
         return withRemaining(rental)
       }, { delay: 120 }),
 
+      rest.post('/api/v1/files', (params) => {
+        const user = currentUser(params)
+
+        if (!user) {
+          return fail(params, 401, problem('token_invalid', 401, 'Требуется вход'))
+        }
+
+        const contentType = params.getRequestHeader('content-type')
+        if (typeof contentType !== 'string' || !contentType.startsWith('multipart/form-data;')) {
+          return fail(params, 422, problem('upload_invalid', 422, 'Ожидается фото'))
+        }
+
+        // The mock server leaves multipart bodies unparsed. Use a demo image.
+        const fileId = uid(ticketPhotoSeq++)
+        ticketPhotoOwners.set(fileId, user.id)
+        params.setStatusCode(201)
+        return { file_id: fileId, url: mockTicketPhoto }
+      }, { delay: 100 }),
+
       rest.post('/api/v1/me/rentals/:id/tickets', (params) => {
         const user = currentUser(params)
 
@@ -1314,29 +1346,16 @@ export default mock(
           return fail(params, 401, problem('token_invalid', 401, 'Требуется вход'))
         }
 
-        const rental = rentals.find(item => item.id === params.request.params.id)
-
-        if (!rental) {
-          return fail(params, 404, problem('not_found', 404, 'Бронь не найдена'))
+        const key = params.getRequestHeader('idempotency-key')
+        if (typeof key !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(key)) {
+          return fail(params, 422, problem('validation_error', 422, 'Некорректный ключ запроса'))
         }
 
-        if (rentalOwners.get(rental.id)?.id !== user.id) {
-          return fail(params, 403, problem('not_your_rental', 403, 'Это не ваша аренда'))
-        }
-
-        if (rental.status !== 'active') {
-          return fail(params, 409, problem('ticket_not_allowed', 409, 'Сообщить о неполадке можно только по активной аренде'))
-        }
-
-        const body = (params.request.body ?? {}) as {
-          category?: string
-          description?: string
-          photo_urls?: string[]
-        }
+        const body = (params.request.body ?? {}) as Partial<CreateTicketRequest>
         const categories: Ticket['category'][] = ['no_power', 'no_drive', 'battery', 'damage', 'other']
-        const description = body.description?.trim() ?? ''
+        const description = typeof body.description === 'string' ? body.description.trim() : ''
 
-        if (!body.category || !categories.includes(body.category as Ticket['category'])) {
+        if (!body.category || !categories.includes(body.category)) {
           return fail(
             params,
             422,
@@ -1344,7 +1363,8 @@ export default mock(
           )
         }
 
-        if (description.length < 10 || description.length > 1000) {
+        const descriptionLength = Array.from(description).length
+        if (descriptionLength < 10 || descriptionLength > 1000) {
           return fail(
             params,
             422,
@@ -1352,36 +1372,73 @@ export default mock(
           )
         }
 
+        const fileIds = body.file_ids ?? []
+        const uploadFailures = body.photo_upload_failures ?? 0
+        if (!Array.isArray(fileIds) || new Set(fileIds).size !== fileIds.length
+          || !Number.isInteger(uploadFailures) || uploadFailures < 0
+          || fileIds.length + uploadFailures > 3) {
+          return fail(params, 422, problem('validation_error', 422, 'Допустимо не более трёх фото'))
+        }
+
+        const requestKey = `${user.id}:${key}`
+        const fingerprint = JSON.stringify([params.request.params.id, body.category, description, fileIds, uploadFailures])
+        const existing = ticketRequests.get(requestKey)
+        if (existing) {
+          if (existing.fingerprint !== fingerprint) {
+            return fail(params, 422, problem('idempotency_conflict', 422, 'Ключ запроса уже использован'))
+          }
+          params.setStatusCode(201)
+          params.setHeader('Idempotent-Replayed', 'true')
+          return existing.receipt
+        }
+
+        if (user.verification_status !== 'approved') {
+          return fail(params, 403, problem('verification_required', 403, 'Требуется верификация'))
+        }
+        const rental = rentals.find(item => item.id === params.request.params.id
+          && rentalOwners.get(item.id)?.id === user.id)
+        if (!rental) {
+          return fail(params, 404, problem('not_found', 404, 'Бронь не найдена'))
+        }
+        if (rental.status !== 'active' && rental.status !== 'overdue') {
+          return fail(params, 409, problem('rental_not_active', 409, 'Сообщить о неполадке можно по активной или просроченной аренде'))
+        }
+
         const since = Date.now() - 24 * HOUR
         const createdToday = tickets.filter(ticket =>
           ticket.rental_id === rental.id && ticket.user.id === user.id && Date.parse(ticket.created_at) > since,
         ).length
 
-        if (createdToday >= 5) {
-          return fail(params, 429, problem('ticket_limit', 429, 'Лимит обращений: не более 5 в сутки по одной аренде'))
+        if (createdToday >= tenant.policies.tickets_per_rental_per_day) {
+          return fail(params, 429, problem('issue_limit_exceeded', 429, 'Достигнут суточный лимит обращений по аренде'))
         }
 
-        const ticket: Ticket = {
+        const photos = fileIds.filter(id => ticketPhotoOwners.get(id) === user.id).map(() => mockTicketPhoto)
+        const receipt: TicketReceipt = {
           id: uid(ticketSeq++),
           rental_id: rental.id,
+          created_at: iso(0),
+          skipped_photo_count: uploadFailures + fileIds.length - photos.length,
+          status: 'submitted',
+          version: 1,
+        }
+        const ticket: Ticket = {
+          ...receipt,
           lot: rental.lot,
           user: userRef(user),
-          category: body.category as Ticket['category'],
+          category: body.category,
           description,
-          photo_urls: Array.isArray(body.photo_urls)
-            ? body.photo_urls.filter((url): url is string => typeof url === 'string').slice(0, 3)
-            : [],
-          status: 'submitted',
+          photo_urls: photos,
           admin_comment: null,
-          created_at: iso(0),
+          updated_at: receipt.created_at,
           resolved_at: null,
-          version: 1,
         }
 
         tickets.unshift(ticket)
+        ticketRequests.set(requestKey, { fingerprint, receipt })
         params.setStatusCode(201)
 
-        return ticket
+        return receipt
       }, { delay: 150 }),
 
       rest.get('/api/v1/me/tickets', (params) => {
@@ -1401,13 +1458,22 @@ export default mock(
         )
 
         const page: TicketPage = {
-          items: filtered.slice(offset, offset + limit),
+          items: filtered.slice(offset, offset + limit).map(withoutTicketPhotos),
           total: filtered.length,
           limit,
           offset,
         }
 
         return page
+      }, { delay: 80 }),
+
+      rest.get('/api/v1/me/tickets/:id', (params) => {
+        const user = currentUser(params)
+        if (!user) {
+          return fail(params, 401, problem('token_invalid', 401, 'Требуется вход'))
+        }
+        const ticket = tickets.find(item => item.user.id === user.id && item.id === params.request.params.id)
+        return ticket ?? fail(params, 404, problem('not_found', 404, 'Тикет не найден'))
       }, { delay: 80 }),
 
       rest.get('/api/v1/admin/analytics/summary', (params) => {
@@ -2292,13 +2358,25 @@ export default mock(
         const filtered = tickets.filter(item => !status || item.status === status)
 
         const page: TicketPage = {
-          items: filtered.slice(offset, offset + limit),
+          items: filtered.slice(offset, offset + limit).map(withoutTicketPhotos),
           total: filtered.length,
           limit,
           offset,
         }
 
         return page
+      }, { delay: 80 }),
+
+      rest.get('/api/v1/admin/tickets/:id', (params) => {
+        const user = currentUser(params)
+        if (!user) {
+          return fail(params, 401, problem('token_invalid', 401, 'Требуется вход'))
+        }
+        if (user.role !== 'admin' && user.role !== 'owner') {
+          return fail(params, 403, problem('forbidden_role', 403, 'Недостаточно прав'))
+        }
+        const ticket = tickets.find(item => item.id === params.request.params.id)
+        return ticket ?? fail(params, 404, problem('not_found', 404, 'Тикет не найден'))
       }, { delay: 80 }),
 
       rest.patch('/api/v1/admin/tickets/:id', (params) => {
@@ -2351,10 +2429,11 @@ export default mock(
 
         ticket.status = body.status
         ticket.admin_comment = comment || ticket.admin_comment
-        ticket.resolved_at = body.status === 'resolved' ? iso(0) : null
+        ticket.updated_at = iso(0)
+        ticket.resolved_at = body.status === 'resolved' ? ticket.updated_at : null
         ticket.version += 1
 
-        return ticket
+        return withoutTicketPhotos(ticket)
       }, { delay: 150 }),
     ],
   },

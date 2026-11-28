@@ -19,6 +19,7 @@ from app.db import create_engine, create_session_factory
 from app.main import create_app
 from app.models import Tenant, User
 from src.domain.entities.user_account import UserRole
+from src.infrastructure.postgres.models.audit_log_record import AuditLogRecord
 from src.infrastructure.postgres.models.category_record import CategoryRecord
 from src.infrastructure.postgres.models.lot_record import LotRecord
 from src.infrastructure.postgres.models.lot_variant_record import LotVariantRecord
@@ -116,8 +117,7 @@ async def _create_rental(
     return rental
 
 
-@pytest.fixture(scope="module")
-def seeded() -> Iterator[SeededRentals]:
+def seed_rentals() -> Iterator[SeededRentals]:
     assert DATABASE_URL is not None
     engine = create_engine(DATABASE_URL)
     factory = create_session_factory(engine)
@@ -220,6 +220,11 @@ def seeded() -> Iterator[SeededRentals]:
         try:
             async with factory() as session:
                 await session.execute(
+                    delete(AuditLogRecord).where(
+                        AuditLogRecord.tenant_id.in_((primary.id, secondary.id))
+                    )
+                )
+                await session.execute(
                     delete(Tenant).where(Tenant.id.in_((primary.id, secondary.id)))
                 )
                 await session.commit()
@@ -233,6 +238,11 @@ def seeded() -> Iterator[SeededRentals]:
         asyncio.run(cleanup())
 
 
+@pytest.fixture(scope="module")
+def seeded() -> Iterator[SeededRentals]:
+    yield from seed_rentals()
+
+
 def _client(tenant: Tenant) -> TestClient:
     settings = Settings(
         database_url=DATABASE_URL,
@@ -241,7 +251,11 @@ def _client(tenant: Tenant) -> TestClient:
         database_role="keep_rollin_app",
         jwt_secret=JWT_SECRET,
     )
-    return TestClient(create_app(settings), base_url=f"https://{tenant.domain}")
+    return TestClient(
+        create_app(settings),
+        base_url=f"https://{tenant.domain}",
+        headers={"Origin": f"https://{tenant.domain}", "Sec-Fetch-Site": "same-origin"},
+    )
 
 
 def _auth(user: User) -> dict[str, str]:

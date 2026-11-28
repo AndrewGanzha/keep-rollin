@@ -326,7 +326,7 @@ _Подгруппа **B6** · 5 задач._
 
 **Зависит:** BE-BOOK-01
 **Объём:** `GET /me/rentals[/{id}]`: `remaining_seconds`, `cancellation_deadline`, лот, тикеты.
-Тикеты подключаются в BE-TIC-01; сейчас карточка отдаёт `tickets: []`.
+Карточка аренды показывает связанные тикеты, созданные через BE-TIC-01.
 **AC:**
 - [x] `remaining_seconds` считается серверным `now`.
 - [x] После окончания интервала `remaining_seconds` отрицателен, в том числе у `overdue`.
@@ -357,28 +357,28 @@ _Подгруппа **B7** · 3 задачи._
 ### BE-TIC-01 · Создание тикета
 
 **Зависит:** BE-BOOK-03, BE-FILE-01
-**Объём:** `POST /me/rentals/{id}/tickets` (категория, описание 10–1000, фото ≤ 3), лимит 5/сутки, Idempotency-Key, outbox админам, audit.
+**Объём:** `POST /me/rentals/{id}/tickets` (категория, описание 10–1000, фото ≤ 3), лимит за 24 часа (по умолчанию 5), Idempotency-Key, outbox админам, audit.
 **AC:**
-- [ ] Без `active`/`overdue` аренды → 409 `rental_not_active`.
-- [ ] 6-й тикет за сутки → 429 `issue_limit_exceeded`.
-- [ ] Отказ загрузки фото не блокирует тикет (A4), это отражено в ответе.
+- [x] Без `active`/`overdue` аренды → 409 `rental_not_active`.
+- [x] 6-й тикет за сутки → 429 `issue_limit_exceeded`.
+- [x] Отказ загрузки фото не блокирует тикет (A4), это отражено в ответе.
 
 ### BE-TIC-02 · Тикеты пользователя
 
 **Зависит:** BE-TIC-01
 **Объём:** `GET /me/tickets[/{id}]`.
 **AC:**
-- [ ] Чужой тикет → 404.
-- [ ] Видны статус, комментарий админа, даты.
+- [x] Чужой тикет → 404.
+- [x] Видны статус, комментарий админа, даты.
 
 ### BE-TIC-03 · Обработка админом
 
 **Зависит:** BE-TIC-02, BE-AVA-04
 **Объём:** `GET /admin/tickets[/{id}]`, `PATCH /admin/tickets/{id}` (статус, комментарий, `put_lot_maintenance` + `maintenance_until`), audit, outbox.
 **AC:**
-- [ ] Переходы: `submitted→in_progress→resolved`; недопустимый переход → 409 `validation_error`/`stale_version`.
-- [ ] `resolved` без комментария → 422.
-- [ ] `put_lot_maintenance` создаёт occupancy-блок и меняет `lot.status` атомарно; конфликт → 409.
+- [x] Переходы: `submitted→in_progress→resolved`; недопустимый переход → 409 `validation_error`/`stale_version`.
+- [x] `resolved` без комментария → 422.
+- [x] `put_lot_maintenance` создаёт occupancy-блок и меняет `lot.status` атомарно; конфликт → 409.
 
 ## 6.2.8. Уведомления и outbox
 

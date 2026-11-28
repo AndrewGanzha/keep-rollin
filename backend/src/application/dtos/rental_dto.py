@@ -5,10 +5,11 @@ from math import floor
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from src.application.dtos.verification_dto import AdminUserRef
 from src.infrastructure.postgres.models.rental_record import RentalStatus
+from src.infrastructure.postgres.models.ticket_record import TicketCategory, TicketStatus
 
 if TYPE_CHECKING:
     from app.models import User
@@ -69,8 +70,17 @@ class AdminRental(Rental):
         )
 
 
+class RentalTicket(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    category: TicketCategory
+    status: TicketStatus
+    created_at: datetime
+
+
 class RentalDetail(Rental):
-    tickets: list[dict[str, object]]
+    tickets: list[RentalTicket]
 
 
 class AdminRentalDetail(AdminRental):
