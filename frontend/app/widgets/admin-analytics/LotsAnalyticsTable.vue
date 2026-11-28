@@ -3,7 +3,10 @@ import type { AnalyticsBucket } from '~/entities/analytics'
 import { formatMoney } from '~/shared/lib'
 import { EmptyState } from '~/shared/ui'
 
-withDefaults(defineProps<{ lots: AnalyticsBucket[]; loading?: boolean }>(), { loading: false })
+withDefaults(defineProps<{ lots: AnalyticsBucket[]; loading?: boolean; currency?: string }>(), {
+  loading: false,
+  currency: 'RUB',
+})
 
 const emit = defineEmits<{ select: [bucket: AnalyticsBucket] }>()
 
@@ -64,7 +67,7 @@ const utilizationClass = (value: number): string => {
           style="min-width: 130px"
         >
           <template #body="{ data }">
-            {{ formatMoney(data.revenue_minor) }}
+            {{ formatMoney(data.revenue_minor, currency) }}
           </template>
         </Column>
         <Column
@@ -72,7 +75,7 @@ const utilizationClass = (value: number): string => {
           style="min-width: 130px"
         >
           <template #body="{ data }">
-            {{ formatMoney(avgCheck(data)) }}
+            {{ formatMoney(avgCheck(data), currency) }}
           </template>
         </Column>
         <Column

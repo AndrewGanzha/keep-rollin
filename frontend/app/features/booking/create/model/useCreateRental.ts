@@ -1,5 +1,6 @@
 import { createRentalRequest, type Rental } from '~/entities/rental'
 import { useSessionStore } from '~/entities/session'
+import { offerGateLocation } from '~/features/offer-acceptance'
 import { ApiError, useApi } from '~/shared/api'
 
 export interface RentalRange {
@@ -49,6 +50,15 @@ export const useCreateRental = () => {
       return rental
     } catch (caught) {
       const code = caught instanceof ApiError ? caught.code : ''
+      if (code === 'offer_not_accepted') {
+        const next = router.currentRoute.value.fullPath
+        await router.push(offerGateLocation(next))
+        return null
+      }
+      if (code === 'verification_required') {
+        await router.push('/account/verification')
+        return null
+      }
       const message = code === 'slot_taken'
         ? 'Этот интервал уже занят — выберите другое время'
         : code === 'battery_unavailable'

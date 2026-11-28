@@ -4,3 +4,13 @@ deploy/deploy.env
 
 # Транскрипт голосовых заказчика — источник CR-01, в git не кладём.
 tasks.md
+
+# Python / backend
+backend/.venv/
+backend/.env
+backend/.pytest_cache/
+backend/.mypy_cache/
+backend/.ruff_cache/
+backend/**/__pycache__/
+.coverage
+*.py[cod]

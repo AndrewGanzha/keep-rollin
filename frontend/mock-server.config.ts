@@ -1,7 +1,17 @@
+import { createHash, randomUUID } from 'node:crypto'
 import { mock, rest } from 'mock-config-server'
 import { addDays, dayKeyOf, zonedDayStartIso } from './app/shared/lib/calendar'
 import type { components } from './app/shared/api/schema'
+import { createMockAnalytics, parseAnalyticsRange } from './mock/analytics'
 import { peakUsage, type BatteryCommit } from './mock/capacity'
+import {
+  createMockOffers,
+  parseAcceptance,
+  parseOfferId,
+  parseOfferPage,
+  parseOfferText,
+  parseRegistration,
+} from './mock/onboarding'
 import {
   computePrice,
   minAllowedUnits,
@@ -40,18 +50,23 @@ type RentalPage = components['schemas']['RentalPage']
 type CreateRentalRequest = components['schemas']['CreateRentalRequest']
 type CreateLotRequest = components['schemas']['CreateLotRequest']
 type LotStatusRequest = components['schemas']['LotStatusRequest']
-type AnalyticsSummary = components['schemas']['AnalyticsSummary']
-type AnalyticsBucket = components['schemas']['AnalyticsBucket']
 type AnalyticsRevenue = components['schemas']['AnalyticsRevenue']
 type AnalyticsLotDetail = components['schemas']['AnalyticsLotDetail']
 type AdminRental = components['schemas']['AdminRental']
 type AdminRentalPage = components['schemas']['AdminRentalPage']
 type AdminUserRef = components['schemas']['AdminUserRef']
 type VerificationRequest = components['schemas']['VerificationRequest']
+type AdminVerificationRequestSummary = components['schemas']['AdminVerificationRequestSummary']
 type VerificationRequestPage = components['schemas']['VerificationRequestPage']
 type Ticket = components['schemas']['Ticket']
 type TicketPage = components['schemas']['TicketPage']
+type TicketReceipt = components['schemas']['TicketReceipt']
+type CreateTicketRequest = components['schemas']['CreateTicketRequest']
 type UpdateBatteryStockRequest = components['schemas']['UpdateBatteryStockRequest']
+type NotificationPreferences = components['schemas']['NotificationPreferencesResponse']
+type UpdateNotificationPreferences = components['schemas']['UpdateNotificationPreferencesRequest']
+type PushSubscriptionMetadata = components['schemas']['PushSubscriptionResponse']
+type UpsertPushSubscription = components['schemas']['UpsertPushSubscriptionRequest']
 
 /** Лот в состоянии мока: `price_from` всегда вычисляется при выдаче. */
 type MockLot = Omit<Lot, 'price_from'>
@@ -82,7 +97,7 @@ const tenant: Tenant = {
   primary_color: '#0f766e',
   timezone: 'Europe/Moscow',
   currency: 'RUB',
-  vapid_public_key: null,
+  vapid_public_key: process.env.MOCK_VAPID_PUBLIC_KEY ?? null,
   policies: {
     booking_horizon_days: 60,
     min_rental_minutes: 60,
@@ -404,7 +419,42 @@ const seedUsers: User[] = [
   },
 ]
 
+const initialOfferDate = iso(-24 * HOUR)
+const offers = createMockOffers({
+  id: uid(950),
+  version: 1,
+  title: 'Демонстрационная оферта Keep Rollin',
+  body: '## Условия аренды\n\n- Соблюдайте правила эксплуатации.\n- Возвращайте транспорт в согласованный срок.',
+  status: 'active',
+  published_at: initialOfferDate,
+  created_at: initialOfferDate,
+  updated_at: initialOfferDate,
+}, seedUsers.map(user => user.id))
+const registeredUsers = new Map<string, { user: User; passwordHash: string }>()
+const mockPasswordHash = (password: string) => createHash('sha256').update(password).digest('hex')
 const tokens = new Map<string, User>()
+const mfaChallenges = new Map<string, { user: User; setup: boolean; expiresAt: number }>()
+const mfaEnabled = new Set<string>([uid(901)])
+const recoveryCodes = new Map<string, Set<string>>()
+const mockMfaSecret = 'JBSWY3DPEHPK3PXP'
+let mockReset: { token: string; email: string | undefined } | null = null
+const notificationPreferences = new Map<string, NotificationPreferences>()
+const pushSubscriptions = new Map<string, Map<string, PushSubscriptionMetadata>>()
+
+const preferencesFor = (user: User): NotificationPreferences => {
+  const saved = notificationPreferences.get(user.id)
+  if (saved) return saved
+  const locked = ['verification.rejected', 'rental.overdue.user', 'ticket.resolved.user']
+  if (user.role !== 'user') locked.push('rental.overdue.admin', 'ticket.created.admin')
+  return {
+    push_enabled: true,
+    email_by_event: Object.fromEntries([
+      'verification.approved', 'booking.confirmed', 'rental.closed', 'booking.cancelled',
+      'rental.ending_soon', 'ticket.updated.user', ...locked,
+    ].map(event => [event, true])),
+    locked_events: locked,
+  }
+}
 
 const rentalLot = (lot: Pick<Lot, 'id' | 'slug' | 'name' | 'photos'>): Rental['lot'] => ({
   id: lot.id,
@@ -511,7 +561,7 @@ const userRef = (user: User): AdminUserRef => ({ id: user.id, name: user.name, e
 const rentalOwners = new Map<string, User>([
   [uid(301), userById(uid(900))],
   [uid(302), userById(uid(900))],
-  [uid(303), userById(uid(903))],
+  [uid(303), userById(uid(900))],
   [uid(304), userById(uid(904))],
   [uid(305), userById(uid(903))],
   [uid(306), userById(uid(904))],
@@ -664,7 +714,22 @@ const verificationRequests: VerificationRequest[] = [
   },
 ]
 
+const toVerificationSummary = (request: VerificationRequest): AdminVerificationRequestSummary => ({
+  id: request.id,
+  user: request.user,
+  status: request.status,
+  admin_comment: request.admin_comment,
+  created_at: request.created_at,
+  reviewed_at: request.reviewed_at,
+  version: request.version,
+})
+
 let ticketSeq = 700
+let ticketPhotoSeq = 6000
+const ticketPhotoOwners = new Map<string, string>()
+const ticketRequests = new Map<string, { fingerprint: string; receipt: TicketReceipt }>()
+const mockTicketPhoto = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAASCAIAAADOjonJAAAALElEQVR4nGNY9+ASGhIpzkNDxKhhGDWIjgaRpw1TzahB9DRo8KWjUYMIqgEAtUjP17FBDTMAAAAASUVORK5CYII='
+const withoutTicketPhotos = (ticket: Ticket): Ticket => ({ ...ticket, photo_urls: [] })
 
 const tickets: Ticket[] = [
   {
@@ -674,10 +739,12 @@ const tickets: Ticket[] = [
     user: userRef(userById(uid(900))),
     category: 'no_power',
     description: 'Батарея не включается после зарядки, индикатор мигает красным',
-    photo_urls: ['https://example.com/tickets/601-1.jpg'],
+    photo_urls: [mockTicketPhoto],
+    skipped_photo_count: 0,
     status: 'submitted',
     admin_comment: null,
     created_at: iso(-2 * HOUR),
+    updated_at: iso(-2 * HOUR),
     resolved_at: null,
     version: 1,
   },
@@ -689,9 +756,11 @@ const tickets: Ticket[] = [
     category: 'battery',
     description: 'Аккумулятор держит заряд примерно вдвое меньше заявленного',
     photo_urls: [],
+    skipped_photo_count: 0,
     status: 'in_progress',
     admin_comment: 'Проверяем состояние на складе',
     created_at: iso(-20 * HOUR),
+    updated_at: iso(-18 * HOUR),
     resolved_at: null,
     version: 2,
   },
@@ -702,10 +771,12 @@ const tickets: Ticket[] = [
     user: userRef(userById(uid(900))),
     category: 'damage',
     description: 'На раме обнаружена трещина возле крепления двигателя',
-    photo_urls: ['https://example.com/tickets/603-1.jpg', 'https://example.com/tickets/603-2.jpg'],
+    photo_urls: [mockTicketPhoto, mockTicketPhoto],
+    skipped_photo_count: 0,
     status: 'resolved',
     admin_comment: 'Лот переведён в обслуживание',
     created_at: iso(-96 * HOUR),
+    updated_at: iso(-90 * HOUR),
     resolved_at: iso(-90 * HOUR),
     version: 3,
   },
@@ -754,6 +825,49 @@ const currentUser = (request: AuthorizedRequest): User | null => {
   const token = typeof header === 'string' ? header.replace(/^Bearer\s+/i, '') : ''
 
   return tokens.get(token) ?? null
+}
+
+const offersAccessProblem = (params: Responder & AuthorizedRequest): Problem | null => {
+  params.setHeader('Cache-Control', 'no-store')
+  const user = currentUser(params)
+  if (!user) return fail(params, 401, problem('token_invalid', 401, 'Требуется вход'))
+  return permissions(user).includes('offers.manage')
+    ? null
+    : fail(params, 403, problem('forbidden_role', 403, 'Недостаточно прав'))
+}
+
+const offerValidationProblem = (params: Responder) =>
+  fail(params, 422, problem('validation_error', 422, 'Проверьте поля'))
+
+const offerNotFound = (params: Responder) =>
+  fail(params, 404, problem('not_found', 404, 'Оферта не найдена'))
+
+const offerNotEditable = (params: Responder) =>
+  fail(params, 409, problem('offer_not_editable', 409, 'Можно изменить только черновик'))
+
+const loginResponse = (user: User): LoginResponse => {
+  const token = `mock-${randomUUID()}`
+  tokens.set(token, user)
+  return {
+    access_token: token,
+    expires_in: 900,
+    user,
+    role: user.role,
+    permissions: permissions(user),
+    mfa_required: false,
+    mfa_setup_required: false,
+  }
+}
+
+const getMfaChallenge = (token: string | undefined, setup: boolean) => {
+  if (!token) return undefined
+  const challenge = mfaChallenges.get(token)
+  if (!challenge) return undefined
+  if (challenge.expiresAt <= Date.now()) {
+    mfaChallenges.delete(token)
+    return undefined
+  }
+  return challenge.setup === setup ? challenge : undefined
 }
 
 const withRemaining = (rental: Rental): Rental => ({
@@ -807,153 +921,28 @@ lots.forEach((lot, lotIndex) => {
   }
 })
 
-const REVENUE_STATUSES: Rental['status'][] = ['active', 'overdue', 'completed']
+const analytics = createMockAnalytics(lots, categories, rentals, tenant.timezone)
 
-const dayKeyFor = (timeMs: number): string => {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: tenant.timezone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(new Date(timeMs))
-  const read = (type: string): string => parts.find(part => part.type === type)?.value ?? ''
-
-  return `${read('year')}-${read('month')}-${read('day')}`
+const analyticsAccessProblem = (params: Responder & AuthorizedRequest): Problem | null => {
+  const user = currentUser(params)
+  if (!user) return fail(params, 401, problem('token_invalid', 401, 'Требуется вход'))
+  return user.role === 'admin' || user.role === 'owner'
+    ? null
+    : fail(params, 403, problem('forbidden_role', 403, 'Недостаточно прав'))
 }
 
-const rentalsInPeriod = (fromMs: number, toMs: number, lotId?: string): Rental[] =>
-  rentals.filter(rental =>
-    Date.parse(rental.start_time) >= fromMs
-    && Date.parse(rental.start_time) < toMs
-    && (!lotId || rental.lot.id === lotId),
-  )
+const analyticsPeriodProblem = (params: Responder) =>
+  fail(params, 422, problem('validation_error', 422, 'Проверьте период'))
 
-const billed = (list: Rental[]): Rental[] => list.filter(rental => REVENUE_STATUSES.includes(rental.status))
-
-const occupancyMinutes = (list: Rental[], fromMs: number, toMs: number): number =>
-  billed(list).reduce((sum, rental) => {
-    const start = Math.max(Date.parse(rental.start_time), fromMs)
-    const end = Math.min(Date.parse(rental.end_time), toMs)
-
-    return sum + Math.max(end - start, 0) / 60000
-  }, 0)
-
-const utilization = (
-  scoped: Rental[],
-  fromMs: number,
-  toMs: number,
-  fleetSize: number,
-): number => {
-  const available = Math.max(((toMs - fromMs) / 60000) * Math.max(fleetSize, 1), 1)
-
-  return Math.min(100, Math.round((occupancyMinutes(scoped, fromMs, toMs) / available) * 1000) / 10)
-}
-
-const analyticsSummary = (fromMs: number, toMs: number, lotId?: string): AnalyticsSummary => {
-  const scoped = rentalsInPeriod(fromMs, toMs, lotId)
-  const revenue = billed(scoped).reduce((sum, rental) => sum + rental.price_minor, 0)
-  const cancelled = scoped.filter(rental => rental.status === 'cancelled').length
-  const billableCount = scoped.length - cancelled
-  const fleetSize = lotId ? 1 : lots.filter(lot => lot.status !== 'archived').length
-
-  return {
-    from: new Date(fromMs).toISOString(),
-    to: new Date(toMs).toISOString(),
-    revenue_minor: revenue,
-    rentals_count: scoped.length,
-    cancelled_count: cancelled,
-    overdue_count: scoped.filter(rental => rental.status === 'overdue').length,
-    avg_rental_minor: billableCount > 0 ? Math.round(revenue / billableCount) : 0,
-    utilization_pct: utilization(scoped, fromMs, toMs, fleetSize),
+const analyticsGrouped = (
+  params: Responder,
+  range: NonNullable<ReturnType<typeof parseAnalyticsRange>>,
+  groupBy: unknown,
+): AnalyticsRevenue | Problem => {
+  if (groupBy !== 'lot' && groupBy !== 'category' && groupBy !== 'day') {
+    return fail(params, 422, problem('validation_error', 422, 'Недопустимая группировка'))
   }
-}
-
-const makeBucket = (
-  key: string,
-  label: string,
-  scoped: Rental[],
-  fromMs: number,
-  toMs: number,
-  fleetSize: number,
-): AnalyticsBucket => ({
-  key,
-  label,
-  rentals_count: scoped.length,
-  cancelled_count: scoped.filter(rental => rental.status === 'cancelled').length,
-  revenue_minor: billed(scoped).reduce((sum, rental) => sum + rental.price_minor, 0),
-  utilization_pct: utilization(scoped, fromMs, toMs, fleetSize),
-})
-
-const analyticsBuckets = (
-  groupBy: 'lot' | 'category' | 'day',
-  fromMs: number,
-  toMs: number,
-  lotId?: string,
-): AnalyticsBucket[] => {
-  if (groupBy === 'lot') {
-    return lots
-      .map(lot => makeBucket(
-        lot.id,
-        lot.name,
-        rentalsInPeriod(fromMs, toMs, lot.id),
-        fromMs,
-        toMs,
-        1,
-      ))
-      .sort((left, right) => right.revenue_minor - left.revenue_minor)
-  }
-
-  if (groupBy === 'category') {
-    return categories
-      .map(category => makeBucket(
-        category.id,
-        category.name,
-        rentalsInPeriod(fromMs, toMs, lotId).filter(rental =>
-          lots.find(lot => lot.id === rental.lot.id)?.category_id === category.id,
-        ),
-        fromMs,
-        toMs,
-        Math.max(lots.filter(lot => lot.category_id === category.id && lot.status !== 'archived').length, 1),
-      ))
-      .sort((left, right) => right.revenue_minor - left.revenue_minor)
-  }
-
-  const buckets: AnalyticsBucket[] = []
-  let cursor = fromMs
-
-  while (cursor < toMs) {
-    const next = Math.min(cursor + 24 * HOUR, toMs)
-    const key = dayKeyFor(cursor)
-
-    buckets.push(makeBucket(
-      key,
-      key,
-      rentalsInPeriod(cursor, next, lotId),
-      cursor,
-      next,
-      1,
-    ))
-    cursor = next
-  }
-
-  return buckets
-}
-
-const parseAnalyticsRange = (
-  query: Record<string, unknown>,
-): { fromMs: number; toMs: number } | null => {
-  const fromMs = typeof query.from === 'string' ? Date.parse(query.from) : Number.NaN
-  const toMs = typeof query.to === 'string' ? Date.parse(query.to) : Number.NaN
-
-  if (!Number.isFinite(fromMs) || !Number.isFinite(toMs)) {
-    return null
-  }
-
-  if (toMs <= fromMs || toMs - fromMs > 366 * 24 * HOUR) {
-    return null
-  }
-
-  return { fromMs, toMs }
+  return { group_by: groupBy, buckets: analytics.buckets(groupBy, range) }
 }
 
 export default mock(
@@ -962,6 +951,13 @@ export default mock(
     name: 'rest',
     configs: [
       rest.get('/api/v1/public/tenant', () => tenant, { delay: 60 }),
+
+      rest.get('/api/v1/public/offers/current', (params) => {
+        const offer = offers.current()
+        if (!offer) return offerNotFound(params)
+        params.setHeader('Cache-Control', 'max-age=60')
+        return offer
+      }),
 
       rest.get('/api/v1/public/categories', () => categories, { delay: 60 }),
 
@@ -1101,10 +1097,32 @@ export default mock(
         return availability
       }, { delay: 100 }),
 
+      rest.post('/api/v1/auth/register', (params) => {
+        const { payload, fields } = parseRegistration(params.request.body)
+        if (!payload) return fail(params, 422, problem('validation_error', 422, 'Проверьте поля', undefined, fields))
+
+        const { email, name, password } = payload
+        if (registeredUsers.has(email) || seedUsers.some(user => user.email === email)) {
+          return fail(params, 409, problem('email_taken', 409, 'Этот email уже зарегистрирован'))
+        }
+
+        const user: User = {
+          id: randomUUID(),
+          email,
+          name: name?.trim() || (email.split('@')[0] ?? email).slice(0, 120),
+          role: 'user',
+          verification_status: 'pending',
+        }
+        registeredUsers.set(email, { user, passwordHash: mockPasswordHash(password) })
+        params.setStatusCode(201)
+        return loginResponse(user)
+      }),
+
       rest.post('/api/v1/auth/login', (params) => {
         const body = (params.request.body ?? {}) as { email?: string; password?: string }
 
-        if (!body.email || !body.password || body.password.length < 8) {
+        if (typeof body.email !== 'string' || !body.email.trim()
+          || typeof body.password !== 'string' || body.password.length < 8) {
           return fail(
             params,
             422,
@@ -1115,20 +1133,80 @@ export default mock(
           )
         }
 
-        const user: User = seedUsers.find(item => item.email === body.email)
-          ?? { ...mockUser, email: body.email }
-        const token = `mock-${Math.random().toString(36).slice(2, 10)}`
-        tokens.set(token, user)
-
-        const response: LoginResponse = {
-          access_token: token,
-          expires_in: 900,
-          user,
-          role: user.role,
-          permissions: permissions(user),
+        const email = body.email.trim().toLowerCase()
+        const registered = registeredUsers.get(email)
+        const user = registered?.user ?? seedUsers.find(item => item.email === email)
+        if (!user || (registered && registered.passwordHash !== mockPasswordHash(body.password))) {
+          return fail(params, 401, problem('invalid_credentials', 401, 'Неверный email или пароль'))
         }
 
-        return response
+        if (user.role === 'user') return loginResponse(user)
+
+        const setup = !mfaEnabled.has(user.id)
+        const token = `mock-challenge-${randomUUID()}`
+        mfaChallenges.set(token, { user, setup, expiresAt: Date.now() + 300_000 })
+        return {
+          expires_in: 300, mfa_required: !setup, mfa_setup_required: setup, mfa_token: token,
+        } satisfies LoginResponse
+      }),
+
+      rest.post('/api/v1/auth/mfa/setup', (params) => {
+        const { mfa_token: token } = (params.request.body ?? {}) as Partial<components['schemas']['MfaTokenRequest']>
+        const challenge = getMfaChallenge(token, true)
+        if (!challenge) return fail(params, 401, problem('token_invalid', 401, 'Начните вход заново'))
+
+        return {
+          secret: mockMfaSecret,
+          otpauth_uri: `otpauth://totp/Keep%20Rollin:${encodeURIComponent(challenge.user.email)}?secret=${mockMfaSecret}&issuer=Keep%20Rollin`,
+        }
+      }),
+
+      rest.post('/api/v1/auth/mfa/confirm', (params) => {
+        const { mfa_token: token, code } = (params.request.body ?? {}) as Partial<components['schemas']['MfaCodeRequest']>
+        const challenge = getMfaChallenge(token, true)
+        if (!token || !challenge) return fail(params, 401, problem('token_invalid', 401, 'Начните вход заново'))
+        if (code !== '123456') return fail(params, 401, problem('invalid_mfa_code', 401, 'Код неверен'))
+
+        mfaChallenges.delete(token)
+        mfaEnabled.add(challenge.user.id)
+        const codes = Array.from({ length: 10 }, () => randomUUID().slice(0, 13))
+        recoveryCodes.set(challenge.user.id, new Set(codes))
+        return { ...loginResponse(challenge.user), recovery_codes: codes }
+      }),
+
+      rest.post('/api/v1/auth/mfa/verify', (params) => {
+        const { mfa_token: token, code } = (params.request.body ?? {}) as Partial<components['schemas']['MfaCodeRequest']>
+        const challenge = getMfaChallenge(token, false)
+        if (!token || !challenge) return fail(params, 401, problem('token_invalid', 401, 'Начните вход заново'))
+        if (!code || (code !== '123456' && !recoveryCodes.get(challenge.user.id)?.delete(code))) {
+          return fail(params, 401, problem('invalid_mfa_code', 401, 'Код неверен'))
+        }
+
+        mfaChallenges.delete(token)
+        return loginResponse(challenge.user)
+      }),
+
+      rest.post<{ body: { email?: unknown } }>('/api/v1/auth/password/forgot', (params) => {
+        const { email } = params.request.body ?? {}
+        mockReset = {
+          token: 'mock-password-reset-token',
+          email: typeof email === 'string' ? email.trim().toLowerCase() : undefined,
+        }
+        params.setStatusCode(202)
+        return { message: 'If the account exists, password reset instructions will be sent.' }
+      }),
+
+      rest.post('/api/v1/auth/password/reset', (params) => {
+        const { token, password } = (params.request.body ?? {}) as Partial<components['schemas']['PasswordResetRequest']>
+        if (!mockReset || token !== mockReset.token) return fail(params, 401, problem('token_invalid', 401, 'Ссылка недействительна'))
+        if (typeof password !== 'string' || password.length < 8 || password.length > 128) {
+          return fail(params, 422, problem('validation_error', 422, 'Проверьте пароль'))
+        }
+        const registered = mockReset.email ? registeredUsers.get(mockReset.email) : undefined
+        if (registered) registered.passwordHash = mockPasswordHash(password)
+        mockReset = null
+        params.setStatusCode(204)
+        return undefined
       }),
 
       rest.get('/api/v1/auth/session', (params) => {
@@ -1142,10 +1220,99 @@ export default mock(
           user,
           role: user.role,
           permissions: permissions(user),
-          offer_accepted: true,
+          offer_accepted: offers.hasAcceptedCurrent(user.id),
+          prefs_summary: { push_enabled: preferencesFor(user).push_enabled },
         }
 
         return session
+      }),
+      rest.get('/api/v1/me/offer-acceptances', (params) => {
+        params.setHeader('Cache-Control', 'no-store')
+        const user = currentUser(params)
+        if (!user) return fail(params, 401, problem('token_invalid', 401, 'Требуется вход'))
+        return offers.history(user.id)
+      }),
+
+      rest.post('/api/v1/me/offer-acceptances', (params) => {
+        params.setHeader('Cache-Control', 'no-store')
+        const user = currentUser(params)
+        if (!user) return fail(params, 401, problem('token_invalid', 401, 'Требуется вход'))
+        const payload = parseAcceptance(params.request.body)
+        if (!payload) return offerValidationProblem(params)
+        const accepted = offers.accept(user.id, payload.offer_version_id, params.request.ip ?? null)
+        if (accepted === 'not_found') return offerNotFound(params)
+        if (accepted === 'offer_not_active') {
+          return fail(params, 409, problem('offer_not_active', 409, 'Версия оферты больше не действует'))
+        }
+        return accepted
+      }),
+
+      rest.get('/api/v1/me/notification-preferences', (params) => {
+        const user = currentUser(params)
+        if (!user) return fail(params, 401, problem('token_invalid', 401, 'Требуется вход'))
+        return preferencesFor(user)
+      }),
+      rest.put('/api/v1/me/notification-preferences', (params) => {
+        const user = currentUser(params)
+        if (!user) return fail(params, 401, problem('token_invalid', 401, 'Требуется вход'))
+        const state = preferencesFor(user)
+        const patch = (params.request.body ?? {}) as UpdateNotificationPreferences
+        const changes = patch.email_by_event ?? {}
+        if (state.locked_events.some(event => changes[event] === false)) {
+          return fail(params, 422, problem('critical_channel_locked', 422, 'Письмо обязательно'))
+        }
+        if (Object.keys(changes).some(event => !(event in state.email_by_event))) {
+          return fail(params, 422, problem('validation_error', 422, 'Неизвестное событие'))
+        }
+        const next = {
+          ...state,
+          push_enabled: patch.push_enabled ?? state.push_enabled,
+          email_by_event: { ...state.email_by_event, ...changes },
+        }
+        notificationPreferences.set(user.id, next)
+        return next
+      }),
+      rest.get('/api/v1/me/push-subscriptions', (params) => {
+        const user = currentUser(params)
+        if (!user) return fail(params, 401, problem('token_invalid', 401, 'Требуется вход'))
+        return [...(pushSubscriptions.get(user.id)?.values() ?? [])]
+      }),
+      rest.post('/api/v1/me/push-subscriptions', (params) => {
+        const user = currentUser(params)
+        if (!user) return fail(params, 401, problem('token_invalid', 401, 'Требуется вход'))
+        const body = (params.request.body ?? {}) as Partial<UpsertPushSubscription>
+        if (!body.endpoint || !body.keys?.p256dh || !body.keys.auth) {
+          return fail(params, 422, problem('validation_error', 422, 'Подписка неполная'))
+        }
+        const hash = createHash('sha256').update(body.endpoint).digest('hex')
+        if ([...pushSubscriptions].some(([owner, rows]) => owner !== user.id && rows.has(hash))) {
+          return fail(params, 409, problem('conflict', 409, 'Подписка занята'))
+        }
+        const rows = pushSubscriptions.get(user.id) ?? new Map<string, PushSubscriptionMetadata>()
+        const previous = rows.get(hash)
+        const now = new Date().toISOString()
+        const row = {
+          id: previous?.id ?? randomUUID(),
+          endpoint_hash: hash,
+          user_agent: null,
+          expiration_time: body.expirationTime ? new Date(body.expirationTime).toISOString() : null,
+          created_at: previous?.created_at ?? now,
+          updated_at: now,
+        }
+        rows.set(hash, row)
+        pushSubscriptions.set(user.id, rows)
+        return row
+      }),
+      rest.delete('/api/v1/me/push-subscriptions/:subscription_id', (params) => {
+        const user = currentUser(params)
+        if (!user) return fail(params, 401, problem('token_invalid', 401, 'Требуется вход'))
+        const rows = pushSubscriptions.get(user.id)
+        if (rows) {
+          for (const [hash, row] of rows) {
+            if (row.id === params.request.params.subscription_id) rows.delete(hash)
+          }
+        }
+        params.setStatusCode(204)
       }),
 
       rest.get('/api/v1/me/rentals', (params) => {
@@ -1191,6 +1358,20 @@ export default mock(
           )
         }
 
+        const startMs = Date.parse(body.start_time)
+        const endMs = Date.parse(body.end_time)
+
+        if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
+          return fail(params, 422, problem('validation_error', 422, 'Конец должен быть позже начала'))
+        }
+
+        if (user.verification_status !== 'approved') {
+          return fail(params, 403, problem('verification_required', 403, 'Требуется верификация'))
+        }
+        if (!offers.hasAcceptedCurrent(user.id)) {
+          return fail(params, 403, problem('offer_not_accepted', 403, 'Примите действующую оферту'))
+        }
+
         const lot = lots.find(item => item.id === body.lot_id)
 
         if (!lot) {
@@ -1211,13 +1392,6 @@ export default mock(
               variant_id: 'Вариант недоступен',
             }),
           )
-        }
-
-        const startMs = Date.parse(body.start_time)
-        const endMs = Date.parse(body.end_time)
-
-        if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
-          return fail(params, 422, problem('validation_error', 422, 'Конец должен быть позже начала'))
         }
 
         let price: RangePrice
@@ -1296,6 +1470,25 @@ export default mock(
         return withRemaining(rental)
       }, { delay: 120 }),
 
+      rest.post('/api/v1/files', (params) => {
+        const user = currentUser(params)
+
+        if (!user) {
+          return fail(params, 401, problem('token_invalid', 401, 'Требуется вход'))
+        }
+
+        const contentType = params.getRequestHeader('content-type')
+        if (typeof contentType !== 'string' || !contentType.startsWith('multipart/form-data;')) {
+          return fail(params, 422, problem('upload_invalid', 422, 'Ожидается фото'))
+        }
+
+        // The mock server leaves multipart bodies unparsed. Use a demo image.
+        const fileId = uid(ticketPhotoSeq++)
+        ticketPhotoOwners.set(fileId, user.id)
+        params.setStatusCode(201)
+        return { file_id: fileId, url: mockTicketPhoto }
+      }, { delay: 100 }),
+
       rest.post('/api/v1/me/rentals/:id/tickets', (params) => {
         const user = currentUser(params)
 
@@ -1303,29 +1496,16 @@ export default mock(
           return fail(params, 401, problem('token_invalid', 401, 'Требуется вход'))
         }
 
-        const rental = rentals.find(item => item.id === params.request.params.id)
-
-        if (!rental) {
-          return fail(params, 404, problem('not_found', 404, 'Бронь не найдена'))
+        const key = params.getRequestHeader('idempotency-key')
+        if (typeof key !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(key)) {
+          return fail(params, 422, problem('validation_error', 422, 'Некорректный ключ запроса'))
         }
 
-        if (rentalOwners.get(rental.id)?.id !== user.id) {
-          return fail(params, 403, problem('not_your_rental', 403, 'Это не ваша аренда'))
-        }
-
-        if (rental.status !== 'active') {
-          return fail(params, 409, problem('ticket_not_allowed', 409, 'Сообщить о неполадке можно только по активной аренде'))
-        }
-
-        const body = (params.request.body ?? {}) as {
-          category?: string
-          description?: string
-          photo_urls?: string[]
-        }
+        const body = (params.request.body ?? {}) as Partial<CreateTicketRequest>
         const categories: Ticket['category'][] = ['no_power', 'no_drive', 'battery', 'damage', 'other']
-        const description = body.description?.trim() ?? ''
+        const description = typeof body.description === 'string' ? body.description.trim() : ''
 
-        if (!body.category || !categories.includes(body.category as Ticket['category'])) {
+        if (!body.category || !categories.includes(body.category)) {
           return fail(
             params,
             422,
@@ -1333,7 +1513,8 @@ export default mock(
           )
         }
 
-        if (description.length < 10 || description.length > 1000) {
+        const descriptionLength = Array.from(description).length
+        if (descriptionLength < 10 || descriptionLength > 1000) {
           return fail(
             params,
             422,
@@ -1341,36 +1522,73 @@ export default mock(
           )
         }
 
+        const fileIds = body.file_ids ?? []
+        const uploadFailures = body.photo_upload_failures ?? 0
+        if (!Array.isArray(fileIds) || new Set(fileIds).size !== fileIds.length
+          || !Number.isInteger(uploadFailures) || uploadFailures < 0
+          || fileIds.length + uploadFailures > 3) {
+          return fail(params, 422, problem('validation_error', 422, 'Допустимо не более трёх фото'))
+        }
+
+        const requestKey = `${user.id}:${key}`
+        const fingerprint = JSON.stringify([params.request.params.id, body.category, description, fileIds, uploadFailures])
+        const existing = ticketRequests.get(requestKey)
+        if (existing) {
+          if (existing.fingerprint !== fingerprint) {
+            return fail(params, 422, problem('idempotency_conflict', 422, 'Ключ запроса уже использован'))
+          }
+          params.setStatusCode(201)
+          params.setHeader('Idempotent-Replayed', 'true')
+          return existing.receipt
+        }
+
+        if (user.verification_status !== 'approved') {
+          return fail(params, 403, problem('verification_required', 403, 'Требуется верификация'))
+        }
+        const rental = rentals.find(item => item.id === params.request.params.id
+          && rentalOwners.get(item.id)?.id === user.id)
+        if (!rental) {
+          return fail(params, 404, problem('not_found', 404, 'Бронь не найдена'))
+        }
+        if (rental.status !== 'active' && rental.status !== 'overdue') {
+          return fail(params, 409, problem('rental_not_active', 409, 'Сообщить о неполадке можно по активной или просроченной аренде'))
+        }
+
         const since = Date.now() - 24 * HOUR
         const createdToday = tickets.filter(ticket =>
           ticket.rental_id === rental.id && ticket.user.id === user.id && Date.parse(ticket.created_at) > since,
         ).length
 
-        if (createdToday >= 5) {
-          return fail(params, 429, problem('ticket_limit', 429, 'Лимит обращений: не более 5 в сутки по одной аренде'))
+        if (createdToday >= tenant.policies.tickets_per_rental_per_day) {
+          return fail(params, 429, problem('issue_limit_exceeded', 429, 'Достигнут суточный лимит обращений по аренде'))
         }
 
-        const ticket: Ticket = {
+        const photos = fileIds.filter(id => ticketPhotoOwners.get(id) === user.id).map(() => mockTicketPhoto)
+        const receipt: TicketReceipt = {
           id: uid(ticketSeq++),
           rental_id: rental.id,
+          created_at: iso(0),
+          skipped_photo_count: uploadFailures + fileIds.length - photos.length,
+          status: 'submitted',
+          version: 1,
+        }
+        const ticket: Ticket = {
+          ...receipt,
           lot: rental.lot,
           user: userRef(user),
-          category: body.category as Ticket['category'],
+          category: body.category,
           description,
-          photo_urls: Array.isArray(body.photo_urls)
-            ? body.photo_urls.filter((url): url is string => typeof url === 'string').slice(0, 3)
-            : [],
-          status: 'submitted',
+          photo_urls: photos,
           admin_comment: null,
-          created_at: iso(0),
+          updated_at: receipt.created_at,
           resolved_at: null,
-          version: 1,
         }
 
         tickets.unshift(ticket)
+        ticketRequests.set(requestKey, { fingerprint, receipt })
         params.setStatusCode(201)
 
-        return ticket
+        return receipt
       }, { delay: 150 }),
 
       rest.get('/api/v1/me/tickets', (params) => {
@@ -1390,7 +1608,7 @@ export default mock(
         )
 
         const page: TicketPage = {
-          items: filtered.slice(offset, offset + limit),
+          items: filtered.slice(offset, offset + limit).map(withoutTicketPhotos),
           total: filtered.length,
           limit,
           offset,
@@ -1399,97 +1617,103 @@ export default mock(
         return page
       }, { delay: 80 }),
 
-      rest.get('/api/v1/admin/analytics/summary', (params) => {
+      rest.get('/api/v1/me/tickets/:id', (params) => {
         const user = currentUser(params)
-
         if (!user) {
           return fail(params, 401, problem('token_invalid', 401, 'Требуется вход'))
         }
+        const ticket = tickets.find(item => item.user.id === user.id && item.id === params.request.params.id)
+        return ticket ?? fail(params, 404, problem('not_found', 404, 'Тикет не найден'))
+      }, { delay: 80 }),
 
-        if (user.role !== 'admin' && user.role !== 'owner') {
-          return fail(params, 403, problem('forbidden_role', 403, 'Недостаточно прав'))
-        }
+      rest.get('/api/v1/admin/analytics/summary', (params) => {
+        const problem = analyticsAccessProblem(params)
+        if (problem) return problem
 
-        const query = params.request.queries as Record<string, unknown>
-        const range = parseAnalyticsRange(query)
-
-        if (!range) {
-          return fail(params, 422, problem('validation_error', 422, 'Проверьте период'))
-        }
-
-        return analyticsSummary(range.fromMs, range.toMs)
+        const { from, to } = params.request.queries
+        const range = parseAnalyticsRange(from, to)
+        return range ? analytics.summary(range) : analyticsPeriodProblem(params)
       }, { delay: 100 }),
 
       rest.get('/api/v1/admin/analytics/revenue', (params) => {
-        const user = currentUser(params)
+        const problem = analyticsAccessProblem(params)
+        if (problem) return problem
 
-        if (!user) {
-          return fail(params, 401, problem('token_invalid', 401, 'Требуется вход'))
+        const { from, to, group_by: groupBy } = params.request.queries
+        const range = parseAnalyticsRange(from, to)
+        if (!range) return analyticsPeriodProblem(params)
+
+        return analyticsGrouped(params, range, groupBy)
+      }, { delay: 100 }),
+
+      rest.get('/api/v1/admin/analytics/utilization', (params) => {
+        const problem = analyticsAccessProblem(params)
+        if (problem) return problem
+
+        const { from, to, group_by: groupBy = 'lot' } = params.request.queries
+        const range = parseAnalyticsRange(from, to)
+        if (!range) return analyticsPeriodProblem(params)
+
+        return analyticsGrouped(params, range, groupBy)
+      }, { delay: 100 }),
+
+      rest.get('/api/v1/admin/analytics/compare', (params) => {
+        const problem = analyticsAccessProblem(params)
+        if (problem) return problem
+
+        const { from, to, compare_from: compareFrom, compare_to: compareTo } = params.request.queries
+        const current = parseAnalyticsRange(from, to)
+        const previous = parseAnalyticsRange(compareFrom, compareTo)
+        return current && previous ? analytics.compare(current, previous) : analyticsPeriodProblem(params)
+      }, { delay: 100 }),
+
+      rest.get('/api/v1/admin/analytics/export', (params) => {
+        const accessProblem = analyticsAccessProblem(params)
+        if (accessProblem) return accessProblem
+
+        const { from, to, report, format = 'csv' } = params.request.queries
+        const range = parseAnalyticsRange(from, to)
+        if (!range) return analyticsPeriodProblem(params)
+
+        if (report !== 'rentals' || format !== 'csv') {
+          return fail(params, 422, problem('validation_error', 422, 'Недопустимый формат отчёта'))
         }
 
-        if (user.role !== 'admin' && user.role !== 'owner') {
-          return fail(params, 403, problem('forbidden_role', 403, 'Недостаточно прав'))
-        }
-
-        const query = params.request.queries as Record<string, unknown>
-        const range = parseAnalyticsRange(query)
-        const groupBy = query.group_by
-
-        if (!range) {
-          return fail(params, 422, problem('validation_error', 422, 'Проверьте период'))
-        }
-
-        if (groupBy !== 'lot' && groupBy !== 'category' && groupBy !== 'day') {
-          return fail(
-            params,
-            422,
-            problem('validation_error', 422, 'Проверьте поля', undefined, { group_by: 'Недопустимая группировка' }),
-          )
-        }
-
-        const response: AnalyticsRevenue = {
-          group_by: groupBy,
-          buckets: analyticsBuckets(groupBy, range.fromMs, range.toMs),
-        }
-
-        return response
+        const first = dayKeyOf(new Date(range.fromMs), tenant.timezone)
+        const last = dayKeyOf(new Date(range.toMs - 1), tenant.timezone)
+        params.attachment(`${tenant.slug}_rentals_${first}_${last}.csv`)
+        params.setHeader('Content-Type', 'text/csv; charset=utf-8')
+        return analytics.csv(range)
       }, { delay: 100 }),
 
       rest.get('/api/v1/admin/analytics/lots/:lot_id', (params) => {
-        const user = currentUser(params)
+        const accessProblem = analyticsAccessProblem(params)
+        if (accessProblem) return accessProblem
 
-        if (!user) {
-          return fail(params, 401, problem('token_invalid', 401, 'Требуется вход'))
-        }
+        const { from, to, limit = '100', offset = '0' } = params.request.queries
+        const range = parseAnalyticsRange(from, to)
+        if (!range) return analyticsPeriodProblem(params)
 
-        if (user.role !== 'admin' && user.role !== 'owner') {
-          return fail(params, 403, problem('forbidden_role', 403, 'Недостаточно прав'))
-        }
-
-        const query = params.request.queries as Record<string, unknown>
-        const range = parseAnalyticsRange(query)
-
-        if (!range) {
-          return fail(params, 422, problem('validation_error', 422, 'Проверьте период'))
+        const pageSize = Number(limit)
+        const start = Number(offset)
+        if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > 100
+          || !Number.isInteger(start) || start < 0 || start > 2147483647) {
+          return fail(params, 422, problem('validation_error', 422, 'Недопустимые параметры страницы'))
         }
 
         const lot = lots.find(item => item.id === params.request.params.lot_id)
+        if (!lot) return fail(params, 404, problem('not_found', 404, 'Лот не найден'))
 
-        if (!lot) {
-          return fail(params, 404, problem('not_found', 404, 'Лот не найден'))
-        }
-
-        const scoped = rentalsInPeriod(range.fromMs, range.toMs, lot.id)
-          .slice()
-          .sort((left, right) => right.start_time.localeCompare(left.start_time))
-
+        const scoped = analytics.inPeriod(range, lot.id)
+          .sort((left, right) => right.start_time.localeCompare(left.start_time) || right.id.localeCompare(left.id))
         const detail: AnalyticsLotDetail = {
-          lot: toLot(lot),
+          lot: { id: lot.id, name: lot.name },
           from: new Date(range.fromMs).toISOString(),
           to: new Date(range.toMs).toISOString(),
-          summary: analyticsSummary(range.fromMs, range.toMs, lot.id),
-          daily: analyticsBuckets('day', range.fromMs, range.toMs, lot.id),
-          rentals: scoped.map(rental => ({
+          summary: analytics.summary(range, [lot]),
+          daily: analytics.buckets('day', range, [lot]),
+          rentals_total: scoped.length,
+          rentals: scoped.slice(start, start + pageSize).map(rental => ({
             id: rental.id,
             start_time: rental.start_time,
             end_time: rental.end_time,
@@ -1886,6 +2110,8 @@ export default mock(
           || !datePattern.test(to)
           || !Number.isFinite(fromMs)
           || !Number.isFinite(toMs)
+          || new Date(fromMs).toISOString().slice(0, 10) !== from
+          || new Date(toMs).toISOString().slice(0, 10) !== to
           || toMs <= fromMs
           || toMs - fromMs > 90 * 24 * HOUR
         ) {
@@ -1895,28 +2121,34 @@ export default mock(
         const rangeStart = Date.parse(tenantDayStart(from))
         const rangeEnd = Date.parse(tenantDayStart(to))
         const category = typeof query.category_id === 'string' ? query.category_id : undefined
+        if (category !== undefined && !/^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i.test(category)) {
+          return fail(params, 422, problem('validation_error', 422, 'Некорректная категория'))
+        }
         const scopedLots = lots.filter(lot => !category || lot.category_id === category)
         const lotIds = new Set(scopedLots.map(lot => lot.id))
 
         const intervals: (ScheduleRentalInterval | ScheduleBlockInterval)[] = [
           ...rentals
-            .filter(rental =>
-              rental.status !== 'cancelled'
-              && lotIds.has(rental.lot.id)
-              && Date.parse(rental.start_time) < rangeEnd
-              && Date.parse(rental.end_time) > rangeStart,
-            )
-            .map(rental => ({
-              id: rental.id,
-              lot_id: rental.lot.id,
-              kind: 'rental' as const,
-              start_time: rental.start_time,
-              end_time: rental.end_time,
-              rental_id: rental.id,
-              status: rental.status,
-              battery_count: rentalBatteries.get(rental.id) ?? 1,
-              user_name: (rentalOwners.get(rental.id) ?? mockUser).name,
-            })),
+            .flatMap((rental): ScheduleRentalInterval[] => {
+              const start = Date.parse(rental.start_time)
+              const end = Date.parse(rental.end_time)
+              if (rental.status === 'cancelled' || !lotIds.has(rental.lot.id) || start >= rangeEnd || end <= rangeStart) {
+                return []
+              }
+              return [{
+                id: rental.id,
+                lot_id: rental.lot.id,
+                kind: 'rental',
+                start_time: new Date(Math.max(rangeStart, start)).toISOString(),
+                end_time: new Date(Math.min(rangeEnd, end)).toISOString(),
+                clipped_start: start < rangeStart,
+                clipped_end: end > rangeEnd,
+                rental_id: rental.id,
+                status: rental.status,
+                battery_count: rentalBatteries.get(rental.id) ?? 1,
+                user_name: (rentalOwners.get(rental.id) ?? mockUser).name,
+              }]
+            }),
           ...blocks
             .filter(block =>
               lotIds.has(block.lot_id)
@@ -1929,10 +2161,12 @@ export default mock(
               kind: 'block' as const,
               start_time: block.start_time,
               end_time: block.end_time,
+              clipped_start: Date.parse(block.start_time) < rangeStart,
+              clipped_end: Date.parse(block.end_time) > rangeEnd,
               block_id: block.id,
               reason: block.reason,
             })),
-        ].sort((left, right) => left.start_time.localeCompare(right.start_time))
+        ].sort((left, right) => Date.parse(left.start_time) - Date.parse(right.start_time))
 
         const schedule: AdminSchedule = {
           lots: scopedLots.map(lot => ({
@@ -2062,6 +2296,25 @@ export default mock(
         return page
       }, { delay: 80 }),
 
+      rest.get('/api/v1/admin/rentals/:id', (params) => {
+        const user = currentUser(params)
+        if (!user) return fail(params, 401, problem('token_invalid', 401, 'Требуется вход'))
+        if (user.role !== 'admin' && user.role !== 'owner') {
+          return fail(params, 403, problem('forbidden_role', 403, 'Недостаточно прав'))
+        }
+        const rental = rentals.find(item => item.id === params.request.params.id)
+        if (!rental) return fail(params, 404, problem('not_found', 404, 'Аренда не найдена'))
+
+        params.setHeader('Cache-Control', 'no-store')
+        const details: components['schemas']['AdminRentalDetail'] = {
+          ...toAdminRental(rental),
+          cancellation_deadline: rental.cancellation_deadline ?? null,
+          completed_at: null,
+          closed_by: null,
+        }
+        return details
+      }, { delay: 80 }),
+
       rest.post('/api/v1/admin/rentals/:id/close', (params) => {
         const user = currentUser(params)
 
@@ -2146,7 +2399,48 @@ export default mock(
         return toAdminRental(rental)
       }, { delay: 150 }),
 
+      rest.get<{ queries: Record<string, unknown> }>('/api/v1/admin/offers', (params) => {
+        const denied = offersAccessProblem(params)
+        if (denied) return denied
+        const page = parseOfferPage(params.request.queries)
+        return page ? offers.list(page.limit, page.offset) : offerValidationProblem(params)
+      }),
+
+      rest.post('/api/v1/admin/offers', (params) => {
+        const denied = offersAccessProblem(params)
+        if (denied) return denied
+        const text = parseOfferText(params.request.body)
+        if (!text?.title || !text.body) return offerValidationProblem(params)
+        params.setStatusCode(201)
+        return offers.create({ title: text.title, body: text.body })
+      }),
+
+      rest.patch<{ params: { offer_id: string } }>('/api/v1/admin/offers/:offer_id', (params) => {
+        const denied = offersAccessProblem(params)
+        if (denied) return denied
+        const id = parseOfferId(params.request.params.offer_id)
+        const text = parseOfferText(params.request.body)
+        if (!id || !text) return offerValidationProblem(params)
+        const updated = offers.update(id, text)
+        if (updated === 'not_found') return offerNotFound(params)
+        if (updated === 'offer_not_editable') return offerNotEditable(params)
+        return updated
+      }),
+
+      rest.post<{ params: { offer_id: string } }>('/api/v1/admin/offers/:offer_id/publish', (params) => {
+        const denied = offersAccessProblem(params)
+        if (denied) return denied
+        const id = parseOfferId(params.request.params.offer_id)
+        if (!id) return offerValidationProblem(params)
+        const published = offers.publish(id)
+        if (published === 'not_found') return offerNotFound(params)
+        if (published === 'offer_not_editable') return offerNotEditable(params)
+        return published
+      }),
+
       rest.get('/api/v1/admin/verification-requests', (params) => {
+        params.setHeader('Cache-Control', 'no-store')
+
         const user = currentUser(params)
 
         if (!user) {
@@ -2165,7 +2459,7 @@ export default mock(
         const filtered = verificationRequests.filter(item => !status || item.status === status)
 
         const page: VerificationRequestPage = {
-          items: filtered.slice(offset, offset + limit),
+          items: filtered.slice(offset, offset + limit).map(toVerificationSummary),
           total: filtered.length,
           limit,
           offset,
@@ -2174,7 +2468,9 @@ export default mock(
         return page
       }, { delay: 80 }),
 
-      rest.post('/api/v1/admin/verification-requests/:id/decision', (params) => {
+      rest.get('/api/v1/admin/verification-requests/:id', (params) => {
+        params.setHeader('Cache-Control', 'no-store')
+
         const user = currentUser(params)
 
         if (!user) {
@@ -2191,14 +2487,44 @@ export default mock(
           return fail(params, 404, problem('not_found', 404, 'Заявка не найдена'))
         }
 
-        const body = (params.request.body ?? {}) as { decision?: string; comment?: string; version?: number }
-        const comment = body.comment?.trim() ?? ''
+        return request
+      }, { delay: 80 }),
+
+      rest.post('/api/v1/admin/verification-requests/:id/decision', (params) => {
+        params.setHeader('Cache-Control', 'no-store')
+
+        const user = currentUser(params)
+
+        if (!user) {
+          return fail(params, 401, problem('token_invalid', 401, 'Требуется вход'))
+        }
+
+        if (user.role !== 'admin' && user.role !== 'owner') {
+          return fail(params, 403, problem('forbidden_role', 403, 'Недостаточно прав'))
+        }
+
+        const request = verificationRequests.find(item => item.id === params.request.params.id)
+
+        if (!request) {
+          return fail(params, 404, problem('not_found', 404, 'Заявка не найдена'))
+        }
+
+        const body = (params.request.body ?? {}) as { decision?: string; comment?: unknown; version?: number }
+        const comment = typeof body.comment === 'string' ? body.comment.trim() : ''
 
         if (body.decision !== 'approved' && body.decision !== 'rejected') {
           return fail(params, 422, problem('validation_error', 422, 'Выберите решение'))
         }
 
-        if (body.decision === 'rejected' && comment.length < 3) {
+        if (body.comment != null && typeof body.comment !== 'string') {
+          return fail(
+            params,
+            422,
+            problem('validation_error', 422, 'Проверьте поля', undefined, { comment: 'Укажите текст комментария' }),
+          )
+        }
+
+        if (body.decision === 'rejected' && !comment) {
           return fail(
             params,
             422,
@@ -2206,12 +2532,12 @@ export default mock(
           )
         }
 
-        if (body.version !== request.version) {
-          return fail(params, 409, problem('stale_version', 409, 'Заявка уже изменилась'))
-        }
-
         if (request.status !== 'pending') {
           return fail(params, 409, problem('already_processed', 409, 'Заявка уже обработана'))
+        }
+
+        if (body.version !== request.version) {
+          return fail(params, 409, problem('stale_version', 409, 'Заявка уже изменилась'))
         }
 
         request.status = body.decision
@@ -2225,7 +2551,7 @@ export default mock(
           owner.verification_status = body.decision
         }
 
-        return request
+        return toVerificationSummary(request)
       }, { delay: 150 }),
 
       rest.get('/api/v1/admin/tickets', (params) => {
@@ -2247,13 +2573,25 @@ export default mock(
         const filtered = tickets.filter(item => !status || item.status === status)
 
         const page: TicketPage = {
-          items: filtered.slice(offset, offset + limit),
+          items: filtered.slice(offset, offset + limit).map(withoutTicketPhotos),
           total: filtered.length,
           limit,
           offset,
         }
 
         return page
+      }, { delay: 80 }),
+
+      rest.get('/api/v1/admin/tickets/:id', (params) => {
+        const user = currentUser(params)
+        if (!user) {
+          return fail(params, 401, problem('token_invalid', 401, 'Требуется вход'))
+        }
+        if (user.role !== 'admin' && user.role !== 'owner') {
+          return fail(params, 403, problem('forbidden_role', 403, 'Недостаточно прав'))
+        }
+        const ticket = tickets.find(item => item.id === params.request.params.id)
+        return ticket ?? fail(params, 404, problem('not_found', 404, 'Тикет не найден'))
       }, { delay: 80 }),
 
       rest.patch('/api/v1/admin/tickets/:id', (params) => {
@@ -2306,10 +2644,11 @@ export default mock(
 
         ticket.status = body.status
         ticket.admin_comment = comment || ticket.admin_comment
-        ticket.resolved_at = body.status === 'resolved' ? iso(0) : null
+        ticket.updated_at = iso(0)
+        ticket.resolved_at = body.status === 'resolved' ? ticket.updated_at : null
         ticket.version += 1
 
-        return ticket
+        return withoutTicketPhotos(ticket)
       }, { delay: 150 }),
     ],
   },

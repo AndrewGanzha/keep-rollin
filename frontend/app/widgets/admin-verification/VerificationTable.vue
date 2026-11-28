@@ -1,19 +1,30 @@
 <script setup lang="ts">
 import type {
+  AdminVerificationRequestSummary,
   VerificationDecisionRequest,
   VerificationRequest,
   VerificationStatus,
 } from '~/entities/verification'
 import { formatDateTime } from '~/shared/lib'
-import { EmptyState } from '~/shared/ui'
+import { EmptyState, ErrorState } from '~/shared/ui'
 
-withDefaults(
-  defineProps<{ requests: VerificationRequest[]; loading?: boolean; pending?: boolean; timeZone?: string }>(),
+const props = withDefaults(
+  defineProps<{
+    requests: AdminVerificationRequestSummary[]
+    loading?: boolean
+    pending?: boolean
+    timeZone?: string
+    detail: VerificationRequest | null
+    detailError: unknown
+    detailPending: boolean
+  }>(),
   { loading: false, pending: false, timeZone: undefined },
 )
 
 const emit = defineEmits<{
-  decide: [item: VerificationRequest, payload: VerificationDecisionRequest]
+  decide: [item: AdminVerificationRequestSummary, payload: VerificationDecisionRequest]
+  'load-detail': [id: string]
+  'clear-detail': []
 }>()
 
 const severity: Record<VerificationStatus, 'success' | 'warn' | 'danger'> = {
@@ -31,47 +42,69 @@ const labels: Record<VerificationStatus, string> = {
 const severityOf = (status: VerificationStatus) => severity[status]
 const labelOf = (status: VerificationStatus) => labels[status]
 
-const documentLabels: Record<string, string> = {
+const documentLabels: Record<VerificationRequest['documents'][number]['purpose'], string> = {
   verification_passport: 'Паспорт',
   verification_registration: 'Регистрация',
   verification_selfie: 'Селфи',
 }
 
-const target = ref<VerificationRequest | null>(null)
-const decision = ref<VerificationDecisionRequest['decision']>('approved')
+type Decision = VerificationDecisionRequest['decision']
+
+const decisionLabels: Record<Decision, string> = {
+  approved: 'Одобрить',
+  rejected: 'Отклонить',
+}
+
+const target = ref<AdminVerificationRequestSummary | null>(null)
+const decision = ref<Decision>()
 const comment = ref('')
+
+const close = () => {
+  target.value = null
+  decision.value = undefined
+  comment.value = ''
+  emit('clear-detail')
+}
+
 const visible = computed({
   get: () => target.value !== null,
   set: (value: boolean) => {
     if (!value) {
-      target.value = null
+      close()
     }
   },
 })
+const currentDetail = computed(() => props.detail?.id === target.value?.id ? props.detail : null)
 const canSubmit = computed(() =>
-  decision.value === 'approved' || comment.value.trim().length >= 3,
+  decision.value === 'approved' || comment.value.trim().length > 0,
 )
+const canDecide = computed(() => currentDetail.value?.status === 'pending')
 
-const open = (item: VerificationRequest, next: VerificationDecisionRequest['decision']) => {
+const open = (item: AdminVerificationRequestSummary, next?: Decision) => {
   decision.value = next
   comment.value = ''
   target.value = item
+  emit('load-detail', item.id)
 }
 
 const submit = () => {
   const item = target.value
+  const detail = currentDetail.value
+  const next = decision.value
 
-  if (!item || !canSubmit.value) {
+  if (!item || detail?.status !== 'pending' || !next || !canSubmit.value || props.pending) {
     return
   }
 
   emit('decide', item, {
-    decision: decision.value,
+    decision: next,
     comment: comment.value.trim() || undefined,
-    version: item.version,
+    version: detail.version,
   })
-  target.value = null
+  close()
 }
+
+onBeforeUnmount(close)
 </script>
 
 <template>
@@ -99,37 +132,6 @@ const submit = () => {
         <div class="cell">
           <span>{{ data.user.name }}</span>
           <span class="muted">{{ data.user.email }}</span>
-        </div>
-      </template>
-    </Column>
-
-    <Column
-      header="Паспорт"
-      style="min-width: 180px"
-    >
-      <template #body="{ data }">
-        <div class="cell">
-          <span>{{ data.passport.passport_number }}</span>
-          <span class="muted">{{ data.passport.birth_date }}</span>
-        </div>
-      </template>
-    </Column>
-
-    <Column
-      header="Документы"
-      style="min-width: 160px"
-    >
-      <template #body="{ data }">
-        <div class="row cell-links">
-          <a
-            v-for="document in data.documents"
-            :key="document.purpose"
-            :href="document.url"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            {{ documentLabels[document.purpose] ?? document.purpose }}
-          </a>
         </div>
       </template>
     </Column>
@@ -174,17 +176,22 @@ const submit = () => {
       style="min-width: 160px"
     >
       <template #body="{ data }">
-        <div
-          v-if="data.status === 'pending'"
-          class="row actions"
-        >
+        <div class="row actions">
           <Button
+            label="Подробнее"
+            size="small"
+            text
+            @click="open(data)"
+          />
+          <Button
+            v-if="data.status === 'pending'"
             label="Одобрить"
             size="small"
             :disabled="pending"
             @click="open(data, 'approved')"
           />
           <Button
+            v-if="data.status === 'pending'"
             label="Отклонить"
             size="small"
             severity="danger"
@@ -193,10 +200,6 @@ const submit = () => {
             @click="open(data, 'rejected')"
           />
         </div>
-        <span
-          v-else
-          class="muted"
-        >—</span>
       </template>
     </Column>
   </DataTable>
@@ -204,17 +207,55 @@ const submit = () => {
   <Dialog
     v-model:visible="visible"
     modal
-    :header="decision === 'approved' ? 'Одобрить верификацию' : 'Отклонить верификацию'"
-    :style="{ width: '440px', maxWidth: '92vw' }"
+    :header="decision ? `${decisionLabels[decision]} верификацию` : 'Заявка на верификацию'"
+    :style="{ width: '480px', maxWidth: '92vw' }"
   >
     <div
       v-if="target"
       class="stack"
     >
       <p style="margin: 0">
-        {{ target.user.name }} · {{ target.passport.passport_number }}
+        {{ target.user.name }} · {{ target.user.email }}
       </p>
-      <div class="field">
+      <p
+        v-if="detailPending"
+        role="status"
+        class="muted"
+      >
+        Загружаем паспортные данные и документы…
+      </p>
+      <ErrorState
+        v-else-if="detailError"
+        :error="detailError"
+        @retry="emit('load-detail', target.id)"
+      />
+      <template v-else-if="currentDetail">
+        <dl class="passport">
+          <dt>ФИО по паспорту</dt>
+          <dd>{{ currentDetail.passport.full_name }}</dd>
+          <dt>Дата рождения</dt>
+          <dd>{{ currentDetail.passport.birth_date }}</dd>
+          <dt>Номер паспорта</dt>
+          <dd>{{ currentDetail.passport.passport_number }}</dd>
+          <dt>Кем выдан</dt>
+          <dd>{{ currentDetail.passport.issued_by }}</dd>
+        </dl>
+        <div class="row document-links">
+          <a
+            v-for="document in currentDetail.documents"
+            :key="document.purpose"
+            :href="document.url"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {{ documentLabels[document.purpose] }}
+          </a>
+        </div>
+      </template>
+      <div
+        v-if="decision && canDecide"
+        class="field"
+      >
         <label for="decision-comment">
           Комментарий{{ decision === 'rejected' ? '' : ' (необязательно)' }}
         </label>
@@ -229,24 +270,39 @@ const submit = () => {
           v-if="decision === 'rejected'"
           class="muted"
         >
-          Для отказа комментарий обязателен (минимум 3 символа)
+          Для отказа комментарий обязателен
         </small>
       </div>
     </div>
 
     <template #footer>
       <Button
-        label="Отмена"
+        :label="decision ? 'Отмена' : 'Закрыть'"
         text
         @click="visible = false"
       />
       <Button
-        :label="decision === 'approved' ? 'Одобрить' : 'Отклонить'"
+        v-if="decision && canDecide"
+        :label="decisionLabels[decision]"
         :severity="decision === 'approved' ? undefined : 'danger'"
-        :disabled="!canSubmit"
+        :disabled="pending || !canSubmit"
         :loading="pending"
         @click="submit"
       />
+      <template v-else-if="canDecide">
+        <Button
+          label="Одобрить"
+          :disabled="pending"
+          @click="decision = 'approved'"
+        />
+        <Button
+          label="Отклонить"
+          severity="danger"
+          text
+          :disabled="pending"
+          @click="decision = 'rejected'"
+        />
+      </template>
     </template>
   </Dialog>
 </template>
@@ -257,7 +313,7 @@ const submit = () => {
 }
 
 .admin-table :deep(.p-datatable-table) {
-  min-width: 1040px;
+  min-width: 860px;
 }
 
 .cell {
@@ -266,9 +322,20 @@ const submit = () => {
   gap: 2px;
 }
 
-.cell-links {
+.document-links {
   gap: 8px;
-  font-size: 0.85rem;
+  flex-wrap: wrap;
+}
+
+.passport {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  margin: 0;
+}
+
+.passport dd {
+  margin: 0;
 }
 
 .clamp {

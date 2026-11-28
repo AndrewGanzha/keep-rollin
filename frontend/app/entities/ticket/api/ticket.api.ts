@@ -1,4 +1,5 @@
 import { unwrap, type ApiClient } from '~/shared/api'
+import type { components } from '~/shared/api/schema'
 import type {
   CreateTicketRequest,
   Ticket,
@@ -6,6 +7,8 @@ import type {
   TicketPatchRequest,
   TicketStatus,
 } from '../model/ticket.types'
+
+export type TicketReceipt = components['schemas']['TicketReceipt']
 
 export interface TicketQuery {
   status?: TicketStatus
@@ -18,6 +21,9 @@ export const fetchAdminTickets = async (
   query: TicketQuery = {},
 ): Promise<TicketPage> =>
   unwrap(await api.GET('/api/v1/admin/tickets', { params: { query } }))
+
+export const fetchAdminTicket = async (api: ApiClient, id: string): Promise<Ticket> =>
+  unwrap(await api.GET('/api/v1/admin/tickets/{id}', { params: { path: { id } } }))
 
 export const patchAdminTicket = async (
   api: ApiClient,
@@ -41,10 +47,26 @@ export const createRentalTicket = async (
   api: ApiClient,
   rentalId: string,
   payload: CreateTicketRequest,
-): Promise<Ticket> =>
+  idempotencyKey: string,
+): Promise<TicketReceipt> =>
   unwrap(
     await api.POST('/api/v1/me/rentals/{id}/tickets', {
-      params: { path: { id: rentalId } },
+      params: { path: { id: rentalId }, header: { 'Idempotency-Key': idempotencyKey } },
       body: payload,
     }),
   )
+
+export const uploadTicketPhoto = async (api: ApiClient, file: File): Promise<string> => {
+  const upload = unwrap(
+    await api.POST('/api/v1/files', {
+      body: { file, purpose: 'ticket_photo' },
+      bodySerializer: (body) => {
+        const form = new FormData()
+        form.set('file', body.file)
+        form.set('purpose', body.purpose)
+        return form
+      },
+    }),
+  )
+  return upload.file_id
+}

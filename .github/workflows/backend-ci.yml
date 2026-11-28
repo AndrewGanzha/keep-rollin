@@ -1,0 +1,96 @@
+name: Backend CI
+
+on:
+  push:
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-ci.yml'
+      - 'Makefile'
+  pull_request:
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-ci.yml'
+      - 'Makefile'
+  workflow_dispatch:
+
+concurrency:
+  group: backend-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: keep_rollin
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d keep_rollin"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/keep_rollin
+      DATABASE_ROLE: keep_rollin_app
+      DATABASE_TIMEOUT_SECONDS: '2'
+      PLATFORM_DOMAIN: platform.test
+      ALLOW_TENANT_HEADER: 'true'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.11.28'
+          enable-cache: true
+
+      - name: Install dependencies
+        working-directory: backend
+        run: uv sync --locked --extra dev
+
+      - name: Lock check
+        working-directory: backend
+        run: uv lock --check
+
+      - name: Apply migrations
+        working-directory: backend
+        run: uv run --locked alembic upgrade head
+
+      - name: Migration check
+        working-directory: backend
+        run: uv run --locked python scripts/check_migrations.py
+
+      - name: Ruff check
+        working-directory: backend
+        run: uv run --locked ruff check .
+
+      - name: Ruff format
+        working-directory: backend
+        run: uv run --locked ruff format --check .
+
+      - name: Mypy
+        working-directory: backend
+        run: uv run --locked mypy app src tests
+
+      - name: Pytest with coverage
+        working-directory: backend
+        run: uv run --locked pytest --cov=app --cov=src --cov-report=term-missing --cov-fail-under=80
+
+      - name: Health and readiness smoke
+        working-directory: backend
+        run: uv run --locked python scripts/smoke_http.py --expect-ready

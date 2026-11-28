@@ -10,7 +10,8 @@ const canCancel = (rental: Rental): boolean =>
   rental.status === 'booked'
   && (!rental.cancellation_deadline || new Date(rental.cancellation_deadline) > new Date())
 
-const canReport = (rental: Rental): boolean => rental.status === 'active'
+const canReport = (rental: Rental): boolean =>
+  rental.status === 'active' || rental.status === 'overdue'
 </script>
 
 <template>

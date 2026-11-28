@@ -1,4 +1,4 @@
-import { fetchSession, loginRequest, useSessionStore } from '~/entities/session'
+import { fetchSession, useSessionStore } from '~/entities/session'
 import { useApi } from '~/shared/api'
 
 /**
@@ -11,6 +11,7 @@ export const useSession = () => {
   const cookie = useCookie<string | null>('kr_token', {
     maxAge: 60 * 60 * 24,
     sameSite: 'lax',
+    secure: useRequestURL({ xForwardedProto: true }).protocol === 'https:',
     path: '/',
   })
   const token = useState<string | null>('access-token', () => cookie.value ?? null)
@@ -42,11 +43,14 @@ export const useSession = () => {
     }
   }
 
-  const login = async (email: string, password: string) => {
-    const response = await loginRequest(api, { email, password })
-    setToken(response.access_token)
+  const establish = async (accessToken: string) => {
+    setToken(accessToken)
     loaded.value = false
     await load(true)
+
+    if (!store.isAuthenticated) {
+      throw new Error('Session could not be loaded')
+    }
   }
 
   const logout = () => {
@@ -55,5 +59,5 @@ export const useSession = () => {
     loaded.value = true
   }
 
-  return { store, load, login, logout }
+  return { store, load, establish, logout }
 }

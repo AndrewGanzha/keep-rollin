@@ -1,5 +1,6 @@
 import { unwrap, type ApiClient } from '~/shared/api'
 import type {
+  AdminVerificationRequestSummary,
   VerificationDecisionRequest,
   VerificationRequest,
   VerificationRequestPage,
@@ -18,11 +19,22 @@ export const fetchVerificationRequests = async (
 ): Promise<VerificationRequestPage> =>
   unwrap(await api.GET('/api/v1/admin/verification-requests', { params: { query } }))
 
+export const fetchVerificationRequest = async (
+  api: ApiClient,
+  id: string,
+  signal: AbortSignal,
+): Promise<VerificationRequest> =>
+  unwrap(await api.GET('/api/v1/admin/verification-requests/{id}', {
+    params: { path: { id } },
+    cache: 'no-store',
+    signal,
+  }))
+
 export const decideVerificationRequest = async (
   api: ApiClient,
   id: string,
   payload: VerificationDecisionRequest,
-): Promise<VerificationRequest> =>
+): Promise<AdminVerificationRequestSummary> =>
   unwrap(
     await api.POST('/api/v1/admin/verification-requests/{id}/decision', {
       params: { path: { id } },

@@ -3,13 +3,21 @@ import type { Ticket, TicketCategory, TicketPatchRequest, TicketStatus } from '~
 import { formatDateTime } from '~/shared/lib'
 import { EmptyState } from '~/shared/ui'
 
-withDefaults(
-  defineProps<{ tickets: Ticket[]; loading?: boolean; pending?: boolean; timeZone?: string }>(),
+const props = withDefaults(
+  defineProps<{
+    tickets: Ticket[]
+    details: Partial<Record<string, { loading: boolean; photos?: string[]; error?: string }>>
+    loading?: boolean
+    pending?: boolean
+    timeZone?: string
+  }>(),
   { loading: false, pending: false, timeZone: undefined },
 )
 
 const emit = defineEmits<{
   apply: [ticket: Ticket, payload: TicketPatchRequest]
+  loadDetails: [id: string]
+  clearDetails: [id: string]
 }>()
 
 const severity: Record<TicketStatus, 'warn' | 'info' | 'success'> = {
@@ -37,6 +45,22 @@ const severityOf = (status: TicketStatus) => severity[status]
 const statusLabel = (status: TicketStatus) => statusLabels[status]
 
 const expanded = ref<Record<string, boolean>>({})
+
+watch(() => props.tickets, (tickets) => {
+  const ids = new Set(tickets.map(ticket => ticket.id))
+  for (const id of Object.keys(expanded.value)) {
+    if (!ids.has(id)) {
+      delete expanded.value[id]
+      emit('clearDetails', id)
+    }
+  }
+})
+
+onBeforeUnmount(() => {
+  for (const id of Object.keys(expanded.value)) {
+    emit('clearDetails', id)
+  }
+})
 
 const target = ref<Ticket | null>(null)
 const nextStatus = ref<TicketPatchRequest['status']>('in_progress')
@@ -85,6 +109,8 @@ const submit = () => {
     size="small"
     scrollable
     class="admin-table"
+    @row-expand="emit('loadDetails', $event.data.id)"
+    @row-collapse="emit('clearDetails', $event.data.id)"
   >
     <template #empty>
       <EmptyState
@@ -182,18 +208,41 @@ const submit = () => {
         <p style="margin: 0">
           {{ data.description }}
         </p>
+        <small
+          v-if="details[data.id]?.loading"
+          class="muted"
+          role="status"
+        >Загрузка фото…</small>
         <div
-          v-if="data.photo_urls.length > 0"
+          v-else-if="details[data.id]?.error"
+          class="row"
+        >
+          <span role="alert">{{ details[data.id]?.error }}</span>
+          <Button
+            label="Повторить"
+            size="small"
+            text
+            @click="emit('loadDetails', data.id)"
+          />
+        </div>
+        <div
+          v-else-if="details[data.id]?.photos?.length"
           class="row"
         >
           <a
-            v-for="url in data.photo_urls"
-            :key="url"
+            v-for="(url, index) in details[data.id]?.photos"
+            :key="index"
             :href="url"
             target="_blank"
             rel="noopener noreferrer"
           >
-            Фото
+            <img
+              :src="url"
+              :alt="`Фото ${index + 1}`"
+              width="96"
+              loading="lazy"
+              referrerpolicy="no-referrer"
+            >
           </a>
         </div>
         <span

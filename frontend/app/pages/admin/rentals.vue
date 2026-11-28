@@ -18,10 +18,14 @@ useHead({ title: 'Аренды — админка' })
 
 type Mode = 'days' | 'hours'
 
-const rentals = await useAdminRentals()
+const mode = ref<Mode>('days')
+const rentals = useAdminRentals(computed(() => mode.value === 'hours'))
 const schedule = await useAdminSchedule()
 
-const mode = ref<Mode>('days')
+watch(mode, (view) => {
+  if (view === 'days') void schedule.refresh()
+})
+
 const selected = ref<AdminRental | null>(null)
 const blockOpen = ref(false)
 const blockRange = ref<BlockRange | null>(null)

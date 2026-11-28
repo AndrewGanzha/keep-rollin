@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import { useBrowserPushLifecycle } from '~/features/notifications'
 import { AppHeader } from '~/widgets/app-header'
+
+useBrowserPushLifecycle()
 </script>
 
 <template>

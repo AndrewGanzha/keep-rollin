@@ -5,6 +5,6 @@ export default defineNuxtRouteMiddleware(async () => {
   await load()
 
   if (store.isAuthenticated) {
-    return navigateTo('/account/rentals')
+    return navigateTo(store.isStaff ? '/admin' : '/account/rentals')
   }
 })

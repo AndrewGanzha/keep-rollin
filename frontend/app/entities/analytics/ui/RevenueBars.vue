@@ -2,7 +2,7 @@
 import type { AnalyticsBucket } from '../model/analytics.types'
 import { formatMoney } from '~/shared/lib'
 
-const props = defineProps<{ buckets: AnalyticsBucket[] }>()
+const props = defineProps<{ buckets: AnalyticsBucket[]; currency?: string }>()
 
 const max = computed(() => Math.max(...props.buckets.map(bucket => bucket.revenue_minor), 1))
 const step = computed(() => Math.max(1, Math.ceil(props.buckets.length / 8)))
@@ -10,7 +10,7 @@ const step = computed(() => Math.max(1, Math.ceil(props.buckets.length / 8)))
 const barHeight = (value: number): string => `${Math.round((value / max.value) * 100)}%`
 const shortLabel = (key: string): string => key.slice(5)
 const tooltip = (bucket: AnalyticsBucket): string =>
-  `${bucket.label}: ${formatMoney(bucket.revenue_minor)} · ${bucket.rentals_count} аренд`
+  `${bucket.label}: ${formatMoney(bucket.revenue_minor, props.currency)} · ${bucket.rentals_count} аренд`
 </script>
 
 <template>

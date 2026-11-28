@@ -118,8 +118,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Вход по email и паролю */
-        post: operations["login"];
+        /** Login */
+        post: operations["login_api_v1_auth_login_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -143,6 +143,62 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/notification-preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Preferences */
+        get: operations["getNotificationPreferences"];
+        /** Update Preferences */
+        put: operations["updateNotificationPreferences"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+
+    "/api/v1/me/push-subscriptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Push Subscriptions */
+        get: operations["listPushSubscriptions"];
+        put?: never;
+        /** Upsert Push Subscription */
+        post: operations["upsertPushSubscription"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+
+    "/api/v1/me/push-subscriptions/{subscription_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Push Subscription */
+        delete: operations["deletePushSubscription"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+
     "/api/v1/me/rentals": {
         parameters: {
             query?: never;
@@ -203,7 +259,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Сообщить о неполадке по активной аренде */
+        /** Сообщить о неполадке по активной или просроченной аренде */
         post: operations["createRentalTicket"];
         delete?: never;
         options?: never;
@@ -228,6 +284,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/tickets/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getMyTicket"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["upload_file_api_v1_files_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/analytics/summary": {
         parameters: {
             query?: never;
@@ -235,7 +323,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** KPI за период */
+        /** Analytics Summary */
         get: operations["getAnalyticsSummary"];
         put?: never;
         post?: never;
@@ -252,7 +340,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Выручка с группировкой */
+        /** Analytics Revenue */
         get: operations["getAnalyticsRevenue"];
         put?: never;
         post?: never;
@@ -269,7 +357,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Доходность лота за период */
+        /** Analytics Lot */
         get: operations["getAnalyticsLot"];
         put?: never;
         post?: never;
@@ -381,10 +469,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /**
-         * Гант «лоты × дни»: аренды, блоки и остатки АКБ
-         * @description Лоты возвращаются все, включая те, у которых нет событий (иначе гант теряет строки). Окно не шире 90 дней, иначе 422. Ответ `no-store`.
-         */
+        /** Get Admin Schedule */
         get: operations["getAdminSchedule"];
         put?: never;
         post?: never;
@@ -502,6 +587,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/verification-requests/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Данные заявки верификации */
+        get: operations["getVerificationRequest"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/verification-requests/{id}/decision": {
         parameters: {
             query?: never;
@@ -543,7 +645,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        get: operations["getAdminTicket"];
         put?: never;
         post?: never;
         delete?: never;
@@ -551,6 +653,263 @@ export interface paths {
         head?: never;
         /** Изменить статус тикета */
         patch: operations["updateAdminTicket"];
+        trace?: never;
+    };
+    "/api/v1/admin/rentals/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Admin Rental */
+        get: operations["getAdminRental"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/analytics/utilization": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Analytics Utilization */
+        get: operations["getAnalyticsUtilization"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/analytics/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Analytics Export */
+        get: operations["exportAnalytics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/analytics/compare": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Analytics Compare */
+        get: operations["compareAnalytics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/password/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reset Password */
+        post: operations["reset_password_api_v1_auth_password_reset_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/password/forgot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Forgot Password */
+        post: operations["forgot_password_api_v1_auth_password_forgot_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/mfa/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Verify Mfa */
+        post: operations["verify_mfa_api_v1_auth_mfa_verify_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/mfa/setup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Setup Mfa */
+        post: operations["setup_mfa_api_v1_auth_mfa_setup_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/mfa/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Confirm Mfa */
+        post: operations["confirm_mfa_api_v1_auth_mfa_confirm_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/public/offers/current": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Current Offer */
+        get: operations["get_current_offer_api_v1_public_offers_current_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/offer-acceptances": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Offer Acceptances */
+        get: operations["list_offer_acceptances_api_v1_me_offer_acceptances_get"];
+        put?: never;
+        /** Accept Offer */
+        post: operations["accept_offer_api_v1_me_offer_acceptances_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/register": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Register */
+        post: operations["register_api_v1_auth_register_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/offers/{offer_id}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Publish Offer */
+        post: operations["publish_offer_api_v1_admin_offers__offer_id__publish_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/offers/{offer_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Offer */
+        patch: operations["update_offer_api_v1_admin_offers__offer_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/admin/offers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Offers */
+        get: operations["list_offers_api_v1_admin_offers_get"];
+        put?: never;
+        /** Create Offer */
+        post: operations["create_offer_api_v1_admin_offers_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
 }
@@ -772,61 +1131,126 @@ export interface components {
             /** @example Техобслуживание */
             reason: string;
         };
+        /** ScheduleLot */
         ScheduleLot: {
-            /** Format: uuid */
-            id: string;
-            name: string;
-            /** Format: uuid */
-            category_id: string;
-            /** @enum {string} */
-            status: "active" | "archived" | "maintenance" | "overdue";
+            /** Battery Type */
             battery_type: string | null;
-            /** @enum {string} */
-            rental_unit: "day" | "hour";
-        };
-        ScheduleRentalInterval: {
-            /** Format: uuid */
+            /**
+             * Category Id
+             * Format: uuid
+             */
+            category_id: string;
+            /**
+             * Id
+             * Format: uuid
+             */
             id: string;
-            /** Format: uuid */
-            lot_id: string;
+            /** Name */
+            name: string;
+            /**
+             * Rental Unit
+             * @enum {string}
+             */
+            rental_unit: "day" | "hour";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "active" | "archived" | "maintenance" | "overdue";
+        };
+        /** ScheduleRentalInterval */
+        ScheduleRentalInterval: {
+            /** Battery Count */
+            battery_count: number;
+            /** Clipped End */
+            clipped_end: boolean;
+            /** Clipped Start */
+            clipped_start: boolean;
+            /**
+             * End Time
+             * Format: date-time
+             */
+            end_time: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
             kind: "rental";
-            /** Format: date-time */
-            start_time: string;
-            /** Format: date-time */
-            end_time: string;
-            /** Format: uuid */
+            /**
+             * Lot Id
+             * Format: uuid
+             */
+            lot_id: string;
+            /**
+             * Rental Id
+             * Format: uuid
+             */
             rental_id: string;
-            /** @enum {string} */
-            status: "booked" | "active" | "overdue" | "completed" | "cancelled";
-            battery_count: number;
+            /**
+             * Start Time
+             * Format: date-time
+             */
+            start_time: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "booked" | "active" | "overdue" | "completed";
+            /** User Name */
             user_name: string;
         };
+        /** ScheduleBlockInterval */
         ScheduleBlockInterval: {
-            /** Format: uuid */
+            /**
+             * Block Id
+             * Format: uuid
+             */
+            block_id: string;
+            /** Clipped End */
+            clipped_end: boolean;
+            /** Clipped Start */
+            clipped_start: boolean;
+            /**
+             * End Time
+             * Format: date-time
+             */
+            end_time: string;
+            /**
+             * Id
+             * Format: uuid
+             */
             id: string;
-            /** Format: uuid */
-            lot_id: string;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
             kind: "block";
-            /** Format: date-time */
-            start_time: string;
-            /** Format: date-time */
-            end_time: string;
-            /** Format: uuid */
-            block_id: string;
+            /**
+             * Lot Id
+             * Format: uuid
+             */
+            lot_id: string;
+            /** Reason */
             reason: string;
+            /**
+             * Start Time
+             * Format: date-time
+             */
+            start_time: string;
         };
+        /** AdminSchedule */
         AdminSchedule: {
-            lots: components["schemas"]["ScheduleLot"][];
-            intervals: (components["schemas"]["ScheduleRentalInterval"] | components["schemas"]["ScheduleBlockInterval"])[];
+            /** Battery Stock */
             battery_stock: components["schemas"]["BatteryStock"][];
+            /** Intervals */
+            intervals: (components["schemas"]["ScheduleRentalInterval"] | components["schemas"]["ScheduleBlockInterval"])[];
+            /** Lots */
+            lots: components["schemas"]["ScheduleLot"][];
         };
         BatteryStock: {
             /** @example 48v */
@@ -879,26 +1303,111 @@ export interface components {
             /** @enum {string} */
             verification_status: "pending" | "approved" | "rejected";
         };
+        NotificationPreferencesResponse: {
+            /** Email By Event */
+            email_by_event: {
+                [key: string]: boolean;
+            };
+            /** Locked Events */
+            locked_events: string[];
+            /** Push Enabled */
+            push_enabled: boolean;
+        };
+
+        NotificationPreferencesSummary: {
+            /** Push Enabled */
+            push_enabled: boolean;
+        };
+
+        UpdateNotificationPreferencesRequest: {
+            /** Email By Event */
+            email_by_event?: {
+                [key: string]: boolean;
+            };
+            /**
+             * Push Enabled
+             * @default true
+             */
+            push_enabled?: boolean;
+        };
+
+        PushSubscriptionKeys: {
+            /** Auth */
+            auth: string;
+            /** P256Dh */
+            p256dh: string;
+        };
+
+        PushSubscriptionResponse: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Endpoint Hash */
+            endpoint_hash: string;
+            /** Expiration Time */
+            expiration_time: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** User Agent */
+            user_agent: string | null;
+        };
+
+        UpsertPushSubscriptionRequest: {
+            /** Endpoint */
+            endpoint: string;
+            /** Expirationtime */
+            expirationTime?: number | null;
+            keys: components["schemas"]["PushSubscriptionKeys"];
+        };
+
         Session: {
             user: components["schemas"]["User"];
             /** @enum {string} */
             role: "owner" | "admin" | "user";
             permissions: string[];
             offer_accepted: boolean;
+            prefs_summary?: components["schemas"]["NotificationPreferencesSummary"];
         };
+        /** LoginRequest */
         LoginRequest: {
-            /** Format: email */
+            /** Email */
             email: string;
+            /** Password */
             password: string;
         };
+        /** LoginResponse */
         LoginResponse: {
-            access_token: string;
-            /** @example 900 */
+            /** Access Token */
+            access_token?: string | null;
+            /** Expires In */
             expires_in: number;
-            user: components["schemas"]["User"];
-            /** @enum {string} */
-            role: "owner" | "admin" | "user";
-            permissions: string[];
+            /**
+             * Mfa Required
+             * @default false
+             */
+            mfa_required: boolean;
+            /**
+             * Mfa Setup Required
+             * @default false
+             */
+            mfa_setup_required: boolean;
+            /** Mfa Token */
+            mfa_token?: string | null;
+            /** Permissions */
+            permissions?: string[];
+            /** Role */
+            role?: ("owner" | "admin" | "user") | null;
+            user?: components["schemas"]["UserDTO"] | null;
         };
         RentalLot: {
             /** Format: uuid */
@@ -943,53 +1452,104 @@ export interface components {
             /** Format: date-time */
             end_time: string;
         };
+        /** AnalyticsSummary */
         AnalyticsSummary: {
-            /** Format: date-time */
-            from: string;
-            /** Format: date-time */
-            to: string;
-            revenue_minor: number;
-            rentals_count: number;
-            cancelled_count: number;
-            overdue_count: number;
+            /** Avg Rental Minor */
             avg_rental_minor: number;
-            utilization_pct: number;
-        };
-        AnalyticsBucket: {
-            key: string;
-            label: string;
-            rentals_count: number;
+            /** Cancelled Count */
             cancelled_count: number;
+            /**
+             * From
+             * Format: date-time
+             */
+            from: string;
+            /** Overdue Count */
+            overdue_count: number;
+            /** Rentals Count */
+            rentals_count: number;
+            /** Revenue Minor */
             revenue_minor: number;
+            /**
+             * To
+             * Format: date-time
+             */
+            to: string;
+            /** Utilization Pct */
             utilization_pct: number;
         };
-        AnalyticsRevenue: {
-            /** @enum {string} */
-            group_by: "lot" | "category" | "day";
-            buckets: components["schemas"]["AnalyticsBucket"][];
+        /** AnalyticsBucket */
+        AnalyticsBucket: {
+            /** Cancelled Count */
+            cancelled_count: number;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Rentals Count */
+            rentals_count: number;
+            /** Revenue Minor */
+            revenue_minor: number;
+            /** Utilization Pct */
+            utilization_pct: number;
         };
+        /** AnalyticsRevenue */
+        AnalyticsRevenue: {
+            /** Buckets */
+            buckets: components["schemas"]["AnalyticsBucket"][];
+            /**
+             * Group By
+             * @enum {string}
+             */
+            group_by: "category" | "lot" | "day";
+        };
+        /** AnalyticsRental */
         AnalyticsRental: {
-            /** Format: uuid */
-            id: string;
-            /** Format: date-time */
-            start_time: string;
-            /** Format: date-time */
-            end_time: string;
-            /** @enum {string} */
-            status: "booked" | "active" | "overdue" | "completed" | "cancelled";
-            price_minor: number;
+            /** Currency */
             currency: string;
+            /**
+             * End Time
+             * Format: date-time
+             */
+            end_time: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Price Minor */
+            price_minor: number;
+            /**
+             * Start Time
+             * Format: date-time
+             */
+            start_time: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "booked" | "active" | "overdue" | "completed" | "cancelled";
             user: components["schemas"]["AdminUserRef"];
         };
+        /** AnalyticsLotDetail */
         AnalyticsLotDetail: {
-            lot: components["schemas"]["Lot"];
-            /** Format: date-time */
-            from: string;
-            /** Format: date-time */
-            to: string;
-            summary: components["schemas"]["AnalyticsSummary"];
+            /** Daily */
             daily: components["schemas"]["AnalyticsBucket"][];
+            /**
+             * From
+             * Format: date-time
+             */
+            from: string;
+            lot: components["schemas"]["AnalyticsLotRef"];
+            /** Rentals */
             rentals: components["schemas"]["AnalyticsRental"][];
+            /** Rentals Total */
+            rentals_total: number;
+            summary: components["schemas"]["AnalyticsSummary"];
+            /**
+             * To
+             * Format: date-time
+             */
+            to: string;
         };
         CreateLotRequest: {
             name: string;
@@ -1041,7 +1601,29 @@ export interface components {
             /** @enum {string} */
             category: "no_power" | "no_drive" | "battery" | "damage" | "other";
             description: string;
-            photo_urls?: string[];
+            file_ids?: string[];
+            photo_upload_failures?: number;
+        };
+        TicketReceipt: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            rental_id: string;
+            /** Format: date-time */
+            created_at: string;
+            skipped_photo_count: number;
+            status: "submitted";
+            version: number;
+        };
+        Body_upload_file_api_v1_files_post: {
+            file: Blob;
+            purpose: components["schemas"]["UploadPurpose"];
+        };
+        UploadPurpose: "lot_photo" | "ticket_photo" | "verification_passport" | "verification_registration" | "verification_selfie";
+        UploadResultDTO: {
+            /** Format: uuid */
+            file_id: string;
+            url: string;
         };
         AdminUserRef: {
             /** Format: uuid */
@@ -1095,23 +1677,25 @@ export interface components {
             /** Format: uri */
             url: string;
         };
-        VerificationRequest: {
+        AdminVerificationRequestSummary: {
             /** Format: uuid */
             id: string;
             user: components["schemas"]["AdminUserRef"];
             /** @enum {string} */
             status: "pending" | "approved" | "rejected";
-            passport: components["schemas"]["VerificationPassport"];
-            documents: components["schemas"]["VerificationDocument"][];
-            admin_comment?: string | null;
+            admin_comment: string | null;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
-            reviewed_at?: string | null;
+            reviewed_at: string | null;
             version: number;
         };
+        VerificationRequest: components["schemas"]["AdminVerificationRequestSummary"] & {
+            passport: components["schemas"]["VerificationPassport"];
+            documents: components["schemas"]["VerificationDocument"][];
+        };
         VerificationRequestPage: {
-            items: components["schemas"]["VerificationRequest"][];
+            items: components["schemas"]["AdminVerificationRequestSummary"][];
             total: number;
             limit: number;
             offset: number;
@@ -1119,7 +1703,7 @@ export interface components {
         VerificationDecisionRequest: {
             /** @enum {string} */
             decision: "approved" | "rejected";
-            comment?: string;
+            comment?: string | null;
             version: number;
         };
         Ticket: {
@@ -1133,13 +1717,16 @@ export interface components {
             category: "no_power" | "no_drive" | "battery" | "damage" | "other";
             description: string;
             photo_urls: string[];
+            skipped_photo_count: number;
             /** @enum {string} */
             status: "submitted" | "in_progress" | "resolved";
-            admin_comment?: string | null;
+            admin_comment: string | null;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
-            resolved_at?: string | null;
+            updated_at: string;
+            /** Format: date-time */
+            resolved_at: string | null;
             version: number;
         };
         TicketPage: {
@@ -1151,8 +1738,286 @@ export interface components {
         TicketPatchRequest: {
             /** @enum {string} */
             status: "in_progress" | "resolved";
-            admin_comment?: string;
+            admin_comment?: string | null;
             version: number;
+            put_lot_maintenance?: boolean;
+            maintenance_until?: string | null;
+        };
+        /** ValidationError */
+        ValidationError: {
+            /** Context */
+            ctx?: Record<string, never>;
+            /** Input */
+            input?: unknown;
+            /** Location */
+            loc: (string | number)[];
+            /** Message */
+            msg: string;
+            /** Error Type */
+            type: string;
+        };
+        /** HTTPValidationError */
+        HTTPValidationError: {
+            /** Detail */
+            detail?: components["schemas"]["ValidationError"][];
+        };
+        /** AdminRentalDetail */
+        AdminRentalDetail: {
+            /** Cancellation Deadline */
+            cancellation_deadline: string | null;
+            /** Closed By */
+            closed_by: string | null;
+            /** Completed At */
+            completed_at: string | null;
+            /** Currency */
+            currency: string;
+            /**
+             * End Time
+             * Format: date-time
+             */
+            end_time: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            lot: components["schemas"]["RentalLot"];
+            /** Price Minor */
+            price_minor: number;
+            /** Remaining Seconds */
+            remaining_seconds: number;
+            /**
+             * Start Time
+             * Format: date-time
+             */
+            start_time: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "booked" | "active" | "overdue" | "completed" | "cancelled";
+            user: components["schemas"]["AdminUserRef"];
+            /** Version */
+            version: number;
+        };
+        /** AnalyticsMetrics */
+        AnalyticsMetrics: {
+            /** Avg Rental Minor */
+            avg_rental_minor: number;
+            /** Cancelled Count */
+            cancelled_count: number;
+            /** Overdue Count */
+            overdue_count: number;
+            /** Rentals Count */
+            rentals_count: number;
+            /** Revenue Minor */
+            revenue_minor: number;
+            /** Utilization Pct */
+            utilization_pct: number;
+        };
+        /** AnalyticsLotRef */
+        AnalyticsLotRef: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+        };
+        /** AnalyticsComparison */
+        AnalyticsComparison: {
+            current: components["schemas"]["AnalyticsSummary"];
+            delta: components["schemas"]["AnalyticsMetrics"];
+            previous: components["schemas"]["AnalyticsSummary"];
+        };
+        /** UserDTO */
+        UserDTO: {
+            /** Email */
+            email: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "owner" | "admin" | "user";
+            /**
+             * Verification Status
+             * @enum {string}
+             */
+            verification_status: "pending" | "approved" | "rejected";
+        };
+        /** MessageResponse */
+        MessageResponse: {
+            /** Message */
+            message: string;
+        };
+        /** PasswordResetRequest */
+        PasswordResetRequest: {
+            /** Password */
+            password: string;
+            /** Token */
+            token: string;
+        };
+        /** PasswordForgotRequest */
+        PasswordForgotRequest: {
+            /** Email */
+            email: string;
+        };
+        /** MfaCodeRequest */
+        MfaCodeRequest: {
+            /** Code */
+            code: string;
+            /** Mfa Token */
+            mfa_token: string;
+        };
+        /** MfaTokenRequest */
+        MfaTokenRequest: {
+            /** Mfa Token */
+            mfa_token: string;
+        };
+        /** MfaConfirmResponse */
+        MfaConfirmResponse: {
+            /** Access Token */
+            access_token?: string | null;
+            /** Expires In */
+            expires_in: number;
+            /**
+             * Mfa Required
+             * @default false
+             */
+            mfa_required: boolean;
+            /**
+             * Mfa Setup Required
+             * @default false
+             */
+            mfa_setup_required: boolean;
+            /** Mfa Token */
+            mfa_token?: string | null;
+            /** Permissions */
+            permissions?: string[];
+            /** Recovery Codes */
+            recovery_codes: string[];
+            /** Role */
+            role?: ("owner" | "admin" | "user") | null;
+            user?: components["schemas"]["UserDTO"] | null;
+        };
+        /** MfaSetupResponse */
+        MfaSetupResponse: {
+            /** Otpauth Uri */
+            otpauth_uri: string;
+            /** Secret */
+            secret: string;
+        };
+        /** OfferAcceptanceDTO */
+        OfferAcceptanceDTO: {
+            /** Accepted At */
+            accepted_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Ip */
+            ip: string | null;
+            /**
+             * Offer Version Id
+             * Format: uuid
+             */
+            offer_version_id: string;
+            /** Version */
+            version: number;
+        };
+        /** AcceptOfferRequest */
+        AcceptOfferRequest: {
+            /**
+             * Offer Version Id
+             * Format: uuid
+             */
+            offer_version_id: string;
+        };
+        /** UpdateOfferRequest */
+        UpdateOfferRequest: {
+            /** Body */
+            body?: string | null;
+            /** Title */
+            title?: string | null;
+        };
+        /** CreateOfferRequest */
+        CreateOfferRequest: {
+            /** Body */
+            body: string;
+            /** Title */
+            title: string;
+        };
+        /** PublicOfferDTO */
+        PublicOfferDTO: {
+            /** Body */
+            body: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Published At */
+            published_at: string;
+            /** Title */
+            title: string;
+            /** Version */
+            version: number;
+        };
+        /** OfferVersionDTO */
+        OfferVersionDTO: {
+            /** Body */
+            body: string;
+            /** Created At */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Published At */
+            published_at: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "draft" | "active" | "archived";
+            /** Title */
+            title: string;
+            /** Updated At */
+            updated_at: string;
+            /** Version */
+            version: number;
+        };
+        /** OfferPageDTO */
+        OfferPageDTO: {
+            /** Items */
+            items: components["schemas"]["OfferVersionDTO"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Total */
+            total: number;
+        };
+        /** RegisterRequest */
+        RegisterRequest: {
+            /** Email */
+            email: string;
+            /** Name */
+            name?: string | null;
+            /** Password */
+            password: string;
+            /** Phone */
+            phone?: string | null;
         };
     };
     responses: {
@@ -1272,6 +2137,221 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    listPushSubscriptions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PushSubscriptionResponse"][];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Access denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+
+    upsertPushSubscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpsertPushSubscriptionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PushSubscriptionResponse"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Access denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Subscription conflict or active subscription limit reached */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+
+    deletePushSubscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                subscription_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Access denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+
+    getNotificationPreferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPreferencesResponse"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Access denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+
+    updateNotificationPreferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateNotificationPreferencesRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPreferencesResponse"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Access denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description validation_error or critical_channel_locked */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+
     getTenant: {
         parameters: {
             query?: never;
@@ -1418,32 +2498,6 @@ export interface operations {
             422: components["responses"]["Validation"];
         };
     };
-    login: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["LoginRequest"];
-            };
-        };
-        responses: {
-            /** @description Сессия */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LoginResponse"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            422: components["responses"]["Validation"];
-        };
-    };
     getSession: {
         parameters: {
             query?: never;
@@ -1548,7 +2602,9 @@ export interface operations {
     createRentalTicket: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
             path: {
                 id: string;
             };
@@ -1566,7 +2622,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Ticket"];
+                    "application/json": components["schemas"]["TicketReceipt"];
                 };
             };
             401: components["responses"]["Unauthorized"];
@@ -1602,9 +2658,39 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
         };
     };
+    getMyTicket: operations["getAdminTicket"];
+    upload_file_api_v1_files_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_file_api_v1_files_post"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadResultDTO"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            413: { headers: { [name: string]: unknown }; content?: never };
+            422: components["responses"]["Validation"];
+            503: { headers: { [name: string]: unknown }; content?: never };
+        };
+    };
     getAnalyticsSummary: {
         parameters: {
             query: {
+                category_id?: string | null;
                 from: string;
                 to: string;
             };
@@ -1614,7 +2700,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description KPI */
+            /** @description Successful Response */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1623,17 +2709,38 @@ export interface operations {
                     "application/json": components["schemas"]["AnalyticsSummary"];
                 };
             };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            422: components["responses"]["Validation"];
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Analytics permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
         };
     };
     getAnalyticsRevenue: {
         parameters: {
             query: {
+                group_by: "category" | "lot" | "day";
+                category_id?: string | null;
                 from: string;
                 to: string;
-                group_by: "lot" | "category" | "day";
             };
             header?: never;
             path?: never;
@@ -1641,7 +2748,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Выручка */
+            /** @description Successful Response */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1650,14 +2757,36 @@ export interface operations {
                     "application/json": components["schemas"]["AnalyticsRevenue"];
                 };
             };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            422: components["responses"]["Validation"];
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Analytics permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
         };
     };
     getAnalyticsLot: {
         parameters: {
             query: {
+                limit?: number;
+                offset?: number;
                 from: string;
                 to: string;
             };
@@ -1669,7 +2798,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Детализация по лоту */
+            /** @description Successful Response */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1678,10 +2807,36 @@ export interface operations {
                     "application/json": components["schemas"]["AnalyticsLotDetail"];
                 };
             };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            422: components["responses"]["Validation"];
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Analytics permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Lot not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
         };
     };
     listAdminLots: {
@@ -1859,9 +3014,11 @@ export interface operations {
     getAdminSchedule: {
         parameters: {
             query: {
+                /** @description First tenant-local date */
                 from: string;
+                /** @description Exclusive tenant-local date */
                 to: string;
-                category_id?: string;
+                category_id?: string | null;
             };
             header?: never;
             path?: never;
@@ -1869,20 +3026,37 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Строки лотов, интервалы аренд и блоков, остатки АКБ */
+            /** @description Successful Response */
             200: {
                 headers: {
-                    /** @example no-store */
-                    "Cache-Control"?: string;
+                    "Cache-Control"?: "no-store";
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["AdminSchedule"];
                 };
             };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            422: components["responses"]["Validation"];
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Calendar access required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid category or date range */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     listBatteryStock: {
@@ -2053,6 +3227,33 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            422: components["responses"]["Validation"];
+        };
+    };
+    getVerificationRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Данные заявки */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VerificationRequest"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["Validation"];
         };
     };
     decideVerificationRequest: {
@@ -2076,7 +3277,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["VerificationRequest"];
+                    "application/json": components["schemas"]["AdminVerificationRequestSummary"];
                 };
             };
             401: components["responses"]["Unauthorized"];
@@ -2090,6 +3291,10 @@ export interface operations {
         parameters: {
             query?: {
                 status?: "submitted" | "in_progress" | "resolved";
+                lot_id?: string;
+                rental_id?: string;
+                from?: string;
+                to?: string;
                 limit?: number;
                 offset?: number;
             };
@@ -2110,6 +3315,32 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+        };
+    };
+    getAdminTicket: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Ticket"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["Validation"];
+            503: { headers: { [name: string]: unknown }; content?: never };
         };
     };
     updateAdminTicket: {
@@ -2141,6 +3372,637 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["Validation"];
+        };
+    };
+    getAdminRental: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminRentalDetail"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Staff permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Rental was not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    getAnalyticsUtilization: {
+        parameters: {
+            query: {
+                group_by?: "category" | "lot" | "day";
+                category_id?: string | null;
+                from: string;
+                to: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalyticsRevenue"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Analytics permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    exportAnalytics: {
+        parameters: {
+            query: {
+                report: "rentals";
+                format?: "csv";
+                from: string;
+                to: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Rental CSV report */
+            200: {
+                headers: {
+                    "Content-Disposition"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": string;
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Analytics permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    compareAnalytics: {
+        parameters: {
+            query: {
+                compare_from: string;
+                compare_to: string;
+                category_id?: string | null;
+                from: string;
+                to: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalyticsComparison"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Analytics permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reset_password_api_v1_auth_password_reset_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordResetRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    forgot_password_api_v1_auth_password_forgot_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordForgotRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    verify_mfa_api_v1_auth_mfa_verify_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MfaCodeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoginResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    setup_mfa_api_v1_auth_mfa_setup_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MfaTokenRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfaSetupResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    confirm_mfa_api_v1_auth_mfa_confirm_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MfaCodeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfaConfirmResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    login_api_v1_auth_login_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LoginRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoginResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_current_offer_api_v1_public_offers_current_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicOfferDTO"];
+                };
+            };
+        };
+    };
+    accept_offer_api_v1_me_offer_acceptances_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AcceptOfferRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OfferAcceptanceDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_offer_acceptances_api_v1_me_offer_acceptances_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OfferAcceptanceDTO"][];
+                };
+            };
+        };
+    };
+    register_api_v1_auth_register_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegisterRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoginResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    publish_offer_api_v1_admin_offers__offer_id__publish_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                offer_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OfferVersionDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_offer_api_v1_admin_offers__offer_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                offer_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateOfferRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OfferVersionDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_offer_api_v1_admin_offers_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateOfferRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OfferVersionDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_offers_api_v1_admin_offers_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OfferPageDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
         };
     };
 }

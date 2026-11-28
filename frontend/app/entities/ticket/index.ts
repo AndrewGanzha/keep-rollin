@@ -1,9 +1,12 @@
 export {
   createRentalTicket,
+  fetchAdminTicket,
   fetchAdminTickets,
   fetchMyTickets,
   patchAdminTicket,
+  uploadTicketPhoto,
   type TicketQuery,
+  type TicketReceipt,
 } from './api/ticket.api'
 export type {
   CreateTicketRequest,

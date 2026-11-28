@@ -21,9 +21,25 @@ const {
   preset,
   customRange,
   periodLabel,
+  periodReady,
+  periodError,
+  currency,
+  comparisonRange,
+  comparisonLabel,
+  comparisonPeriodError,
+  comparison,
+  comparisonPending,
+  comparisonError,
+  refreshComparison,
   openLot,
   detail,
+  detailLoading,
+  detailOffset,
+  detailPageSize,
+  pageDetail,
   closeDetail,
+  downloadCsv,
+  exporting,
 } = await useAdminAnalytics()
 </script>
 
@@ -49,12 +65,31 @@ const {
         v-model="customRange"
         selection-mode="range"
         :manual-input="false"
+        :invalid="periodError"
         placeholder="Диапазон"
+        aria-label="Диапазон отчёта"
         show-icon
       />
 
       <span class="muted">{{ periodLabel }}</span>
+
+      <Button
+        label="Скачать CSV"
+        icon="pi pi-download"
+        outlined
+        :loading="exporting"
+        :disabled="!periodReady"
+        @click="downloadCsv"
+      />
     </div>
+
+    <Message
+      v-if="!periodReady"
+      severity="warn"
+      size="small"
+    >
+      {{ periodError ? 'Выберите период до 366 дней' : 'Укажите дату окончания периода' }}
+    </Message>
 
     <ErrorState
       v-if="error"
@@ -70,7 +105,44 @@ const {
       />
 
       <template v-if="data">
-        <AnalyticsKpis :summary="data.summary" />
+        <div class="row analytics__toolbar">
+          <label for="analytics-comparison">Сравнить с периодом</label>
+          <DatePicker
+            v-model="comparisonRange"
+            input-id="analytics-comparison"
+            selection-mode="range"
+            :manual-input="false"
+            :invalid="comparisonPeriodError"
+            placeholder="Диапазон"
+            show-icon
+            show-clear
+          />
+          <span
+            v-if="comparisonLabel && comparisonPending"
+            class="muted"
+            role="status"
+          >Загружаем сравнение…</span>
+        </div>
+
+        <Message
+          v-if="comparisonPeriodError"
+          severity="warn"
+          size="small"
+        >
+          Выберите период сравнения до 366 дней
+        </Message>
+
+        <ErrorState
+          v-if="comparisonLabel && comparisonError && !comparisonPending"
+          :error="comparisonError"
+          @retry="refreshComparison"
+        />
+
+        <AnalyticsKpis
+          :summary="data.summary"
+          :currency="currency"
+          :comparison="periodReady && !pending && !comparisonPending && !comparisonError ? comparison : null"
+        />
 
         <div class="analytics__grid">
           <Card>
@@ -78,21 +150,33 @@ const {
               Выручка по дням
             </template>
             <template #content>
-              <RevenueBars :buckets="data.day" />
+              <RevenueBars
+                :buckets="data.day"
+                :currency="currency"
+              />
             </template>
           </Card>
 
-          <CategoryBreakdown :buckets="data.categories" />
+          <CategoryBreakdown
+            :buckets="data.categories"
+            :currency="currency"
+          />
         </div>
 
         <LotsAnalyticsTable
           :lots="data.lots"
-          :loading="pending"
+          :currency="currency"
+          :loading="pending || (detailLoading && !detail)"
           @select="openLot"
         />
 
         <LotAnalyticsDialog
           :detail="detail"
+          :currency="currency"
+          :loading="detailLoading"
+          :offset="detailOffset"
+          :page-size="detailPageSize"
+          @page="pageDetail"
           @close="closeDetail"
         />
       </template>
@@ -107,6 +191,7 @@ const {
 
 .analytics__toolbar :deep(.p-selectbutton) {
   flex-wrap: wrap;
+  max-width: 100%;
 }
 
 .analytics__grid {
@@ -117,7 +202,7 @@ const {
 
 @media (max-width: 900px) {
   .analytics__grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 </style>

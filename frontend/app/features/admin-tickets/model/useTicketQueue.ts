@@ -1,4 +1,5 @@
 import {
+  fetchAdminTicket,
   fetchAdminTickets,
   patchAdminTicket,
   type Ticket,
@@ -11,6 +12,11 @@ export const useTicketQueue = async () => {
   const api = useApi()
   const toast = useToast()
   const status = ref<TicketStatus | undefined>()
+  const details = shallowReactive<Record<string, {
+    loading: boolean
+    photos?: string[]
+    error?: string
+  }>>({})
 
   const request = useAsyncData(
     'admin-tickets',
@@ -20,6 +26,27 @@ export const useTicketQueue = async () => {
   await request
 
   const updating = ref(false)
+
+  const loadDetails = async (id: string) => {
+    const pending = { loading: true }
+    details[id] = pending
+
+    try {
+      const ticket = await fetchAdminTicket(api, id)
+      if (details[id] === pending) {
+        details[id] = { loading: false, photos: ticket.photo_urls }
+      }
+    } catch (caught) {
+      if (details[id] === pending) {
+        const error = caught instanceof ApiError ? caught.message : 'Не удалось загрузить фото'
+        details[id] = { loading: false, error }
+      }
+    }
+  }
+
+  const clearDetails = (id: string) => {
+    delete details[id]
+  }
 
   const update = async (ticket: Ticket, payload: TicketPatchRequest) => {
     updating.value = true
@@ -45,5 +72,8 @@ export const useTicketQueue = async () => {
     status,
     updating,
     update,
+    details,
+    loadDetails,
+    clearDetails,
   }
 }

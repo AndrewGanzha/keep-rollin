@@ -33,8 +33,11 @@ graph LR
 
 CI-гейты (job `contract`):
 
+> Текущий `contract/openapi.json` фиксирует пути и схемы DTO; полные 4xx-ответы, `application/problem+json`-примеры и взаимоисключающие success/challenge-варианты для auth-операций остаются в BE-QA-01/CT-08. Runtime-поведение ошибок покрыто HTTP-тестами (401/403/409/422/429, `Retry-After`).
+
 ```bash
-make openapi                 # backend: python -m app.scripts.export_openapi > contract/openapi.json
+cd backend
+python scripts/export_openapi.py      # пишет contract/openapi.json без редиректа
 git diff --exit-code contract/openapi.json
 oasdiff breaking contract/openapi.json@main contract/openapi.json   # падает → метка breaking-contract
 pnpm --dir frontend gen:api && git diff --exit-code frontend/generated  # кодогенерация детерминирована
@@ -70,7 +73,7 @@ schemathesis run contract/openapi.json --url http://api:8000 --checks all   # в
 | D-01 | Тенант               | Тенант определяется по `Host`; `X-Tenant` — только dev/test; `tenant_id` никогда не в теле запроса |
 | D-02 | Пути и версии        | `/api/v1/{public,me,admin,platform}`; breaking-изменения → `/api/v2`                            |
 | D-03 | Аутентификация       | Access JWT 15 мин в памяти; refresh — в `__Host-rt` (HttpOnly/Secure/SameSite=Lax), ротация     |
-| D-04 | 2FA                  | TOTP обязателен для `owner`/`admin`; `mfa_token` 5 мин; 10 recovery-кодов                      |
+| D-04 | 2FA                  | TOTP обязателен для `owner`/`admin`; `mfa_token` 5 мин; 10 recovery-кодов; enrollment до выдачи access |
 | D-05 | Время                | Всё в UTC ISO-8601 (`Z`), `timestamptz`; интервалы полуоткрытые `[start, end)`                  |
 | D-06 | Деньги               | `price_minor` (int) + `currency` тенанта; цену считает только сервер                           |
 | D-07 | Списки               | `limit` (20, max 100) + `offset` + `sort`; ответ `{items,total,limit,offset}`; неизвестный фильтр → 422 |
@@ -81,7 +84,7 @@ schemathesis run contract/openapi.json --url http://api:8000 --checks all   # в
 | D-12 | Политики             | `tenant_settings`: горизонт, мин/макс длительность, отмена, напоминание, лимиты                 |
 | D-13 | Уведомления          | Outbox в транзакции события; критичные — email+push; прочие — push→email                        |
 | D-14 | Аналитика            | Метрики по `start_time` аренды, бакеты по таймзоне тенанта; формулы в `contract/analytics.md`   |
-| D-15 | Кэш                  | `public`: ETag + `max-age`; `me`/`admin`: `no-store`                                            |
+| D-15 | Кэш                  | ETag для каталога. Политики кеша маршрутов приведены в §3.12.                                            |
 | D-16 | Трассировка          | `X-Request-Id` (генерируется/пробрасывается) → `trace_id` в любой ошибке                        |
 | D-17 | Enum-ы               | Строковые snake_case; значения — в §3.9; неизвестное значение клиент показывает как есть         |
 | D-18 | URL и SSR            | Человекочитаемые `slug` для tenant/category/lot; SSR-кэш ключуется по `host`                     |
@@ -90,7 +93,7 @@ schemathesis run contract/openapi.json --url http://api:8000 --checks all   # в
 
 1. `Host` → `tenant` (уникальные `subdomain` и `domain`); ответ 404 `tenant_not_found`, если не найден.
 2. JWT содержит `tnt`; несовпадение с `Host` → 403 `tenant_mismatch` (защита от переноса токена).
-3. RLS: `SET LOCAL app.tenant_id` в начале транзакции (SQLAlchemy event `after_begin`); воркер/миграции — `app.bypass_rls`.
+3. RLS: `SET LOCAL app.tenant_id` в начале транзакции (SQLAlchemy event `after_begin`); воркер/CLI-провижининг используют отдельный привилегированный DSN (не `keep_rollin_app`) и не полагаются на GUC-bypass.
 4. Nuxt SSR обязан пробрасывать `host` и `cookie` в исходящие запросы; SSR-кэш — по `host+path`, никакого общего кэша между тенантами.
 
 ### 3.2. Аутентификация (D-03, D-04)
@@ -104,6 +107,7 @@ schemathesis run contract/openapi.json --url http://api:8000 --checks all   # в
 | Пароль           | argon2id; минимум 8 символов; «утечка в списке» → 422                    |
 | MFA              | TOTP 30 с, ±1 окно, lockout 5 попыток/5 мин; recovery-код одноразовый   |
 | Сброс пароля     | Токен 1 ч, одноразовый; после сброса все refresh-сессии отозваны        |
+| Enrollment staff | Пароль верный, но MFA не подтверждён → только `mfa_setup_required` + `mfa_token`; access/refresh не выдаются |
 
 Пример логина с MFA:
 
@@ -112,6 +116,20 @@ POST /api/v1/auth/login  →  200 {"mfa_required": true, "mfa_token": "..."}
 POST /api/v1/auth/mfa/verify {"mfa_token": "...", "code": "123456"}
                          →  200 {"access_token": "...", "expires_in": 900, "user": {...}}
 ```
+
+Первый вход owner/admin без подтверждённого TOTP:
+
+```json
+POST /api/v1/auth/login → 200 {"mfa_setup_required": true, "mfa_token": "..."}
+POST /api/v1/auth/mfa/setup {"mfa_token": "..."}
+                        → 200 {"secret": "...", "otpauth_uri": "otpauth://..."}
+POST /api/v1/auth/mfa/confirm {"mfa_token": "...", "code": "123456"}
+                        → 200 {"access_token": "...", "recovery_codes": ["...", "..."]}
+```
+
+`mfa_token` — отдельный тип JWT (`typ=mfa`), не принимается как Bearer access. Подтверждение MFA повышает `token_version` и отзывает прежние сессии. Recovery-коды хранятся keyed-хешами и одноразовы. Lockout-счётчик сохраняется до истечения окна; 6-я попытка возвращает `429 rate_limited` + `Retry-After`.
+
+Сброс пароля не раскрывает существование аккаунта: `POST /auth/password/forgot` всегда `202` с одинаковым телом. Токен живёт 1 час, хранится хешем, а материал для доставки — в зашифрованном виде до подключения email-воркера (BE-NOT-02). Успешный сброс повышает `token_version` и отзывает все refresh-семьи.
 
 ### 3.3. Роли и права
 
@@ -178,13 +196,15 @@ POST /api/v1/auth/mfa/verify {"mfa_token": "...", "code": "123456"}
 | `already_processed`       | 409  | Решение по заявке уже принято                                  |
 | `characteristic_in_use`   | 409  | Смена типа/удаление характеристики с данными                   |
 | `email_taken`             | 409  | Регистрация на занятый email                                   |
+| `battery_unavailable`      | 409  | Недостаточно аккумуляторов выбранного типа                      |
+| `stock_below_committed`    | 409  | Количество меньше занятого пика                                 |
 | `idempotency_conflict`    | 422  | Тот же ключ, другой body                                       |
 | `upload_invalid`          | 422  | MIME/размер/назначение файла не валидны                        |
 | `critical_channel_locked` | 422  | Попытка отключить критичное уведомление                        |
 | `payload_too_large`       | 413  | Файл/тело больше лимита                                        |
 | `unsupported_media_type`  | 415  | Неподдерживаемый тип                                           |
 | `rate_limited`            | 429  | Лимит запросов (есть `Retry-After`)                            |
-| `issue_limit_exceeded`    | 429  | > 5 тикетов на аренду в сутки                                  |
+| `issue_limit_exceeded`    | 429  | Лимит тикетов на аренду за последние 24 ч                                  |
 | `internal_error`          | 500  | Необработанная ошибка (с `trace_id`)                           |
 | `service_unavailable`     | 503  | Зависимость (БД/S3/SMTP) недоступна                            |
 
@@ -199,7 +219,7 @@ POST /api/v1/auth/mfa/verify {"mfa_token": "...", "code": "123456"}
 | `POST /me/verification-requests`         |
 | `POST /admin/lots/bulk`                  |
 
-Поведение: ключ хранится `(tenant_id, user_id, key)` + хеш body 24 ч. Повтор с тем же body → сохранённый ответ + `Idempotent-Replayed: true`; другой body → 422 `idempotency_conflict`.
+Ключ хранится как `(tenant_id, user_id, key)` вместе с отпечатком операции и нормализованного тела запроса. В течение 24 часов повтор возвращает сохранённый успешный ответ с `Idempotent-Replayed: true`. Другая операция или тело под тем же ключом получает `422 idempotency_conflict`. Неуспешный запрос освобождает ключ при откате транзакции.
 
 ### 3.6. Занятость и брони (D-11)
 
@@ -213,6 +233,9 @@ ALTER TABLE occupancy ADD CONSTRAINT occupancy_no_overlap
 * `kind ∈ {booking, block, maintenance}` — бронь, ручная блокировка (UC-2.4), обслуживание (UC-9.4).
 * Пересечение на уровне БД → `IntegrityError` → 409 `slot_taken` (единственная защита от гонок, приложение не «проверяет и вставляет»).
 * `status ∈ {active, released}` — отмена/закрытие освобождает интервал, история сохраняется.
+* Для ручного `maintenance` владелец открывает интервал `[now,)` в той же транзакции, что меняет `lot.status`. Календарь показывает открытый интервал в пределах запрошенного окна. При выходе из `maintenance` интервал закрывается временем перехода, получает `released` и остаётся в истории. Датированные блоки продолжают действовать независимо.
+* Когда срок обслуживания из тикета наступил, воркер освобождает конечный интервал, сохраняя его границы в истории. Возврат лота в `active` ждёт окончания других действующих блокировок и ручного закрытия незавершённой аренды.
+* Бронь становится `active` по наступлении `start_time`, если лот доступен и предыдущая аренда закрыта. Просрочка начинается строго после `end_time`. Лот в `active` становится `overdue`. Если он уже закрыт для бронирования на обслуживание или архивирован, сохраняется действующее ограничение. Outbox получает событие на арендатора и по одному на каждого активного администратора и владельца.
 * Просрочка (UC-10.4) не требует новой записи: `rental.status=overdue` при активном `occupancy` уже блокирует новые брони.
 
 ### 3.7. Доступность: форматы
@@ -228,7 +251,9 @@ ALTER TABLE occupancy ADD CONSTRAINT occupancy_no_overlap
 
 * Гость видит только `kind: "busy"`; staff — `booking|block|maintenance` + `rental_id`/`block_id`.
 * Диапазон ≤ 90 дней; `from < to`; иначе 422.
-* Агрегат по модели: `GET /public/availability?category_id=…` → `{lots_total, lots_free, windows: [...]}` (UC-2.2/7.1).
+* `GET /public/availability?from=…&to=…&category_id=…` строит сводку по видимым активным лотам с активным вариантом (UC-2.2/7.1). Обе границы обязательны, `category_id` опционален.
+* `lots_total` — число подходящих лотов. `lots_free` на верхнем уровне считает лоты, свободные весь диапазон. `windows` содержит соседние полуоткрытые интервалы `{start,end,lots_free}` с постоянным числом свободных лотов. При пустой выборке оба счётчика равны нулю, а массив окон пуст.
+* Пересечения учитывают активные записи занятости. Сводка содержит только время и счётчики.
 
 ### 3.8. Лимиты и политики (`tenant_settings`, D-12)
 
@@ -245,7 +270,7 @@ ALTER TABLE occupancy ADD CONSTRAINT occupancy_no_overlap
 | `timezone`                  | —      | IANA       | отображение, аналитика |
 | `currency`                  | RUB    | ISO 4217   | D-06                  |
 
-Прочие лимиты контракта: описание тикета 10–1000 символов; фото ≤ 5 МБ (jpg/png/webp), документ ≤ 10 МБ (jpg/png/pdf); не более 3 фото на тикет и 3 документов на заявку; bulk-создание ≤ 50 лотов.
+Прочие лимиты контракта включают 10–1000 символов для описания тикета, до 3 фото на тикет, до 3 документов на заявку и до 50 лотов в bulk. Фото лота или тикета принимаются в JPEG, PNG или WebP до 5 МиБ. Паспорт и регистрация принимаются в JPEG, PNG или PDF до 10 МиБ, селфи — в JPEG или PNG до 10 МиБ. Изображения перекодируются с нормализацией ориентации и без EXIF.
 
 ### 3.9. Enum-ы (D-17)
 
@@ -263,7 +288,7 @@ ALTER TABLE occupancy ADD CONSTRAINT occupancy_no_overlap
 | `file.purpose` | `lot_photo`, `ticket_photo`, `verification_passport`, `verification_registration`, `verification_selfie` |
 | `characteristic.type` | `number`, `text`, `select`                                        |
 | `notification.status` | `pending`, `sent`, `failed`                                       |
-| `audit.action` | фиксированный enum, пополняется миграцией: `lot.status_changed`, `rental.closed`, `rental.overdue`, `verification.decided`, `ticket.status_changed`, `offer.published`, `settings.updated`, `admin.created`, `admin.deactivated`, `lot.blocked` |
+| `audit.action` | Фиксированный enum: `tenant.provisioned`, `admin.created`, `admin.deactivated`, `user.deactivated`, `settings.updated`, `category.created`, `category.updated`, `category.characteristics_updated`, `offer.created`, `offer.updated`, `offer.published`, `lot.blocked`, `lot.unblocked`, `lot.status_changed`, `verification.decided`, `rental.booked`, `rental.cancelled`, `battery_stock.created`, `battery_stock.updated`, `battery_stock.deleted`, `rental.closed`, `rental.overdue`, `ticket.created`, `ticket.status_changed` |
 
 ### 3.10. Уведомления: события (D-13)
 
@@ -272,6 +297,7 @@ ALTER TABLE occupancy ADD CONSTRAINT occupancy_no_overlap
 | `verification.approved`    | ❌        | push → email          | user       |
 | `verification.rejected`    | ✅        | email + push          | user       |
 | `booking.confirmed`        | ❌        | push → email          | user       |
+| `rental.closed`             | ❌        | push → email          | user       |
 | `booking.cancelled`        | ❌        | push → email          | user       |
 | `rental.ending_soon`       | ❌        | push → email          | user       |
 | `rental.overdue.user`      | ✅        | email + push          | user       |
@@ -280,7 +306,17 @@ ALTER TABLE occupancy ADD CONSTRAINT occupancy_no_overlap
 | `ticket.updated.user`      | ❌        | push → email          | user       |
 | `ticket.resolved.user`     | ✅        | email + push          | user       |
 
-Ключ дедупликации: `(event_type, entity_id, user_id, channel)`. Retry: 1/5/15 мин, затем `failed`.
+Ключ дедупликации: `(event_type, entity_id, user_id, channel)`. Retry: 1/5/15 мин, затем `failed`. При включённом SMTP воркер доставляет письма по бизнес-событиям из таблицы. Для некритичных событий учитывается `email_by_event`, критичные email всегда включены.
+
+При включённой маршрутизации воркер фиксирует выбор канала отдельными записями
+outbox. Критичный email ставится в очередь независимо от результата push.
+Для некритичных событий первая успешная подписка исключает повтор по email.
+Неактуальные подписки деактивируются при 404/410 с проверкой версии регистрации.
+
+Событие `rental.ending_soon` ставится в очередь один раз, когда активная аренда
+попадает в окно `reminder_hours_before`. Воркер повторно проверяет статус и время
+окончания перед обращением к провайдеру. Письма и push о решении по верификации
+открывают `/account/verification`, где показан текущий статус аккаунта.
 
 Формат настроек пользователя (`GET/PUT /me/notification-preferences`):
 
@@ -310,5 +346,18 @@ ALTER TABLE occupancy ADD CONSTRAINT occupancy_no_overlap
 
 * `X-Request-Id` принимается от клиента/прокси, иначе генерируется; возвращается в ответе и попадает в `trace_id` любых ошибок.
 * `Date`-заголовок ответа — источник для клиентского таймера (FE считает offset, не доверяет локальным часам).
-* Кэш: `GET /public/tenant` → `max-age=300`; каталог/карточка → `max-age=60, stale-while-revalidate=300`; доступность → `max-age=10`; `/me` и `/admin` → `no-store`.
+* Кэш: `GET /public/tenant` → `max-age=300`; каталог/карточка → `max-age=60, stale-while-revalidate=300`; доступность → `no-store`; `/me` и `/admin` → `no-store`.
 * Валюта одна на тенанта; мультивалютность — бэклог (ТЗ 12.1).
+* Rate limit логина — in-process, `tenant+IP` и `tenant+email`, окно и лимиты из env (`AUTH_RATE_LIMIT_*`). Это ограничение MVP: при нескольких API-инстансах эффективный лимит умножается; Redis — бэклог. `X-Forwarded-For` не используется, клиентский IP берётся из доверенного `request.client.host` (настройка `FORWARDED_ALLOW_IPS` на прокси).
+
+### 3.13. Администраторы, аудит и провижининг
+
+- `GET /admin/users` — owner-only, фильтры `role`, `q`, `limit/offset`, безопасные поля (`id,email,name,role,is_active,mfa_enabled,created_at`).
+- `POST /admin/users` — создаёт только `admin`, требует свежий TOTP owner в `mfa_code` (нет/неверный → `401 invalid_mfa_code`, lockout → `429 rate_limited` + `Retry-After`), пароль проверяется политикой и хешируется Argon2id. Начальный пароль задаёт owner; invitation/forced-change — follow-up.
+- `POST /admin/users/{id}/deactivate` — нельзя себя и последнего активного owner; чужой `id` → 404; успех инвалидирует access/refresh и пишет audit. Мутации сериализуются advisory-lock по тенанту.
+- `audit_log` — append-only для API-роли (`SELECT, INSERT`), RLS по `tenant_id`, keyset по `(created_at DESC, id DESC)`, metadata только по закрытому allowlist без PII/секретов. `GET /admin/audit-log` — owner-only, фильтры `actor_id/action/entity_type+entity_id/from/to`, курсор привязан к фильтрам.
+- Аудит охватывает действующие изменения администраторов, настроек, категорий, характеристик, оферт и блоков календаря. Запись сохраняется в транзакции операции. Повторное снятие блока возвращает `204` без новой записи.
+- Retention по умолчанию 365 дней; `python -m app.cli purge-audit-log` — dry-run, `--execute` удаляет батчами только строки старше cutoff (минимум 30 дней) через привилегированный DSN.
+- `python -m app.cli provision-tenant` — идемпотентно создаёт tenant/settings/owner/VAPID/audit одной транзакцией; требует `PROVISION_DATABASE_URL` (не API-роль), пароль печатается один раз только при создании. VAPID private key шифруется `SecretBox` с контекстом `vapid:<tenant_id>`.
+- Для провижининга в production задайте CLI те же `APP_ENV=production` и ключи `SECURITY_KEY`, `SECURITY_KEY_ID`, `SECURITY_PREVIOUS_KEYS`, что и у API. Передавайте DSN через `PROVISION_DATABASE_URL`.
+- Привилегированный DSN должен принадлежать отдельной роли с минимальными грантами (владелец таблиц или `BYPASSRLS` + только нужные таблицы); `keep_rollin_app` для CLI не подходит.
