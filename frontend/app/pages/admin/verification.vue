@@ -9,7 +9,10 @@ definePageMeta({ layout: 'admin', middleware: ['auth', 'role'] })
 
 useHead({ title: 'Верификация — админка' })
 
-const { data, pending, error, refresh, status, deciding, decide } = await useVerificationQueue()
+const {
+  data, pending, error, refresh, status, deciding, decide,
+  detail, detailError, detailPending, loadDetail, clearDetail,
+} = await useVerificationQueue()
 const tenant = useTenant()
 const timeZone = computed(() => tenant.value?.timezone)
 
@@ -49,7 +52,12 @@ const statusOptions: { label: string; value: VerificationStatus }[] = [
       :loading="pending"
       :pending="deciding"
       :time-zone="timeZone"
+      :detail="detail"
+      :detail-error="detailError"
+      :detail-pending="detailPending"
       @decide="decide"
+      @load-detail="loadDetail"
+      @clear-detail="clearDetail"
     />
   </div>
 </template>

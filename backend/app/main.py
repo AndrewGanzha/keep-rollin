@@ -22,6 +22,8 @@ from app.api.offers import me_router as me_offers_router
 from app.api.offers import public_router as public_offers_router
 from app.api.quote import router as quote_router
 from app.api.tenant import router as tenant_router
+from app.api.verification import admin_router as admin_verification_router
+from app.api.verification import me_router as me_verification_router
 from app.config import Settings, get_settings
 from app.db import create_engine, create_session_factory
 from app.errors import register_exception_handlers
@@ -110,6 +112,8 @@ def create_app(
     application.include_router(catalog_router)
     application.include_router(public_offers_router)
     application.include_router(me_offers_router)
+    application.include_router(me_verification_router)
+    application.include_router(admin_verification_router)
     application.include_router(availability_router)
     application.include_router(quote_router)
     application.include_router(tenant_router)

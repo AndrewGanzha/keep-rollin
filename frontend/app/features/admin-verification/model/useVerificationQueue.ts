@@ -1,6 +1,8 @@
 import {
   decideVerificationRequest,
+  fetchVerificationRequest,
   fetchVerificationRequests,
+  type AdminVerificationRequestSummary,
   type VerificationDecisionRequest,
   type VerificationRequest,
   type VerificationStatus,
@@ -17,11 +19,48 @@ export const useVerificationQueue = async () => {
     () => fetchVerificationRequests(api, { status: status.value }),
     { watch: [status] },
   )
-  await request
 
   const deciding = ref(false)
+  const detail = shallowRef<VerificationRequest | null>(null)
+  const detailError = shallowRef<unknown>(null)
+  const detailPending = ref(false)
+  let detailRequest: AbortController | undefined
 
-  const decide = async (item: VerificationRequest, payload: VerificationDecisionRequest) => {
+  const clearDetail = () => {
+    detailRequest?.abort()
+    detailRequest = undefined
+    detail.value = null
+    detailError.value = null
+    detailPending.value = false
+  }
+
+  const loadDetail = async (id: string) => {
+    clearDetail()
+    const controller = new AbortController()
+    detailRequest = controller
+    detailPending.value = true
+
+    try {
+      const received = await fetchVerificationRequest(api, id, controller.signal)
+      if (detailRequest === controller) {
+        detail.value = received
+      }
+    } catch (caught) {
+      if (detailRequest === controller) {
+        detailError.value = caught
+      }
+    } finally {
+      if (detailRequest === controller) {
+        detailRequest = undefined
+        detailPending.value = false
+      }
+    }
+  }
+
+  onScopeDispose(clearDetail)
+  await request
+
+  const decide = async (item: AdminVerificationRequestSummary, payload: VerificationDecisionRequest) => {
     deciding.value = true
 
     try {
@@ -45,5 +84,10 @@ export const useVerificationQueue = async () => {
     status,
     deciding,
     decide,
+    detail,
+    detailError,
+    detailPending,
+    loadDetail,
+    clearDetail,
   }
 }

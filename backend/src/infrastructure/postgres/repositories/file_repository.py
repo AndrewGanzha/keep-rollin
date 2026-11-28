@@ -6,6 +6,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
 from src.infrastructure.postgres.models.file_record import AttachmentRecord, FileRecord
+from src.infrastructure.postgres.models.verification_request_record import (
+    VerificationDocumentRecord,
+)
 
 
 class UnknownLotPhotoError(Exception):
@@ -95,7 +98,11 @@ class FileRepository:
             AttachmentRecord.tenant_id == FileRecord.tenant_id,
             AttachmentRecord.file_id == FileRecord.id,
         )
-        return FileRecord.created_at < cutoff, ~attached
+        verification_document = exists().where(
+            VerificationDocumentRecord.tenant_id == FileRecord.tenant_id,
+            VerificationDocumentRecord.file_id == FileRecord.id,
+        )
+        return FileRecord.created_at < cutoff, ~attached & ~verification_document
 
     async def count_orphans(self, cutoff: datetime) -> int:
         cutoff_filter, unattached = self._unattached_before(cutoff)

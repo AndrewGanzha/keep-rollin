@@ -217,7 +217,7 @@ POST /api/v1/auth/mfa/confirm {"mfa_token": "...", "code": "123456"}
 | `POST /me/verification-requests`         |
 | `POST /admin/lots/bulk`                  |
 
-Поведение: ключ хранится `(tenant_id, user_id, key)` + хеш body 24 ч. Повтор с тем же body → сохранённый ответ + `Idempotent-Replayed: true`; другой body → 422 `idempotency_conflict`.
+Ключ хранится как `(tenant_id, user_id, key)` вместе с отпечатком операции и нормализованного тела запроса. В течение 24 часов повтор возвращает сохранённый успешный ответ с `Idempotent-Replayed: true`. Другая операция или тело под тем же ключом получает `422 idempotency_conflict`. Неуспешный запрос освобождает ключ при откате транзакции.
 
 ### 3.6. Занятость и брони (D-11)
 

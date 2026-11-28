@@ -60,7 +60,7 @@
 | `GET /admin/lots/{id}`                            | Деталь + `version` |
 | `PATCH /admin/lots/{id}`                          | Требует `version` |
 | `POST /admin/lots/{id}/status`                    | Владелец меняет статус и получает обновлённый лот. Правила переходов приведены ниже |
-| `POST /admin/lots/bulk`                           | `count ≤ 50`, Idempotency-Key |
+| `POST /admin/lots/bulk`                           | `{template, count}`, 1–50, Idempotency-Key, 201 `{items}` |
 | `POST /admin/lots/{id}/blocks`                    | Ручная блокировка (UC-2.4) |
 | `DELETE /admin/lots/{id}/blocks/{block_id}`       | Снять блокировку |
 | `POST /files`                                     | Multipart с `file` и `purpose`. Возвращает 201 с `file_id` и подписанным `url` |
@@ -75,6 +75,8 @@
 
 `POST /files` требует сессию и обычные заголовки CSRF. `lot_photo` доступен владельцу. Остальные назначения хранятся в приватном бакете. Подписанная ссылка из ответа действительна пять минут по умолчанию, ответ имеет `Cache-Control: no-store`. Несовпадение MIME и содержимого даёт 422 `upload_invalid`, превышение лимита — 413 `payload_too_large`.
 
+`POST /admin/lots/bulk` принимает шаблон обычного лота. Имена внутри пакета получают суффикс ` №N`, слаги — `-N`. База слага берётся из шаблона или генерируется из имени. Порядок `items` соответствует нумерации. Конфликт с существующим слагом возвращает `409 slug_taken` и откатывает весь пакет.
+
 ### 4.4. Календарь и доступность (staff)
 
 | Метод и путь                  | Роли        | Назначение / заметки |
@@ -84,15 +86,13 @@
 
 ### 4.5. Верификация и оферта
 
-> Маршруты `verification-requests` ниже — planned: BE-VER-01/02/03 ещё не реализованы, поэтому их нет в текущем `contract/openapi.json`. Оферты реализованы.
-
 | Метод и путь                                    | Роли        | Назначение / заметки |
 | ----------------------------------------------- | ----------- | -------------------- |
 | `POST /me/verification-requests`                | user+       | Паспортные данные + 3 документа; Idempotency-Key |
 | `GET /me/verification-requests`                 | user+       | История заявок |
-| `GET /me/verification-requests/{id}`            | user+       | Статус + комментарий |
+| `GET /me/verification-requests/{id}`            | user+       | Статус, комментарий, даты и подписанные URL документов своей заявки |
 | `GET /admin/verification-requests`              | admin, owner| Очередь, фильтр `status`, пагинация |
-| `GET /admin/verification-requests/{id}`         | admin, owner| Деталь + подписанные URL документов (5 мин) |
+| `GET /admin/verification-requests/{id}`         | admin, owner| Деталь с паспортными полями и подписанными URL документов |
 | `POST /admin/verification-requests/{id}/decision` | admin, owner | `{decision, comment, version}`; 409 `already_processed` |
 | `GET /admin/audit-log`                          | owner       | Фильтры по актору/сущности/дате, keyset-пагинация |
 | `GET /admin/offers`                             | owner       | Версии оферты |
@@ -101,6 +101,10 @@
 | `POST /admin/offers/{id}/publish`               | owner       | Активирует, прежняя → `archived` |
 | `POST /me/offer-acceptances`                    | user+       | `{offer_version_id}`; идемпотентно |
 | `GET /me/offer-acceptances`                     | user+       | История принятий |
+
+При подаче `passport` содержит `full_name`, `birth_date` (YYYY-MM-DD), `passport_number` и `issued_by`. Объект `documents` содержит три идентификатора под ключами `verification_passport`, `verification_registration` и `verification_selfie`. Заявитель получает эти идентификаторы через `POST /files`. После отказа можно подать новую заявку. При наличии действующей заявки на проверке или одобрении сервер возвращает `409 conflict`.
+
+Списки, ответ о подаче и ответ о решении содержат сводку. Свежие ссылки на приватные документы выдаются в деталях заявки, стандартный срок — пять минут. В ответах верификации применяется `Cache-Control: no-store`. Для отказа нужен непустой комментарий. Изменение статуса, запись аудита и постановка события в outbox выполняются в одной транзакции.
 
 ### 4.6. Брони и аренды
 

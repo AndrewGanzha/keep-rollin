@@ -48,6 +48,7 @@ type AdminRental = components['schemas']['AdminRental']
 type AdminRentalPage = components['schemas']['AdminRentalPage']
 type AdminUserRef = components['schemas']['AdminUserRef']
 type VerificationRequest = components['schemas']['VerificationRequest']
+type AdminVerificationRequestSummary = components['schemas']['AdminVerificationRequestSummary']
 type VerificationRequestPage = components['schemas']['VerificationRequestPage']
 type Ticket = components['schemas']['Ticket']
 type TicketPage = components['schemas']['TicketPage']
@@ -663,6 +664,16 @@ const verificationRequests: VerificationRequest[] = [
     version: 2,
   },
 ]
+
+const toVerificationSummary = (request: VerificationRequest): AdminVerificationRequestSummary => ({
+  id: request.id,
+  user: request.user,
+  status: request.status,
+  admin_comment: request.admin_comment,
+  created_at: request.created_at,
+  reviewed_at: request.reviewed_at,
+  version: request.version,
+})
 
 let ticketSeq = 700
 
@@ -2147,6 +2158,8 @@ export default mock(
       }, { delay: 150 }),
 
       rest.get('/api/v1/admin/verification-requests', (params) => {
+        params.setHeader('Cache-Control', 'no-store')
+
         const user = currentUser(params)
 
         if (!user) {
@@ -2165,7 +2178,7 @@ export default mock(
         const filtered = verificationRequests.filter(item => !status || item.status === status)
 
         const page: VerificationRequestPage = {
-          items: filtered.slice(offset, offset + limit),
+          items: filtered.slice(offset, offset + limit).map(toVerificationSummary),
           total: filtered.length,
           limit,
           offset,
@@ -2174,7 +2187,9 @@ export default mock(
         return page
       }, { delay: 80 }),
 
-      rest.post('/api/v1/admin/verification-requests/:id/decision', (params) => {
+      rest.get('/api/v1/admin/verification-requests/:id', (params) => {
+        params.setHeader('Cache-Control', 'no-store')
+
         const user = currentUser(params)
 
         if (!user) {
@@ -2191,14 +2206,44 @@ export default mock(
           return fail(params, 404, problem('not_found', 404, 'Заявка не найдена'))
         }
 
-        const body = (params.request.body ?? {}) as { decision?: string; comment?: string; version?: number }
-        const comment = body.comment?.trim() ?? ''
+        return request
+      }, { delay: 80 }),
+
+      rest.post('/api/v1/admin/verification-requests/:id/decision', (params) => {
+        params.setHeader('Cache-Control', 'no-store')
+
+        const user = currentUser(params)
+
+        if (!user) {
+          return fail(params, 401, problem('token_invalid', 401, 'Требуется вход'))
+        }
+
+        if (user.role !== 'admin' && user.role !== 'owner') {
+          return fail(params, 403, problem('forbidden_role', 403, 'Недостаточно прав'))
+        }
+
+        const request = verificationRequests.find(item => item.id === params.request.params.id)
+
+        if (!request) {
+          return fail(params, 404, problem('not_found', 404, 'Заявка не найдена'))
+        }
+
+        const body = (params.request.body ?? {}) as { decision?: string; comment?: unknown; version?: number }
+        const comment = typeof body.comment === 'string' ? body.comment.trim() : ''
 
         if (body.decision !== 'approved' && body.decision !== 'rejected') {
           return fail(params, 422, problem('validation_error', 422, 'Выберите решение'))
         }
 
-        if (body.decision === 'rejected' && comment.length < 3) {
+        if (body.comment != null && typeof body.comment !== 'string') {
+          return fail(
+            params,
+            422,
+            problem('validation_error', 422, 'Проверьте поля', undefined, { comment: 'Укажите текст комментария' }),
+          )
+        }
+
+        if (body.decision === 'rejected' && !comment) {
           return fail(
             params,
             422,
@@ -2206,12 +2251,12 @@ export default mock(
           )
         }
 
-        if (body.version !== request.version) {
-          return fail(params, 409, problem('stale_version', 409, 'Заявка уже изменилась'))
-        }
-
         if (request.status !== 'pending') {
           return fail(params, 409, problem('already_processed', 409, 'Заявка уже обработана'))
+        }
+
+        if (body.version !== request.version) {
+          return fail(params, 409, problem('stale_version', 409, 'Заявка уже изменилась'))
         }
 
         request.status = body.decision
@@ -2225,7 +2270,7 @@ export default mock(
           owner.verification_status = body.decision
         }
 
-        return request
+        return toVerificationSummary(request)
       }, { delay: 150 }),
 
       rest.get('/api/v1/admin/tickets', (params) => {

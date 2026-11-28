@@ -7,7 +7,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.audit_deps import StaffAudit
 from app.api.auth_deps import get_current_user, require_permission, verify_csrf
 from app.api.deps import get_db_session
-from src.application.dtos.admin_lot_dto import CreateLotRequest, LotStatusRequest, UpdateLotRequest
+from app.api.idempotency import REPLAY_RESPONSE_HEADERS, Idempotency, IdempotencyKey
+from src.application.dtos.admin_lot_dto import (
+    BulkLotRequest,
+    BulkLotResponse,
+    CreateLotRequest,
+    LotStatusRequest,
+    UpdateLotRequest,
+)
 from src.application.dtos.lot_dto import LotDTO, LotPageDTO
 from src.domain.entities.lot import LotStatus
 from src.domain.entities.user_account import UserAccount
@@ -112,6 +119,40 @@ async def create_lot(payload: CreateLotRequest, repository: Repository) -> LotDT
         return LotDTO.from_domain(await repository.create(payload))
     except _LOT_ERRORS as exc:
         raise _lot_error(exc) from exc
+
+
+@router.post(
+    "/bulk",
+    response_model=BulkLotResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(verify_csrf)],
+    responses={
+        201: {"headers": REPLAY_RESPONSE_HEADERS},
+        401: {"description": "Authentication required"},
+        403: {"description": "Owner permission or CSRF verification required"},
+        404: {"description": "Category or photo not found"},
+        409: {"description": "slug_taken"},
+    },
+)
+async def create_bulk_lots(
+    payload: BulkLotRequest,
+    response: Response,
+    repository: Repository,
+    actor: Annotated[UserAccount, Depends(get_current_user)],
+    key: IdempotencyKey,
+    idempotency: Idempotency,
+) -> BulkLotResponse:
+    cached = await idempotency.replay(actor.id, key, "admin.lots.bulk", payload, response)
+    if cached is not None:
+        return BulkLotResponse.model_validate(cached)
+
+    try:
+        lots = await repository.create_bulk(payload.template, payload.count)
+    except _LOT_ERRORS as exc:
+        raise _lot_error(exc) from exc
+    result = BulkLotResponse(items=[LotDTO.from_domain(lot) for lot in lots])
+    await idempotency.save(actor.id, key, result)
+    return result
 
 
 @router.patch(

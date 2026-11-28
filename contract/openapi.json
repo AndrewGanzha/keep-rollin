@@ -358,6 +358,94 @@
         "title": "AdminUserListDTO",
         "type": "object"
       },
+      "AdminUserRef": {
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "email"
+        ],
+        "title": "AdminUserRef",
+        "type": "object"
+      },
+      "AdminVerificationRequestSummary": {
+        "properties": {
+          "admin_comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Admin Comment"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "reviewed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed At"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "approved",
+              "rejected"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "user": {
+            "$ref": "#/components/schemas/AdminUserRef"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "admin_comment",
+          "created_at",
+          "reviewed_at",
+          "version",
+          "user"
+        ],
+        "title": "AdminVerificationRequestSummary",
+        "type": "object"
+      },
       "AuditLogEntryDTO": {
         "properties": {
           "action": {
@@ -591,6 +679,42 @@
           "purpose"
         ],
         "title": "Body_upload_file_api_v1_files_post",
+        "type": "object"
+      },
+      "BulkLotRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "maximum": 50.0,
+            "minimum": 1.0,
+            "title": "Count",
+            "type": "integer"
+          },
+          "template": {
+            "$ref": "#/components/schemas/CreateLotRequest"
+          }
+        },
+        "required": [
+          "template",
+          "count"
+        ],
+        "title": "BulkLotRequest",
+        "type": "object"
+      },
+      "BulkLotResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LotDTO"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "BulkLotResponse",
         "type": "object"
       },
       "BusyIntervalDTO": {
@@ -1121,6 +1245,23 @@
           "body"
         ],
         "title": "CreateOfferRequest",
+        "type": "object"
+      },
+      "CreateVerificationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "documents": {
+            "$ref": "#/components/schemas/VerificationDocumentsInput"
+          },
+          "passport": {
+            "$ref": "#/components/schemas/VerificationPassport"
+          }
+        },
+        "required": [
+          "passport",
+          "documents"
+        ],
+        "title": "CreateVerificationRequest",
         "type": "object"
       },
       "FreeWindowDTO": {
@@ -1715,6 +1856,74 @@
           "mfa_token"
         ],
         "title": "MfaTokenRequest",
+        "type": "object"
+      },
+      "MyVerificationRequest": {
+        "properties": {
+          "admin_comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Admin Comment"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "documents": {
+            "items": {
+              "$ref": "#/components/schemas/VerificationDocument"
+            },
+            "title": "Documents",
+            "type": "array"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "reviewed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed At"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "approved",
+              "rejected"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "admin_comment",
+          "created_at",
+          "reviewed_at",
+          "version",
+          "documents"
+        ],
+        "title": "MyVerificationRequest",
         "type": "object"
       },
       "OfferAcceptanceDTO": {
@@ -2955,6 +3164,328 @@
         ],
         "title": "ValidationError",
         "type": "object"
+      },
+      "VerificationDecisionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "comment": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
+          "decision": {
+            "enum": [
+              "approved",
+              "rejected"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "version": {
+            "maximum": 9.223372036854776e+18,
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "decision",
+          "version"
+        ],
+        "title": "VerificationDecisionRequest",
+        "type": "object"
+      },
+      "VerificationDocument": {
+        "properties": {
+          "purpose": {
+            "enum": [
+              "verification_passport",
+              "verification_registration",
+              "verification_selfie"
+            ],
+            "title": "Purpose",
+            "type": "string"
+          },
+          "url": {
+            "format": "uri",
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "purpose",
+          "url"
+        ],
+        "title": "VerificationDocument",
+        "type": "object"
+      },
+      "VerificationDocumentsInput": {
+        "additionalProperties": false,
+        "properties": {
+          "verification_passport": {
+            "format": "uuid",
+            "title": "Verification Passport",
+            "type": "string"
+          },
+          "verification_registration": {
+            "format": "uuid",
+            "title": "Verification Registration",
+            "type": "string"
+          },
+          "verification_selfie": {
+            "format": "uuid",
+            "title": "Verification Selfie",
+            "type": "string"
+          }
+        },
+        "required": [
+          "verification_passport",
+          "verification_registration",
+          "verification_selfie"
+        ],
+        "title": "VerificationDocumentsInput",
+        "type": "object"
+      },
+      "VerificationPassport": {
+        "additionalProperties": false,
+        "properties": {
+          "birth_date": {
+            "format": "date",
+            "title": "Birth Date",
+            "type": "string"
+          },
+          "full_name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Full Name",
+            "type": "string"
+          },
+          "issued_by": {
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Issued By",
+            "type": "string"
+          },
+          "passport_number": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Passport Number",
+            "type": "string"
+          }
+        },
+        "required": [
+          "full_name",
+          "birth_date",
+          "passport_number",
+          "issued_by"
+        ],
+        "title": "VerificationPassport",
+        "type": "object"
+      },
+      "VerificationRequest": {
+        "properties": {
+          "admin_comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Admin Comment"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "documents": {
+            "items": {
+              "$ref": "#/components/schemas/VerificationDocument"
+            },
+            "title": "Documents",
+            "type": "array"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "passport": {
+            "$ref": "#/components/schemas/VerificationPassport"
+          },
+          "reviewed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed At"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "approved",
+              "rejected"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "user": {
+            "$ref": "#/components/schemas/AdminUserRef"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "admin_comment",
+          "created_at",
+          "reviewed_at",
+          "version",
+          "user",
+          "passport",
+          "documents"
+        ],
+        "title": "VerificationRequest",
+        "type": "object"
+      },
+      "VerificationRequestPage_AdminVerificationRequestSummary_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AdminVerificationRequestSummary"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "VerificationRequestPage[AdminVerificationRequestSummary]",
+        "type": "object"
+      },
+      "VerificationRequestPage_VerificationRequestSummary_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/VerificationRequestSummary"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "VerificationRequestPage[VerificationRequestSummary]",
+        "type": "object"
+      },
+      "VerificationRequestSummary": {
+        "properties": {
+          "admin_comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Admin Comment"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "reviewed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed At"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "approved",
+              "rejected"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "admin_comment",
+          "created_at",
+          "reviewed_at",
+          "version"
+        ],
+        "title": "VerificationRequestSummary",
+        "type": "object"
       }
     },
     "securitySchemes": {
@@ -3642,6 +4173,87 @@
           }
         ],
         "summary": "Create Lot",
+        "tags": [
+          "admin-lots"
+        ]
+      }
+    },
+    "/api/v1/admin/lots/bulk": {
+      "post": {
+        "operationId": "create_bulk_lots_api_v1_admin_lots_bulk_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "format": "uuid4",
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkLotRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkLotResponse"
+                }
+              }
+            },
+            "description": "Successful Response",
+            "headers": {
+              "Idempotent-Replayed": {
+                "description": "Present with value true when a stored response is replayed.",
+                "schema": {
+                  "enum": [
+                    "true"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Owner permission or CSRF verification required"
+          },
+          "404": {
+            "description": "Category or photo not found"
+          },
+          "409": {
+            "description": "slug_taken"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Bulk Lots",
         "tags": [
           "admin-lots"
         ]
@@ -4469,6 +5081,204 @@
         ]
       }
     },
+    "/api/v1/admin/verification-requests": {
+      "get": {
+        "operationId": "listVerificationRequests",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "pending",
+                    "approved",
+                    "rejected"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "maximum": 9223372036854775807,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerificationRequestPage_AdminVerificationRequestSummary_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Requests",
+        "tags": [
+          "admin-verification"
+        ]
+      }
+    },
+    "/api/v1/admin/verification-requests/{id}": {
+      "get": {
+        "operationId": "getVerificationRequest",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerificationRequest"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Verification request was not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Request",
+        "tags": [
+          "admin-verification"
+        ]
+      }
+    },
+    "/api/v1/admin/verification-requests/{id}/decision": {
+      "post": {
+        "operationId": "decideVerificationRequest",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerificationDecisionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminVerificationRequestSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Verification request was not found"
+          },
+          "409": {
+            "description": "Verification request was already processed or the version is stale"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Decide Request",
+        "tags": [
+          "admin-verification"
+        ]
+      }
+    },
     "/api/v1/auth/login": {
       "post": {
         "operationId": "login_api_v1_auth_login_post",
@@ -4933,6 +5743,189 @@
         "summary": "Accept Offer",
         "tags": [
           "me-offers"
+        ]
+      }
+    },
+    "/api/v1/me/verification-requests": {
+      "get": {
+        "operationId": "listMyVerificationRequests",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "maximum": 9223372036854775807,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerificationRequestPage_VerificationRequestSummary_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List My Requests",
+        "tags": [
+          "me-verification"
+        ]
+      },
+      "post": {
+        "operationId": "createMyVerificationRequest",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "format": "uuid4",
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateVerificationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerificationRequestSummary"
+                }
+              }
+            },
+            "description": "Successful Response",
+            "headers": {
+              "Idempotent-Replayed": {
+                "description": "Present with value true when a stored response is replayed.",
+                "schema": {
+                  "enum": [
+                    "true"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "An active verification request already exists"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create My Request",
+        "tags": [
+          "me-verification"
+        ]
+      }
+    },
+    "/api/v1/me/verification-requests/{id}": {
+      "get": {
+        "operationId": "getMyVerificationRequest",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyVerificationRequest"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Verification request was not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get My Request",
+        "tags": [
+          "me-verification"
         ]
       }
     },

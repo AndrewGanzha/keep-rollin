@@ -15,13 +15,19 @@ from pydantic import (
     model_validator,
 )
 
-from src.application.dtos.lot_dto import RentalUnit
+from src.application.dtos.lot_dto import LotDTO, RentalUnit
 from src.domain.entities.lot import LotStatus
 from src.domain.value_objects.limits import MAX_DATABASE_INTEGER
 from src.domain.value_objects.price import PriceTier
 
-LotName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)]
-LotSlug = Annotated[str, StringConstraints(min_length=1, max_length=80, pattern=r"^[a-z0-9-]+$")]
+MAX_LOT_NAME_LENGTH = 120
+MAX_LOT_SLUG_LENGTH = 80
+LotName = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=MAX_LOT_NAME_LENGTH)
+]
+LotSlug = Annotated[
+    str, StringConstraints(min_length=1, max_length=MAX_LOT_SLUG_LENGTH, pattern=r"^[a-z0-9-]+$")
+]
 Duration = Annotated[int, Field(strict=True, ge=1, le=365)]
 AllowedDurationsInput = Annotated[list[Duration], Field(min_length=1, max_length=365)]
 
@@ -128,6 +134,17 @@ class CreateLotRequest(LotPhotoInput):
     allowed_durations: AllowedDurationsInput
     characteristics: CharacteristicsInput
     status: Literal["active", "archived"] = "active"
+
+
+class BulkLotRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    template: CreateLotRequest
+    count: int = Field(strict=True, ge=1, le=50)
+
+
+class BulkLotResponse(BaseModel):
+    items: list[LotDTO]
 
 
 ManualLotStatus = Literal["active", "archived", "maintenance"]

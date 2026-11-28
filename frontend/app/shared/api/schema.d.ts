@@ -502,6 +502,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/verification-requests/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Данные заявки верификации */
+        get: operations["getVerificationRequest"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/verification-requests/{id}/decision": {
         parameters: {
             query?: never;
@@ -1095,23 +1112,25 @@ export interface components {
             /** Format: uri */
             url: string;
         };
-        VerificationRequest: {
+        AdminVerificationRequestSummary: {
             /** Format: uuid */
             id: string;
             user: components["schemas"]["AdminUserRef"];
             /** @enum {string} */
             status: "pending" | "approved" | "rejected";
-            passport: components["schemas"]["VerificationPassport"];
-            documents: components["schemas"]["VerificationDocument"][];
-            admin_comment?: string | null;
+            admin_comment: string | null;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
-            reviewed_at?: string | null;
+            reviewed_at: string | null;
             version: number;
         };
+        VerificationRequest: components["schemas"]["AdminVerificationRequestSummary"] & {
+            passport: components["schemas"]["VerificationPassport"];
+            documents: components["schemas"]["VerificationDocument"][];
+        };
         VerificationRequestPage: {
-            items: components["schemas"]["VerificationRequest"][];
+            items: components["schemas"]["AdminVerificationRequestSummary"][];
             total: number;
             limit: number;
             offset: number;
@@ -1119,7 +1138,7 @@ export interface components {
         VerificationDecisionRequest: {
             /** @enum {string} */
             decision: "approved" | "rejected";
-            comment?: string;
+            comment?: string | null;
             version: number;
         };
         Ticket: {
@@ -2053,6 +2072,33 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            422: components["responses"]["Validation"];
+        };
+    };
+    getVerificationRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Данные заявки */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VerificationRequest"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["Validation"];
         };
     };
     decideVerificationRequest: {
@@ -2076,7 +2122,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["VerificationRequest"];
+                    "application/json": components["schemas"]["AdminVerificationRequestSummary"];
                 };
             };
             401: components["responses"]["Unauthorized"];

@@ -14,6 +14,8 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from app.models import Tenant
 from src.application.dtos.admin_lot_dto import (
+    MAX_LOT_NAME_LENGTH,
+    MAX_LOT_SLUG_LENGTH,
     CharacteristicsInput,
     CreateLotRequest,
     LotPhotoInput,
@@ -100,13 +102,17 @@ _CYRILLIC = str.maketrans(
 )
 
 
-def _generated_slug(name: str, lot_id: UUID) -> str:
+def _slug_stem(name: str) -> str:
     ascii_name = (
         unicodedata.normalize("NFKD", name.lower().translate(_CYRILLIC))
         .encode("ascii", "ignore")
         .decode()
     )
-    prefix = re.sub(r"[^a-z0-9]+", "-", ascii_name)[:47].strip("-")
+    return re.sub(r"[^a-z0-9]+", "-", ascii_name)
+
+
+def _generated_slug(name: str, lot_id: UUID) -> str:
+    prefix = _slug_stem(name)[:47].strip("-")
     return f"{prefix or 'lot'}-{lot_id.hex}"
 
 
@@ -270,6 +276,20 @@ class AdminLotRepository:
         await self._flush_lot()
         await self._set_photos(record, payload)
         return await self.get(lot_id)
+
+    async def create_bulk(self, template: CreateLotRequest, count: int) -> list[Lot]:
+        slug_stem = template.slug or _slug_stem(template.name).strip("-") or "lot"
+        lots = []
+        for number in range(1, count + 1):
+            name_suffix = f" №{number}"
+            slug_suffix = f"-{number}"
+            name = template.name[: MAX_LOT_NAME_LENGTH - len(name_suffix)].rstrip()
+            slug = slug_stem[: MAX_LOT_SLUG_LENGTH - len(slug_suffix)].rstrip("-") or "lot"
+            payload = template.model_copy(
+                update={"name": f"{name}{name_suffix}", "slug": f"{slug}{slug_suffix}"}
+            )
+            lots.append(await self.create(payload))
+        return lots
 
     async def update(self, lot_id: UUID, payload: UpdateLotRequest) -> Lot:
         record = await self._get_record(lot_id, lock=True)
