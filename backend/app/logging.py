@@ -6,7 +6,7 @@ from typing import Any
 
 
 class JsonFormatter(logging.Formatter):
-    """Format access records as one JSON object per line."""
+    """Format log records as one JSON object per line."""
 
     _EXTRA_FIELDS = (
         "request_id",
@@ -15,6 +15,10 @@ class JsonFormatter(logging.Formatter):
         "status_code",
         "duration_ms",
         "tenant_id",
+        "job",
+        "trace_id",
+        "outcome",
+        "error_type",
     )
 
     def format(self, record: logging.LogRecord) -> str:
@@ -31,9 +35,9 @@ class JsonFormatter(logging.Formatter):
         return json.dumps(payload, ensure_ascii=True, default=str)
 
 
-def configure_logging() -> None:
-    """Install a single JSON access-log handler."""
-    logger = logging.getLogger("app.access")
+def configure_logging(name: str = "app.access") -> None:
+    """Install a single JSON handler for the named logger."""
+    logger = logging.getLogger(name)
     if logger.handlers:
         return
     handler = logging.StreamHandler(sys.stdout)

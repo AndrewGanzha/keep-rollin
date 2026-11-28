@@ -62,6 +62,37 @@ uv run --locked python scripts/check_migrations.py
 `resolve_tenant(host, kind)` — узкая `SECURITY DEFINER` функция для поиска
 тенанта по домену или поддомену.
 
+## Фоновый воркер
+
+После `alembic upgrade head` выдайте отдельному логину PostgreSQL членство
+в `keep_rollin_worker`. Для каждой операции воркер явно переключается на эту роль
+и работает в пределах одного тенанта. Для DSN нужен PostgreSQL или пул в режиме
+сессии, поскольку блокировка живёт между транзакциями одного запуска.
+
+| Переменная | Назначение |
+| --- | --- |
+| `WORKER_DATABASE_URL` | DSN отдельного логина с правом `SET ROLE keep_rollin_worker` |
+| `WORKER_INTERVAL_SECONDS` | Частота запуска задач, по умолчанию 60 секунд |
+| `WORKER_BATCH_SIZE` | Размер пакета работы с одним тенантом, по умолчанию 500 |
+| `WORKER_SENTRY_DSN` | Необязательный DSN Sentry. Ошибки содержат имя задачи, тип и trace ID |
+
+```powershell
+cd backend
+uv run --locked uvicorn app.worker:create_app --factory --port 8001 --no-access-log
+docker build --target worker -t keep-rollin-worker .
+docker run --rm --stop-timeout 120 --env WORKER_DATABASE_URL -p 127.0.0.1:8001:8001 keep-rollin-worker
+```
+
+`/health` проверяет HTTP-процесс, `/readyz` проверяет доступ к мигрированной БД от роли
+воркера, `/metrics` содержит счётчики результатов, ошибок, обработанных записей и
+длительность задач. Размещайте этот порт во внутренней сети. При SIGTERM воркер
+прекращает запуск новых пакетов и дожидается завершения текущих транзакций. Настройте
+время остановки контейнера с учётом подключения к БД и времени выполнения пакета.
+
+Сервис обрабатывает переходы аренд, завершение календарного обслуживания и TTL
+idempotency-ключей. Уведомления о просрочке поступают в существующий outbox. Для воспроизведения проверки 10 000 переходов запустите `uv run --locked python -m scripts.benchmark_rental_worker` на тестовой БД с применёнными миграциями и установленным `DATABASE_URL`.
+
+
 ## Проверки
 
 ```powershell
