@@ -25,6 +25,10 @@ export const useSessionStore = defineStore('session', () => {
     offerAccepted.value = session.offer_accepted
   }
 
+  const markOfferAccepted = (userId: string): void => {
+    if (user.value?.id === userId) offerAccepted.value = true
+  }
+
   const clear = (): void => {
     user.value = null
     role.value = null
@@ -41,6 +45,7 @@ export const useSessionStore = defineStore('session', () => {
     isStaff,
     can,
     setSession,
+    markOfferAccepted,
     clear,
   }
 })

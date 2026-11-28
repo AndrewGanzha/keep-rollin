@@ -72,6 +72,7 @@ const useDemo = (demoEmail: string) => {
         <form
           v-if="stage === 'credentials'"
           class="stack"
+          novalidate
           @submit.prevent="onSubmit"
         >
           <div class="field">
@@ -108,6 +109,7 @@ const useDemo = (demoEmail: string) => {
             :loading="pending"
           />
           <NuxtLink to="/password/forgot">Забыли пароль?</NuxtLink>
+          <NuxtLink to="/register">Зарегистрироваться</NuxtLink>
 
           <template v-if="showDemoAccounts">
             <p class="muted demo-label">

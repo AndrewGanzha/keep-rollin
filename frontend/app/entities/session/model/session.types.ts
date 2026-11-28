@@ -2,6 +2,7 @@ import type { components } from '~/shared/api/schema'
 
 export type Session = components['schemas']['Session']
 export type LoginRequest = components['schemas']['LoginRequest']
+export type RegisterRequest = components['schemas']['RegisterRequest']
 export type LoginResponse = components['schemas']['LoginResponse']
 export type MfaTokenRequest = components['schemas']['MfaTokenRequest']
 export type MfaCodeRequest = components['schemas']['MfaCodeRequest']

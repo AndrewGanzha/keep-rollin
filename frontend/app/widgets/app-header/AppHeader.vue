@@ -93,15 +93,25 @@ const toggleTheme = () => {
           <span class="muted header__user">{{ session.user?.name }}</span>
           <LogoutButton />
         </template>
-        <NuxtLink
-          v-else
-          to="/login"
-        >
-          <Button
-            label="Войти"
-            size="small"
-          />
-        </NuxtLink>
+        <template v-else>
+          <NuxtLink
+            to="/register"
+            class="header__link"
+          >Регистрация</NuxtLink>
+          <NuxtLink
+            v-slot="{ href, navigate }"
+            to="/login"
+            custom
+          >
+            <Button
+              as="a"
+              :href="href"
+              label="Войти"
+              size="small"
+              @click="navigate"
+            />
+          </NuxtLink>
+        </template>
       </div>
     </div>
   </header>

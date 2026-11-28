@@ -1,6 +1,8 @@
 import { computed, onScopeDispose, ref, shallowRef } from 'vue'
 import { confirmMfa, loginRequest, setupMfa, verifyMfa, type LoginResponse, type MfaSetupResponse } from '~/entities/session'
 import { ApiError, useApi } from '~/shared/api'
+import { safeNext } from '~/shared/lib/safe-next'
+import { loginCredentials } from '../../model/credentials'
 import { useSession } from '../../model/useSession'
 
 type LoginStep =
@@ -8,21 +10,6 @@ type LoginStep =
   | { kind: 'verify'; token: string }
   | { kind: 'setup'; token: string; details?: MfaSetupResponse }
   | { kind: 'recovery'; accessToken: string; codes: string[]; downloaded: boolean }
-
-const destination = (next: unknown, isStaff: boolean) => {
-  const fallback = isStaff ? '/admin' : '/account/rentals'
-  if (typeof next !== 'string' || !next.startsWith('/') || next.startsWith('//') || next.includes('\\')) {
-    return fallback
-  }
-
-  const origin = 'https://keep-rollin.invalid'
-  try {
-    const target = new URL(next, origin)
-    return target.origin === origin && !target.pathname.startsWith('//') ? next : fallback
-  } catch {
-    return fallback
-  }
-}
 
 export const useLogin = () => {
   const api = useApi()
@@ -136,7 +123,7 @@ export const useLogin = () => {
 
   const goToDestination = async () => {
     if (!disposed) {
-      await navigateTo(destination(route.query.next, store.isStaff))
+      await navigateTo(safeNext(route.query.next, store.isStaff ? '/admin' : '/account/rentals'))
     }
   }
 
@@ -144,7 +131,12 @@ export const useLogin = () => {
     if (stage.value !== 'credentials') {
       return
     }
-    const response = await loginRequest(api, { email, password })
+    const credentials = loginCredentials.safeParse({ email, password })
+    if (!credentials.success) {
+      errorText.value = credentials.error.issues[0]?.message ?? 'Проверьте email и пароль.'
+      return
+    }
+    const response = await loginRequest(api, credentials.data)
     if (disposed) {
       return
     }

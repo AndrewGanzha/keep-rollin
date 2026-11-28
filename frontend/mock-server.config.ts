@@ -5,6 +5,14 @@ import type { components } from './app/shared/api/schema'
 import { createMockAnalytics, parseAnalyticsRange } from './mock/analytics'
 import { peakUsage, type BatteryCommit } from './mock/capacity'
 import {
+  createMockOffers,
+  parseAcceptance,
+  parseOfferId,
+  parseOfferPage,
+  parseOfferText,
+  parseRegistration,
+} from './mock/onboarding'
+import {
   computePrice,
   minAllowedUnits,
   priceForRange,
@@ -411,12 +419,25 @@ const seedUsers: User[] = [
   },
 ]
 
+const initialOfferDate = iso(-24 * HOUR)
+const offers = createMockOffers({
+  id: uid(950),
+  version: 1,
+  title: 'Демонстрационная оферта Keep Rollin',
+  body: '## Условия аренды\n\n- Соблюдайте правила эксплуатации.\n- Возвращайте транспорт в согласованный срок.',
+  status: 'active',
+  published_at: initialOfferDate,
+  created_at: initialOfferDate,
+  updated_at: initialOfferDate,
+}, seedUsers.map(user => user.id))
+const registeredUsers = new Map<string, { user: User; passwordHash: string }>()
+const mockPasswordHash = (password: string) => createHash('sha256').update(password).digest('hex')
 const tokens = new Map<string, User>()
 const mfaChallenges = new Map<string, { user: User; setup: boolean; expiresAt: number }>()
 const mfaEnabled = new Set<string>([uid(901)])
 const recoveryCodes = new Map<string, Set<string>>()
 const mockMfaSecret = 'JBSWY3DPEHPK3PXP'
-let mockResetToken: string | null = null
+let mockReset: { token: string; email: string | undefined } | null = null
 const notificationPreferences = new Map<string, NotificationPreferences>()
 const pushSubscriptions = new Map<string, Map<string, PushSubscriptionMetadata>>()
 
@@ -806,10 +827,36 @@ const currentUser = (request: AuthorizedRequest): User | null => {
   return tokens.get(token) ?? null
 }
 
+const offersAccessProblem = (params: Responder & AuthorizedRequest): Problem | null => {
+  params.setHeader('Cache-Control', 'no-store')
+  const user = currentUser(params)
+  if (!user) return fail(params, 401, problem('token_invalid', 401, 'Требуется вход'))
+  return permissions(user).includes('offers.manage')
+    ? null
+    : fail(params, 403, problem('forbidden_role', 403, 'Недостаточно прав'))
+}
+
+const offerValidationProblem = (params: Responder) =>
+  fail(params, 422, problem('validation_error', 422, 'Проверьте поля'))
+
+const offerNotFound = (params: Responder) =>
+  fail(params, 404, problem('not_found', 404, 'Оферта не найдена'))
+
+const offerNotEditable = (params: Responder) =>
+  fail(params, 409, problem('offer_not_editable', 409, 'Можно изменить только черновик'))
+
 const loginResponse = (user: User): LoginResponse => {
   const token = `mock-${randomUUID()}`
   tokens.set(token, user)
-  return { access_token: token, expires_in: 900, user, role: user.role, permissions: permissions(user) }
+  return {
+    access_token: token,
+    expires_in: 900,
+    user,
+    role: user.role,
+    permissions: permissions(user),
+    mfa_required: false,
+    mfa_setup_required: false,
+  }
 }
 
 const getMfaChallenge = (token: string | undefined, setup: boolean) => {
@@ -904,6 +951,13 @@ export default mock(
     name: 'rest',
     configs: [
       rest.get('/api/v1/public/tenant', () => tenant, { delay: 60 }),
+
+      rest.get('/api/v1/public/offers/current', (params) => {
+        const offer = offers.current()
+        if (!offer) return offerNotFound(params)
+        params.setHeader('Cache-Control', 'max-age=60')
+        return offer
+      }),
 
       rest.get('/api/v1/public/categories', () => categories, { delay: 60 }),
 
@@ -1043,10 +1097,32 @@ export default mock(
         return availability
       }, { delay: 100 }),
 
+      rest.post('/api/v1/auth/register', (params) => {
+        const { payload, fields } = parseRegistration(params.request.body)
+        if (!payload) return fail(params, 422, problem('validation_error', 422, 'Проверьте поля', undefined, fields))
+
+        const { email, name, password } = payload
+        if (registeredUsers.has(email) || seedUsers.some(user => user.email === email)) {
+          return fail(params, 409, problem('email_taken', 409, 'Этот email уже зарегистрирован'))
+        }
+
+        const user: User = {
+          id: randomUUID(),
+          email,
+          name: name?.trim() || (email.split('@')[0] ?? email).slice(0, 120),
+          role: 'user',
+          verification_status: 'pending',
+        }
+        registeredUsers.set(email, { user, passwordHash: mockPasswordHash(password) })
+        params.setStatusCode(201)
+        return loginResponse(user)
+      }),
+
       rest.post('/api/v1/auth/login', (params) => {
         const body = (params.request.body ?? {}) as { email?: string; password?: string }
 
-        if (!body.email || !body.password || body.password.length < 8) {
+        if (typeof body.email !== 'string' || !body.email.trim()
+          || typeof body.password !== 'string' || body.password.length < 8) {
           return fail(
             params,
             422,
@@ -1057,8 +1133,13 @@ export default mock(
           )
         }
 
-        const user: User = seedUsers.find(item => item.email === body.email)
-          ?? { ...mockUser, email: body.email }
+        const email = body.email.trim().toLowerCase()
+        const registered = registeredUsers.get(email)
+        const user = registered?.user ?? seedUsers.find(item => item.email === email)
+        if (!user || (registered && registered.passwordHash !== mockPasswordHash(body.password))) {
+          return fail(params, 401, problem('invalid_credentials', 401, 'Неверный email или пароль'))
+        }
+
         if (user.role === 'user') return loginResponse(user)
 
         const setup = !mfaEnabled.has(user.id)
@@ -1105,19 +1186,25 @@ export default mock(
         return loginResponse(challenge.user)
       }),
 
-      rest.post('/api/v1/auth/password/forgot', (params) => {
-        mockResetToken = 'mock-password-reset-token'
+      rest.post<{ body: { email?: unknown } }>('/api/v1/auth/password/forgot', (params) => {
+        const { email } = params.request.body ?? {}
+        mockReset = {
+          token: 'mock-password-reset-token',
+          email: typeof email === 'string' ? email.trim().toLowerCase() : undefined,
+        }
         params.setStatusCode(202)
         return { message: 'If the account exists, password reset instructions will be sent.' }
       }),
 
       rest.post('/api/v1/auth/password/reset', (params) => {
         const { token, password } = (params.request.body ?? {}) as Partial<components['schemas']['PasswordResetRequest']>
-        if (!token || token !== mockResetToken) return fail(params, 401, problem('token_invalid', 401, 'Ссылка недействительна'))
-        if (!password || password.length < 8 || password.length > 128) {
+        if (!mockReset || token !== mockReset.token) return fail(params, 401, problem('token_invalid', 401, 'Ссылка недействительна'))
+        if (typeof password !== 'string' || password.length < 8 || password.length > 128) {
           return fail(params, 422, problem('validation_error', 422, 'Проверьте пароль'))
         }
-        mockResetToken = null
+        const registered = mockReset.email ? registeredUsers.get(mockReset.email) : undefined
+        if (registered) registered.passwordHash = mockPasswordHash(password)
+        mockReset = null
         params.setStatusCode(204)
         return undefined
       }),
@@ -1133,12 +1220,33 @@ export default mock(
           user,
           role: user.role,
           permissions: permissions(user),
-          offer_accepted: true,
+          offer_accepted: offers.hasAcceptedCurrent(user.id),
           prefs_summary: { push_enabled: preferencesFor(user).push_enabled },
         }
 
         return session
       }),
+      rest.get('/api/v1/me/offer-acceptances', (params) => {
+        params.setHeader('Cache-Control', 'no-store')
+        const user = currentUser(params)
+        if (!user) return fail(params, 401, problem('token_invalid', 401, 'Требуется вход'))
+        return offers.history(user.id)
+      }),
+
+      rest.post('/api/v1/me/offer-acceptances', (params) => {
+        params.setHeader('Cache-Control', 'no-store')
+        const user = currentUser(params)
+        if (!user) return fail(params, 401, problem('token_invalid', 401, 'Требуется вход'))
+        const payload = parseAcceptance(params.request.body)
+        if (!payload) return offerValidationProblem(params)
+        const accepted = offers.accept(user.id, payload.offer_version_id, params.request.ip ?? null)
+        if (accepted === 'not_found') return offerNotFound(params)
+        if (accepted === 'offer_not_active') {
+          return fail(params, 409, problem('offer_not_active', 409, 'Версия оферты больше не действует'))
+        }
+        return accepted
+      }),
+
       rest.get('/api/v1/me/notification-preferences', (params) => {
         const user = currentUser(params)
         if (!user) return fail(params, 401, problem('token_invalid', 401, 'Требуется вход'))
@@ -1250,6 +1358,20 @@ export default mock(
           )
         }
 
+        const startMs = Date.parse(body.start_time)
+        const endMs = Date.parse(body.end_time)
+
+        if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
+          return fail(params, 422, problem('validation_error', 422, 'Конец должен быть позже начала'))
+        }
+
+        if (user.verification_status !== 'approved') {
+          return fail(params, 403, problem('verification_required', 403, 'Требуется верификация'))
+        }
+        if (!offers.hasAcceptedCurrent(user.id)) {
+          return fail(params, 403, problem('offer_not_accepted', 403, 'Примите действующую оферту'))
+        }
+
         const lot = lots.find(item => item.id === body.lot_id)
 
         if (!lot) {
@@ -1270,13 +1392,6 @@ export default mock(
               variant_id: 'Вариант недоступен',
             }),
           )
-        }
-
-        const startMs = Date.parse(body.start_time)
-        const endMs = Date.parse(body.end_time)
-
-        if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
-          return fail(params, 422, problem('validation_error', 422, 'Конец должен быть позже начала'))
         }
 
         let price: RangePrice
@@ -2283,6 +2398,45 @@ export default mock(
 
         return toAdminRental(rental)
       }, { delay: 150 }),
+
+      rest.get<{ queries: Record<string, unknown> }>('/api/v1/admin/offers', (params) => {
+        const denied = offersAccessProblem(params)
+        if (denied) return denied
+        const page = parseOfferPage(params.request.queries)
+        return page ? offers.list(page.limit, page.offset) : offerValidationProblem(params)
+      }),
+
+      rest.post('/api/v1/admin/offers', (params) => {
+        const denied = offersAccessProblem(params)
+        if (denied) return denied
+        const text = parseOfferText(params.request.body)
+        if (!text?.title || !text.body) return offerValidationProblem(params)
+        params.setStatusCode(201)
+        return offers.create({ title: text.title, body: text.body })
+      }),
+
+      rest.patch<{ params: { offer_id: string } }>('/api/v1/admin/offers/:offer_id', (params) => {
+        const denied = offersAccessProblem(params)
+        if (denied) return denied
+        const id = parseOfferId(params.request.params.offer_id)
+        const text = parseOfferText(params.request.body)
+        if (!id || !text) return offerValidationProblem(params)
+        const updated = offers.update(id, text)
+        if (updated === 'not_found') return offerNotFound(params)
+        if (updated === 'offer_not_editable') return offerNotEditable(params)
+        return updated
+      }),
+
+      rest.post<{ params: { offer_id: string } }>('/api/v1/admin/offers/:offer_id/publish', (params) => {
+        const denied = offersAccessProblem(params)
+        if (denied) return denied
+        const id = parseOfferId(params.request.params.offer_id)
+        if (!id) return offerValidationProblem(params)
+        const published = offers.publish(id)
+        if (published === 'not_found') return offerNotFound(params)
+        if (published === 'offer_not_editable') return offerNotEditable(params)
+        return published
+      }),
 
       rest.get('/api/v1/admin/verification-requests', (params) => {
         params.setHeader('Cache-Control', 'no-store')

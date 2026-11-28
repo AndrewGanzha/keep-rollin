@@ -8,11 +8,15 @@ import type {
   MfaTokenRequest,
   PasswordForgotRequest,
   PasswordResetRequest,
+  RegisterRequest,
   Session,
 } from '../model/session.types'
 
 export const loginRequest = async (api: ApiClient, payload: LoginRequest): Promise<LoginResponse> =>
   unwrap(await api.POST('/api/v1/auth/login', { body: payload }))
+
+export const registerRequest = async (api: ApiClient, payload: RegisterRequest): Promise<LoginResponse> =>
+  unwrap(await api.POST('/api/v1/auth/register', { body: payload }))
 
 export const setupMfa = async (api: ApiClient, payload: MfaTokenRequest): Promise<MfaSetupResponse> =>
   unwrap(await api.POST('/api/v1/auth/mfa/setup', { body: payload }))

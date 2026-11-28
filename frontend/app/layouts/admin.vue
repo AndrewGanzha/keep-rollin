@@ -15,7 +15,12 @@ useBrowserPushLifecycle()
       aria-label="Админ-раздел"
     >
       <div class="admin-nav__inner">
-        <NuxtLink to="/admin/lots">Лоты</NuxtLink>
+        <NuxtLink
+          v-if="session.can('catalog.manage')"
+          to="/admin/lots"
+        >
+          Лоты
+        </NuxtLink>
         <NuxtLink to="/admin/rentals">Аренды</NuxtLink>
         <NuxtLink to="/admin/verification">Верификация</NuxtLink>
         <NuxtLink to="/admin/tickets">Тикеты</NuxtLink>
@@ -25,6 +30,12 @@ useBrowserPushLifecycle()
           to="/admin/batteries"
         >
           Аккумуляторы
+        </NuxtLink>
+        <NuxtLink
+          v-if="session.can('offers.manage')"
+          to="/admin/offers"
+        >
+          Оферты
         </NuxtLink>
       </div>
     </nav>

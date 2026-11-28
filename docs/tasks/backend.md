@@ -86,8 +86,8 @@ _Подгруппа **B2** · 6 задач._
 - [x] `permissions[]` соответствует роли; `require_permission` проверен на разрешение и отказ.
 - [x] `/auth/session` проверяет подпись, срок, `tnt`, `is_active` и `token_version`.
 - [x] CSRF требует Origin и Sec-Fetch-Site, сравнивает scheme/host/port и отклоняет неканонический Origin; за TLS-прокси uvicorn принимает `X-Forwarded-Proto` только от allowlisted peer.
-- [ ] Использование `permissions[]` во frontend для скрытия UI — при подключении FE.
-- [ ] `prefs-summary` в `/auth/session` — вместе с настройками уведомлений.
+- [x] Фронтенд скрывает ссылки на лоты и оферты без `catalog.manage` и `offers.manage` соответственно.
+- [x] `prefs_summary.push_enabled` в `/auth/session` отражает настройки уведомлений.
 - [x] Обязательный MFA для owner/admin — BE-AUTH-03.
 
 ### BE-AUTH-05 · Сброс пароля
