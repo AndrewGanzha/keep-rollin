@@ -2053,6 +2053,8 @@ export default mock(
           || !datePattern.test(to)
           || !Number.isFinite(fromMs)
           || !Number.isFinite(toMs)
+          || new Date(fromMs).toISOString().slice(0, 10) !== from
+          || new Date(toMs).toISOString().slice(0, 10) !== to
           || toMs <= fromMs
           || toMs - fromMs > 90 * 24 * HOUR
         ) {
@@ -2062,28 +2064,34 @@ export default mock(
         const rangeStart = Date.parse(tenantDayStart(from))
         const rangeEnd = Date.parse(tenantDayStart(to))
         const category = typeof query.category_id === 'string' ? query.category_id : undefined
+        if (category !== undefined && !/^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i.test(category)) {
+          return fail(params, 422, problem('validation_error', 422, 'Некорректная категория'))
+        }
         const scopedLots = lots.filter(lot => !category || lot.category_id === category)
         const lotIds = new Set(scopedLots.map(lot => lot.id))
 
         const intervals: (ScheduleRentalInterval | ScheduleBlockInterval)[] = [
           ...rentals
-            .filter(rental =>
-              rental.status !== 'cancelled'
-              && lotIds.has(rental.lot.id)
-              && Date.parse(rental.start_time) < rangeEnd
-              && Date.parse(rental.end_time) > rangeStart,
-            )
-            .map(rental => ({
-              id: rental.id,
-              lot_id: rental.lot.id,
-              kind: 'rental' as const,
-              start_time: rental.start_time,
-              end_time: rental.end_time,
-              rental_id: rental.id,
-              status: rental.status,
-              battery_count: rentalBatteries.get(rental.id) ?? 1,
-              user_name: (rentalOwners.get(rental.id) ?? mockUser).name,
-            })),
+            .flatMap((rental): ScheduleRentalInterval[] => {
+              const start = Date.parse(rental.start_time)
+              const end = Date.parse(rental.end_time)
+              if (rental.status === 'cancelled' || !lotIds.has(rental.lot.id) || start >= rangeEnd || end <= rangeStart) {
+                return []
+              }
+              return [{
+                id: rental.id,
+                lot_id: rental.lot.id,
+                kind: 'rental',
+                start_time: new Date(Math.max(rangeStart, start)).toISOString(),
+                end_time: new Date(Math.min(rangeEnd, end)).toISOString(),
+                clipped_start: start < rangeStart,
+                clipped_end: end > rangeEnd,
+                rental_id: rental.id,
+                status: rental.status,
+                battery_count: rentalBatteries.get(rental.id) ?? 1,
+                user_name: (rentalOwners.get(rental.id) ?? mockUser).name,
+              }]
+            }),
           ...blocks
             .filter(block =>
               lotIds.has(block.lot_id)
@@ -2096,10 +2104,12 @@ export default mock(
               kind: 'block' as const,
               start_time: block.start_time,
               end_time: block.end_time,
+              clipped_start: Date.parse(block.start_time) < rangeStart,
+              clipped_end: Date.parse(block.end_time) > rangeEnd,
               block_id: block.id,
               reason: block.reason,
             })),
-        ].sort((left, right) => left.start_time.localeCompare(right.start_time))
+        ].sort((left, right) => Date.parse(left.start_time) - Date.parse(right.start_time))
 
         const schedule: AdminSchedule = {
           lots: scopedLots.map(lot => ({
@@ -2227,6 +2237,25 @@ export default mock(
         }
 
         return page
+      }, { delay: 80 }),
+
+      rest.get('/api/v1/admin/rentals/:id', (params) => {
+        const user = currentUser(params)
+        if (!user) return fail(params, 401, problem('token_invalid', 401, 'Требуется вход'))
+        if (user.role !== 'admin' && user.role !== 'owner') {
+          return fail(params, 403, problem('forbidden_role', 403, 'Недостаточно прав'))
+        }
+        const rental = rentals.find(item => item.id === params.request.params.id)
+        if (!rental) return fail(params, 404, problem('not_found', 404, 'Аренда не найдена'))
+
+        params.setHeader('Cache-Control', 'no-store')
+        const details: components['schemas']['AdminRentalDetail'] = {
+          ...toAdminRental(rental),
+          cancellation_deadline: rental.cancellation_deadline ?? null,
+          completed_at: null,
+          closed_by: null,
+        }
+        return details
       }, { delay: 80 }),
 
       rest.post('/api/v1/admin/rentals/:id/close', (params) => {

@@ -113,7 +113,13 @@ def test_booking_guards_and_price_snapshot(seeded: SeededCalendarAPI) -> None:
     lot = new_lot(seeded, owner)
     start = datetime.now(UTC) + timedelta(days=3)
     body = booking(lot, start)
+    variant_id = body["variant_id"]
     header = key(customer)
+    quote_path = f"/api/v1/public/lots/{lot['slug']}/quote"
+    quote_params = {
+        "start": body["end_time"],
+        "end": (start + timedelta(days=2)).isoformat(),
+    }
     with client_for(seeded.domain_a) as client:
         assert client.post(RENTALS, headers=key({}), json=body).status_code == 401
         blocked = client.post(RENTALS, headers=header, json=body)
@@ -165,20 +171,43 @@ def test_booking_guards_and_price_snapshot(seeded: SeededCalendarAPI) -> None:
         )
         assert conflict.status_code == 422 and conflict.json()["code"] == "idempotency_conflict"
         assert conflict.headers["Cache-Control"] == "no-store"
+
+        quote_before = client.get(quote_path, params=quote_params)
+        assert quote_before.status_code == 200, quote_before.text
+        before = next(
+            item for item in quote_before.json()["variants"] if item["variant_id"] == variant_id
+        )
+        assert before["available"] and before["price_total_minor"] == saved["price_minor"]
+
+        variants = payload(seeded.category_a_id)["variants"]
+        assert isinstance(variants, list)
         changed = client.patch(
             f"{LOTS}/{lot['id']}",
             headers=owner,
             json={
                 "version": lot["version"],
                 "variants": [
-                    {
-                        "battery_count": 1,
+                    variant
+                    | {
                         "price_tiers": [{"min_units": 1, "price_per_unit_minor": 9900}],
                     }
+                    if variant["battery_count"] == 0
+                    else variant
+                    for variant in variants
                 ],
             },
         )
         assert changed.status_code == 200, changed.text
+        updated = next(item for item in changed.json()["variants"] if item["battery_count"] == 0)
+        assert updated["id"] == variant_id
+
+        quote_after = client.get(quote_path, params=quote_params)
+        assert quote_after.status_code == 200, quote_after.text
+        after = next(
+            item for item in quote_after.json()["variants"] if item["variant_id"] == variant_id
+        )
+        assert after["available"] and after["price_total_minor"] == 9900
+
         detail = client.get(f"{ME}/{saved['id']}", headers=customer)
         assert detail.status_code == 200 and detail.json()["price_minor"] == 4900
         assert client.get(f"{ME}/{saved['id']}", headers=owner).status_code == 404

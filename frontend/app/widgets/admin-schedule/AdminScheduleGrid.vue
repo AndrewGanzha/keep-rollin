@@ -121,8 +121,8 @@ const barFor = (interval: ScheduleInterval): Bar | null => {
     interval,
     left,
     width: Math.max(right - left, 10),
-    clippedStart: startMs < monthStart.value,
-    clippedEnd: endMs > monthEnd.value,
+    clippedStart: interval.clipped_start || startMs < monthStart.value,
+    clippedEnd: interval.clipped_end || endMs > monthEnd.value,
   }
 }
 

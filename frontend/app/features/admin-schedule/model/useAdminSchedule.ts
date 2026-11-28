@@ -1,7 +1,6 @@
 import {
   cancelAdminRental,
   closeAdminRental,
-  fetchAdminRentals,
   type AdminRental,
   type CancelAdminRentalRequest,
   type CloseRentalRequest,
@@ -14,8 +13,8 @@ import {
   type ScheduleRentalInterval,
 } from '~/entities/schedule'
 import { useTenant } from '~/entities/tenant'
-import { ApiError, useApi } from '~/shared/api'
-import { blockRangeIso, dayKeyOf, monthDays, shiftMonth, zonedDayStartIso } from '~/shared/lib'
+import { ApiError, unwrap, useApi } from '~/shared/api'
+import { blockRangeIso, dayKeyOf, monthDays, shiftMonth } from '~/shared/lib'
 
 export const useAdminSchedule = async () => {
   const api = useApi()
@@ -101,21 +100,13 @@ export const useAdminSchedule = async () => {
 
   const openRental = async (interval: ScheduleRentalInterval): Promise<AdminRental | null> => {
     try {
-      const page = await fetchAdminRentals(api, {
-        lot_id: interval.lot_id,
-        from: zonedDayStartIso(from.value, timeZone.value),
-        to: zonedDayStartIso(to.value, timeZone.value),
-        limit: 100,
-      })
-      const rental = page.items.find(item => item.id === interval.rental_id)
-
-      if (!rental) {
-        toast.add({ severity: 'error', summary: 'Аренда не найдена', life: 3000 })
-      }
-
-      return rental ?? null
+      return unwrap(await api.GET('/api/v1/admin/rentals/{id}', {
+        params: { path: { id: interval.rental_id } },
+      }))
     } catch (caught) {
-      const message = caught instanceof ApiError ? caught.message : 'Не удалось открыть аренду'
+      const message = caught instanceof ApiError
+        ? caught.code === 'not_found' ? 'Аренда не найдена' : caught.message
+        : 'Не удалось открыть аренду'
       toast.add({ severity: 'error', summary: message, life: 4000 })
       return null
     }

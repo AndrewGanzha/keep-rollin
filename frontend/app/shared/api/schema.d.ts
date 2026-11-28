@@ -469,10 +469,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /**
-         * Гант «лоты × дни»: аренды, блоки и остатки АКБ
-         * @description Лоты возвращаются все, включая те, у которых нет событий (иначе гант теряет строки). Окно не шире 90 дней, иначе 422. Ответ `no-store`.
-         */
+        /** Get Admin Schedule */
         get: operations["getAdminSchedule"];
         put?: never;
         post?: never;
@@ -656,6 +653,23 @@ export interface paths {
         head?: never;
         /** Изменить статус тикета */
         patch: operations["updateAdminTicket"];
+        trace?: never;
+    };
+    "/api/v1/admin/rentals/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Admin Rental */
+        get: operations["getAdminRental"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
 }
@@ -877,61 +891,126 @@ export interface components {
             /** @example Техобслуживание */
             reason: string;
         };
+        /** ScheduleLot */
         ScheduleLot: {
-            /** Format: uuid */
-            id: string;
-            name: string;
-            /** Format: uuid */
-            category_id: string;
-            /** @enum {string} */
-            status: "active" | "archived" | "maintenance" | "overdue";
+            /** Battery Type */
             battery_type: string | null;
-            /** @enum {string} */
-            rental_unit: "day" | "hour";
-        };
-        ScheduleRentalInterval: {
-            /** Format: uuid */
+            /**
+             * Category Id
+             * Format: uuid
+             */
+            category_id: string;
+            /**
+             * Id
+             * Format: uuid
+             */
             id: string;
-            /** Format: uuid */
-            lot_id: string;
+            /** Name */
+            name: string;
+            /**
+             * Rental Unit
+             * @enum {string}
+             */
+            rental_unit: "day" | "hour";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "active" | "archived" | "maintenance" | "overdue";
+        };
+        /** ScheduleRentalInterval */
+        ScheduleRentalInterval: {
+            /** Battery Count */
+            battery_count: number;
+            /** Clipped End */
+            clipped_end: boolean;
+            /** Clipped Start */
+            clipped_start: boolean;
+            /**
+             * End Time
+             * Format: date-time
+             */
+            end_time: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
             kind: "rental";
-            /** Format: date-time */
-            start_time: string;
-            /** Format: date-time */
-            end_time: string;
-            /** Format: uuid */
+            /**
+             * Lot Id
+             * Format: uuid
+             */
+            lot_id: string;
+            /**
+             * Rental Id
+             * Format: uuid
+             */
             rental_id: string;
-            /** @enum {string} */
-            status: "booked" | "active" | "overdue" | "completed" | "cancelled";
-            battery_count: number;
+            /**
+             * Start Time
+             * Format: date-time
+             */
+            start_time: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "booked" | "active" | "overdue" | "completed";
+            /** User Name */
             user_name: string;
         };
+        /** ScheduleBlockInterval */
         ScheduleBlockInterval: {
-            /** Format: uuid */
+            /**
+             * Block Id
+             * Format: uuid
+             */
+            block_id: string;
+            /** Clipped End */
+            clipped_end: boolean;
+            /** Clipped Start */
+            clipped_start: boolean;
+            /**
+             * End Time
+             * Format: date-time
+             */
+            end_time: string;
+            /**
+             * Id
+             * Format: uuid
+             */
             id: string;
-            /** Format: uuid */
-            lot_id: string;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
             kind: "block";
-            /** Format: date-time */
-            start_time: string;
-            /** Format: date-time */
-            end_time: string;
-            /** Format: uuid */
-            block_id: string;
+            /**
+             * Lot Id
+             * Format: uuid
+             */
+            lot_id: string;
+            /** Reason */
             reason: string;
+            /**
+             * Start Time
+             * Format: date-time
+             */
+            start_time: string;
         };
+        /** AdminSchedule */
         AdminSchedule: {
-            lots: components["schemas"]["ScheduleLot"][];
-            intervals: (components["schemas"]["ScheduleRentalInterval"] | components["schemas"]["ScheduleBlockInterval"])[];
+            /** Battery Stock */
             battery_stock: components["schemas"]["BatteryStock"][];
+            /** Intervals */
+            intervals: (components["schemas"]["ScheduleRentalInterval"] | components["schemas"]["ScheduleBlockInterval"])[];
+            /** Lots */
+            lots: components["schemas"]["ScheduleLot"][];
         };
         BatteryStock: {
             /** @example 48v */
@@ -1355,6 +1434,63 @@ export interface components {
             version: number;
             put_lot_maintenance?: boolean;
             maintenance_until?: string | null;
+        };
+        /** ValidationError */
+        ValidationError: {
+            /** Context */
+            ctx?: Record<string, never>;
+            /** Input */
+            input?: unknown;
+            /** Location */
+            loc: (string | number)[];
+            /** Message */
+            msg: string;
+            /** Error Type */
+            type: string;
+        };
+        /** HTTPValidationError */
+        HTTPValidationError: {
+            /** Detail */
+            detail?: components["schemas"]["ValidationError"][];
+        };
+        /** AdminRentalDetail */
+        AdminRentalDetail: {
+            /** Cancellation Deadline */
+            cancellation_deadline: string | null;
+            /** Closed By */
+            closed_by: string | null;
+            /** Completed At */
+            completed_at: string | null;
+            /** Currency */
+            currency: string;
+            /**
+             * End Time
+             * Format: date-time
+             */
+            end_time: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            lot: components["schemas"]["RentalLot"];
+            /** Price Minor */
+            price_minor: number;
+            /** Remaining Seconds */
+            remaining_seconds: number;
+            /**
+             * Start Time
+             * Format: date-time
+             */
+            start_time: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "booked" | "active" | "overdue" | "completed" | "cancelled";
+            user: components["schemas"]["AdminUserRef"];
+            /** Version */
+            version: number;
         };
     };
     responses: {
@@ -2307,9 +2443,11 @@ export interface operations {
     getAdminSchedule: {
         parameters: {
             query: {
+                /** @description First tenant-local date */
                 from: string;
+                /** @description Exclusive tenant-local date */
                 to: string;
-                category_id?: string;
+                category_id?: string | null;
             };
             header?: never;
             path?: never;
@@ -2317,20 +2455,37 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Строки лотов, интервалы аренд и блоков, остатки АКБ */
+            /** @description Successful Response */
             200: {
                 headers: {
-                    /** @example no-store */
-                    "Cache-Control"?: string;
+                    "Cache-Control"?: "no-store";
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["AdminSchedule"];
                 };
             };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            422: components["responses"]["Validation"];
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Calendar access required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid category or date range */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     listBatteryStock: {
@@ -2646,6 +2801,58 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["Validation"];
+        };
+    };
+    getAdminRental: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminRentalDetail"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Staff permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Rental was not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
         };
     };
 }

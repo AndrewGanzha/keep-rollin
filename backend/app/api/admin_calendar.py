@@ -1,18 +1,23 @@
-from datetime import datetime
+import re
+from datetime import date, datetime, time
 from typing import Annotated, Literal
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from pydantic import BeforeValidator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.audit_deps import StaffAudit
 from app.api.auth_deps import require_permission, verify_csrf
 from app.api.deps import get_db_session
+from app.api.public_period import parse_public_period
 from src.application.dtos.admin_calendar_dto import (
     CalendarEventDTO,
     CreateLotBlockRequest,
     LotBlockDTO,
 )
+from src.application.dtos.admin_schedule_dto import AdminSchedule
 from src.application.handlers.calendar.calendar import (
     CalendarQuery,
     CreateBlockCommand,
@@ -33,6 +38,9 @@ from src.domain.value_objects.time_range import TimeRange
 from src.infrastructure.postgres.repositories.admin_calendar_repository import (
     AdminCalendarRepository,
 )
+from src.infrastructure.postgres.repositories.admin_schedule_repository import (
+    AdminScheduleRepository,
+)
 
 MAX_CALENDAR_DAYS = 90
 CalendarStatusFilter = Literal["booked", "active", "overdue", "completed", "cancelled", "released"]
@@ -44,10 +52,25 @@ def no_store(response: Response) -> None:
     response.headers["Cache-Control"] = "no-store"
 
 
+def _require_date_key(value: object) -> str:
+    if not isinstance(value, str) or re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", value) is None:
+        raise ValueError("must be in YYYY-MM-DD format")
+    return value
+
+
+ScheduleDate = Annotated[date, BeforeValidator(_require_date_key)]
+
+
 def get_calendar_repository(
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> IAdminCalendarRepository:
     return AdminCalendarRepository(session)
+
+
+def get_schedule_repository(
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> AdminScheduleRepository:
+    return AdminScheduleRepository(session)
 
 
 def get_list_handler(
@@ -141,6 +164,44 @@ async def get_calendar(
         )
     except TooManyCalendarLotsError as exc:
         raise _calendar_error(exc) from exc
+
+
+@router.get(
+    "/schedule",
+    operation_id="getAdminSchedule",
+    response_model=AdminSchedule,
+    dependencies=[Depends(require_permission("calendar.view")), Depends(no_store)],
+    responses={
+        200: {"headers": {"Cache-Control": {"schema": {"type": "string", "const": "no-store"}}}},
+        401: {"description": "Authentication required"},
+        403: {"description": "Calendar access required"},
+        422: {"description": "Invalid category or date range"},
+    },
+)
+async def get_admin_schedule(
+    repository: Annotated[AdminScheduleRepository, Depends(get_schedule_repository)],
+    from_: Annotated[ScheduleDate, Query(alias="from", description="First tenant-local date")],
+    to: Annotated[ScheduleDate, Query(description="Exclusive tenant-local date")],
+    category_id: Annotated[UUID | None, Query()] = None,
+) -> AdminSchedule:
+    if not 0 < (to - from_).days <= MAX_CALENDAR_DAYS:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "validation_error",
+                "fields": {"to": f"range must cover 1 to {MAX_CALENDAR_DAYS} calendar days"},
+            },
+        )
+    timezone_name = await repository.tenant_timezone()
+    if timezone_name is None:
+        raise HTTPException(status_code=404, detail={"code": "tenant_not_found"})
+    timezone = ZoneInfo(timezone_name)
+    period = parse_public_period(
+        datetime.combine(from_, time.min, tzinfo=timezone),
+        datetime.combine(to, time.min, tzinfo=timezone),
+        normalize_to_utc=True,
+    )
+    return await repository.get_schedule(period=period, category_id=category_id)
 
 
 @router.get(

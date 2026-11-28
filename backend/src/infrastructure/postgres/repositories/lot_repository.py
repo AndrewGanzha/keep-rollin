@@ -36,7 +36,7 @@ _DECIMAL_NUMBER = re.compile(r"[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?
 _MAX_CATALOG_NUMBER = Decimal("1e308")
 
 
-def public_lot_query() -> Select[LotRecord]:
+def public_lot_query(*, single_lot: bool = False) -> Select[LotRecord]:
     return (
         select(LotRecord)
         .join(CategoryRecord, CategoryRecord.id == LotRecord.category_id)
@@ -45,7 +45,7 @@ def public_lot_query() -> Select[LotRecord]:
             LotRecord.status == "active",
             CategoryRecord.is_archived.is_(False),
             Tenant.currency.op("~")("^[A-Z]{3}$"),
-            _structurally_valid_lot(),
+            _structurally_valid_lot(single_lot=single_lot),
         )
     )
 
@@ -73,11 +73,19 @@ def _numeric_filter_value(value: str) -> str | None:
     return str(number) if number else "0"
 
 
-def _structurally_valid_lot() -> ColumnElement[bool]:
+def _structurally_valid_lot(*, single_lot: bool) -> ColumnElement[bool]:
     has_variants = exists().where(LotVariantRecord.lot_id == LotRecord.id)
-    has_empty_variant = exists().where(
-        LotVariantRecord.lot_id == LotRecord.id,
-        ~exists().where(LotPriceTierRecord.variant_id == LotVariantRecord.id),
+    # On a slug lookup, prevent PostgreSQL from expanding tier validation into
+    # anti-joins across every visible lot. Keep the listing plan unchanged.
+    tier_offset = " OFFSET 0" if single_lot else ""
+    has_empty_variant = (
+        select(LotVariantRecord.id)
+        .where(
+            LotVariantRecord.lot_id == LotRecord.id,
+            ~exists().where(LotPriceTierRecord.variant_id == LotVariantRecord.id),
+        )
+        .offset(0 if single_lot else None)
+        .exists()
     )
     has_positive_battery = exists().where(
         LotVariantRecord.lot_id == LotRecord.id,
@@ -109,7 +117,7 @@ def _structurally_valid_lot() -> ColumnElement[bool]:
             "JOIN lot_price_tier a ON a.variant_id = v.id "
             "JOIN lot_price_tier b ON b.variant_id = v.id AND a.min_units < b.min_units "
             "WHERE v.lot_id = lot.id "
-            "AND a.price_per_unit_minor < b.price_per_unit_minor)"
+            f"AND a.price_per_unit_minor < b.price_per_unit_minor{tier_offset})"
         ),
         (
             "NOT EXISTS (SELECT 1 FROM jsonb_each(CASE "
@@ -270,7 +278,7 @@ class LotRepository(ILotRepository):
 
     async def get_active_by_slug(self, slug: Slug) -> Lot | None:
         statement = (
-            public_lot_query()
+            public_lot_query(single_lot=True)
             .where(LotRecord.slug == slug.value)
             .options(selectinload(LotRecord.variants).selectinload(LotVariantRecord.price_tiers))
         )

@@ -11,7 +11,7 @@ import { useTenant } from '~/entities/tenant'
 import { ApiError, useApi } from '~/shared/api'
 import { calendarRange, dayKeyOf, type CalendarView } from '~/shared/lib'
 
-export const useAdminRentals = async () => {
+export const useAdminRentals = (enabled: Readonly<Ref<boolean>>) => {
   const api = useApi()
   const toast = useToast()
   const tenant = useTenant()
@@ -33,9 +33,12 @@ export const useAdminRentals = async () => {
       to: range.value.to,
       limit: 100,
     }),
-    { watch: [status, range] },
+    { immediate: false },
   )
-  await request
+
+  watch([enabled, status, range], ([active]) => {
+    if (active) void request.refresh()
+  })
 
   const acting = ref(false)
 
