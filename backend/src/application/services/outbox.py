@@ -71,6 +71,7 @@ class OutboxConsumer:
         *,
         now: datetime | None = None,
         limit: int = 20,
+        retry_errors: type[Exception] = Exception,
     ) -> OutboxProcessResult:
         timestamp = now or datetime.now(UTC)
         messages = await self._repository.claim_due(now=timestamp, limit=limit)
@@ -81,9 +82,7 @@ class OutboxConsumer:
         for message in messages:
             try:
                 await handler.handle(message)
-                await self._repository.mark_processed(message.id, processed_at=timestamp)
-                processed += 1
-            except Exception as exc:
+            except retry_errors as exc:
                 attempts = message.attempts + 1
                 error = str(exc)[:500]
                 if attempts <= len(RETRY_DELAYS_MINUTES):
@@ -105,6 +104,9 @@ class OutboxConsumer:
                         error=error,
                     )
                     failed += 1
+            else:
+                await self._repository.mark_processed(message.id, processed_at=timestamp)
+                processed += 1
 
         return OutboxProcessResult(
             claimed=len(messages),

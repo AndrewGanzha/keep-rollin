@@ -40,7 +40,7 @@
 | `POST /auth/logout`              | все   | Отзыв сессии, очистка cookie |
 | `POST /auth/password/forgot`     | гость | Всегда 202 (без enumeration) |
 | `POST /auth/password/reset`      | гость | Токен + новый пароль; 204 |
-| `GET /auth/session`              | все   | user, tenant, role, `permissions[]`, `verification_status`, `offer_accepted`, `mfa_enabled` (`prefs-summary` — follow-up BE-NOT-04) |
+| `GET /auth/session`              | все   | user, tenant, role, `permissions[]`, `verification_status`, `offer_accepted`, `mfa_enabled` и `prefs_summary.push_enabled` |
 | `GET /me/push-subscriptions`     | user+ | Список подписок |
 | `POST /me/push-subscriptions`    | user+ | Upsert по `endpoint` |
 | `DELETE /me/push-subscriptions/{id}` | user+ | Отписка |

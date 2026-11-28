@@ -109,6 +109,9 @@ class User(Base):
     mfa_recovery_hashes: Mapped[list[str]] = mapped_column(
         JSONB(), nullable=False, server_default=text("'[]'::jsonb")
     )
+    notification_preferences: Mapped[dict[str, object]] = mapped_column(
+        JSONB(), nullable=False, server_default=text("'{}'::jsonb")
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

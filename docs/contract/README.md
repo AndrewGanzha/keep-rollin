@@ -306,7 +306,7 @@ ALTER TABLE occupancy ADD CONSTRAINT occupancy_no_overlap
 | `ticket.updated.user`      | ❌        | push → email          | user       |
 | `ticket.resolved.user`     | ✅        | email + push          | user       |
 
-Ключ дедупликации: `(event_type, entity_id, user_id, channel)`. Retry: 1/5/15 мин, затем `failed`.
+Ключ дедупликации: `(event_type, entity_id, user_id, channel)`. Retry: 1/5/15 мин, затем `failed`. При включённом SMTP воркер доставляет письма по бизнес-событиям из таблицы. Для некритичных событий учитывается `email_by_event`, критичные email всегда включены.
 
 Формат настроек пользователя (`GET/PUT /me/notification-preferences`):
 

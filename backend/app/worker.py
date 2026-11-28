@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, AsyncSession
 from app.db import configure_session, create_engine
 from app.logging import configure_logging
 from app.models import Tenant
+from app.notification_email_job import SmtpSettings, create_email_job
 from app.worker_jobs import JOBS, Job
 
 logger = logging.getLogger("app.worker")
@@ -39,6 +40,7 @@ class WorkerSettings(BaseSettings):
     interval_seconds: int = Field(default=60, ge=1)
     batch_size: int = Field(default=500, ge=1, le=1000)
     sentry_dsn: SecretStr | None = None
+    smtp: SmtpSettings = Field(default_factory=SmtpSettings)
 
 
 class TenantJobFailed(RuntimeError):
@@ -79,6 +81,11 @@ class Worker:
         self.scheduler = AsyncIOScheduler(job_defaults={"coalesce": True, "max_instances": 1})
         self.accepting = True
         self.running: set[asyncio.Task[None]] = set()
+        self.registry = CollectorRegistry()
+        self.jobs = dict(JOBS)
+        email_job = create_email_job(settings.smtp, registry=self.registry)
+        if email_job is not None:
+            self.jobs["email_delivery"] = email_job
         self.sentry = (
             Client(
                 dsn=settings.sentry_dsn.get_secret_value(),
@@ -89,7 +96,6 @@ class Worker:
             if settings.sentry_dsn
             else None
         )
-        self.registry = CollectorRegistry()
         self.runs = Counter(
             "worker_job_runs",
             "Finished runs by outcome",
@@ -109,7 +115,7 @@ class Worker:
             ("job",),
             registry=self.registry,
         )
-        for job in JOBS:
+        for job in self.jobs:
             for outcome in ("success", "failed", "skipped"):
                 self.runs.labels(job, outcome)
             self.errors.labels(job)
@@ -117,7 +123,7 @@ class Worker:
             self.processed.labels(job)
 
     def start(self) -> None:
-        for name, job in JOBS.items():
+        for name, job in self.jobs.items():
             self.scheduler.add_job(
                 self.run,
                 "interval",

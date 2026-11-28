@@ -20,6 +20,7 @@ from app.api.catalog import router as catalog_router
 from app.api.files import UploadLengthMiddleware
 from app.api.files import router as files_router
 from app.api.health import router as health_router
+from app.api.notification_preferences import router as notification_preferences_router
 from app.api.offers import me_router as me_offers_router
 from app.api.offers import public_router as public_offers_router
 from app.api.quote import router as quote_router
@@ -109,6 +110,7 @@ def create_app(
     application.include_router(health_router)
     application.include_router(files_router)
     application.include_router(auth_router)
+    application.include_router(notification_preferences_router)
     application.include_router(admin_calendar_router)
     application.include_router(admin_categories_router)
     application.include_router(admin_audit_router)

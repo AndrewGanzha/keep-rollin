@@ -25,6 +25,7 @@ from src.application.dtos.auth_dto import (
     SessionDTO,
     UserDTO,
 )
+from src.application.dtos.notification_preferences_dto import NotificationPreferencesSummary
 from src.application.services.auth import (
     AuthService,
     InvalidMfaChallengeError,
@@ -35,6 +36,7 @@ from src.application.services.auth import (
     MfaChallenge,
     MfaLockedError,
 )
+from src.domain.entities.notification_preferences import push_enabled
 from src.domain.entities.user_account import (
     AuthBusyError,
     EmailTakenError,
@@ -47,6 +49,9 @@ from src.domain.entities.user_account import (
     UserAccount,
 )
 from src.domain.policies.password_policy import PasswordCompromisedError
+from src.infrastructure.postgres.repositories.notification_preferences_repository import (
+    NotificationPreferencesRepository,
+)
 from src.infrastructure.postgres.repositories.offer_repository import OfferRepository
 
 
@@ -365,6 +370,9 @@ async def session(
     db_session: Annotated[AsyncSession, Depends(get_db_session)],
     service: Annotated[AuthService, Depends(get_auth_service)],
 ) -> SessionDTO:
+    preferences = await NotificationPreferencesRepository(db_session).get(user.id)
+    if preferences is None:
+        raise HTTPException(403, detail={"code": "forbidden_role"})
     offer_accepted = await OfferRepository(db_session).has_accepted_current(user_id=user.id)
     return SessionDTO(
         user=UserDTO.from_domain(user),
@@ -373,6 +381,7 @@ async def session(
         permissions=list(user.permissions),
         offer_accepted=offer_accepted,
         mfa_enabled=await service.mfa_enabled(user.id),
+        prefs_summary=NotificationPreferencesSummary(push_enabled=push_enabled(preferences)),
     )
 
 

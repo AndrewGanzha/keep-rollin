@@ -2320,6 +2320,48 @@
         "title": "MyVerificationRequest",
         "type": "object"
       },
+      "NotificationPreferencesResponse": {
+        "properties": {
+          "email_by_event": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "title": "Email By Event",
+            "type": "object"
+          },
+          "locked_events": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Locked Events",
+            "type": "array"
+          },
+          "push_enabled": {
+            "title": "Push Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "push_enabled",
+          "email_by_event",
+          "locked_events"
+        ],
+        "title": "NotificationPreferencesResponse",
+        "type": "object"
+      },
+      "NotificationPreferencesSummary": {
+        "properties": {
+          "push_enabled": {
+            "title": "Push Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "push_enabled"
+        ],
+        "title": "NotificationPreferencesSummary",
+        "type": "object"
+      },
       "OfferAcceptanceDTO": {
         "properties": {
           "accepted_at": {
@@ -3061,6 +3103,9 @@
             "title": "Permissions",
             "type": "array"
           },
+          "prefs_summary": {
+            "$ref": "#/components/schemas/NotificationPreferencesSummary"
+          },
           "role": {
             "enum": [
               "owner",
@@ -3084,7 +3129,8 @@
           "tenant_id",
           "role",
           "permissions",
-          "offer_accepted"
+          "offer_accepted",
+          "prefs_summary"
         ],
         "title": "SessionDTO",
         "type": "object"
@@ -3854,6 +3900,25 @@
           "version"
         ],
         "title": "UpdateLotRequest",
+        "type": "object"
+      },
+      "UpdateNotificationPreferencesRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "email_by_event": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "title": "Email By Event",
+            "type": "object"
+          },
+          "push_enabled": {
+            "default": true,
+            "title": "Push Enabled",
+            "type": "boolean"
+          }
+        },
+        "title": "UpdateNotificationPreferencesRequest",
         "type": "object"
       },
       "UpdateOfferRequest": {
@@ -7437,6 +7502,81 @@
         "summary": "Upload File",
         "tags": [
           "files"
+        ]
+      }
+    },
+    "/api/v1/me/notification-preferences": {
+      "get": {
+        "operationId": "getNotificationPreferences",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationPreferencesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Access denied"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Preferences",
+        "tags": [
+          "notification-preferences"
+        ]
+      },
+      "put": {
+        "operationId": "updateNotificationPreferences",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateNotificationPreferencesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationPreferencesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Access denied"
+          },
+          "422": {
+            "description": "validation_error or critical_channel_locked"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update Preferences",
+        "tags": [
+          "notification-preferences"
         ]
       }
     },

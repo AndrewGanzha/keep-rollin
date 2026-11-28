@@ -143,6 +143,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/notification-preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Preferences */
+        get: operations["getNotificationPreferences"];
+        /** Update Preferences */
+        put: operations["updateNotificationPreferences"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+
     "/api/v1/me/rentals": {
         parameters: {
             query?: never;
@@ -928,12 +947,41 @@ export interface components {
             /** @enum {string} */
             verification_status: "pending" | "approved" | "rejected";
         };
+        NotificationPreferencesResponse: {
+            /** Email By Event */
+            email_by_event: {
+                [key: string]: boolean;
+            };
+            /** Locked Events */
+            locked_events: string[];
+            /** Push Enabled */
+            push_enabled: boolean;
+        };
+
+        NotificationPreferencesSummary: {
+            /** Push Enabled */
+            push_enabled: boolean;
+        };
+
+        UpdateNotificationPreferencesRequest: {
+            /** Email By Event */
+            email_by_event?: {
+                [key: string]: boolean;
+            };
+            /**
+             * Push Enabled
+             * @default true
+             */
+            push_enabled?: boolean;
+        };
+
         Session: {
             user: components["schemas"]["User"];
             /** @enum {string} */
             role: "owner" | "admin" | "user";
             permissions: string[];
             offer_accepted: boolean;
+            prefs_summary?: components["schemas"]["NotificationPreferencesSummary"];
         };
         LoginRequest: {
             /** Format: email */
@@ -1350,6 +1398,87 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    getNotificationPreferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPreferencesResponse"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Access denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+
+    updateNotificationPreferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateNotificationPreferencesRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPreferencesResponse"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Access denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description validation_error or critical_channel_locked */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+
     getTenant: {
         parameters: {
             query?: never;

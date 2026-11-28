@@ -2,9 +2,10 @@ from datetime import datetime
 from typing import cast
 from uuid import UUID
 
-from sqlalchemy import select, update
+from sqlalchemy import literal_column, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import defer
 
 from src.application.repositories.i_outbox_repository import IOutboxRepository
 from src.domain.entities.outbox_message import (
@@ -18,8 +19,11 @@ UNIQUE_VIOLATION = "23505"
 
 
 class OutboxRepository(IOutboxRepository):
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(
+        self, session: AsyncSession, *, email_event_types: frozenset[str] | None = None
+    ) -> None:
         self._session = session
+        self._email_event_types = email_event_types
 
     def _tenant_id(self) -> UUID:
         value = self._session.info.get("tenant_id")
@@ -56,7 +60,8 @@ class OutboxRepository(IOutboxRepository):
         statement = (
             select(OutboxMessageRecord)
             .where(
-                OutboxMessageRecord.status == "pending",
+                OutboxMessageRecord.tenant_id == self._tenant_id(),
+                OutboxMessageRecord.status == literal_column("'pending'"),
                 OutboxMessageRecord.available_at <= now,
             )
             .order_by(
@@ -67,6 +72,14 @@ class OutboxRepository(IOutboxRepository):
             .limit(limit)
             .with_for_update(skip_locked=True)
         )
+        if self._email_event_types is not None:
+            statement = statement.options(defer(OutboxMessageRecord.payload, raiseload=True)).where(
+                OutboxMessageRecord.event_type.in_(self._email_event_types),
+                or_(
+                    OutboxMessageRecord.channel.is_(None),
+                    OutboxMessageRecord.channel == "email",
+                ),
+            )
         result = await self._session.execute(statement)
         return [self._to_domain(record) for record in result.scalars().all()]
 
@@ -74,7 +87,12 @@ class OutboxRepository(IOutboxRepository):
         await self._session.execute(
             update(OutboxMessageRecord)
             .where(OutboxMessageRecord.id == message_id)
-            .values(status="processed", processed_at=processed_at, updated_at=processed_at)
+            .values(
+                status="processed",
+                processed_at=processed_at,
+                updated_at=processed_at,
+                last_error=None,
+            )
         )
 
     async def mark_failed(
@@ -98,8 +116,7 @@ class OutboxRepository(IOutboxRepository):
             )
         )
 
-    @staticmethod
-    def _to_domain(record: OutboxMessageRecord) -> OutboxMessage:
+    def _to_domain(self, record: OutboxMessageRecord) -> OutboxMessage:
         return OutboxMessage(
             id=record.id,
             created_at=record.created_at,
@@ -108,7 +125,7 @@ class OutboxRepository(IOutboxRepository):
             entity_id=record.entity_id,
             user_id=record.user_id,
             channel=record.channel,
-            payload=record.payload,
+            payload=record.payload if self._email_event_types is None else {},
             status=cast(OutboxStatus, record.status),
             attempts=record.attempts,
             available_at=record.available_at,

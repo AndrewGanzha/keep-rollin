@@ -93,6 +93,27 @@ docker run --rm --stop-timeout 120 --env WORKER_DATABASE_URL -p 127.0.0.1:8001:8
 idempotency-ключей. Уведомления о просрочке поступают в существующий outbox. Для воспроизведения проверки 10 000 переходов запустите `uv run --locked python -m scripts.benchmark_rental_worker` на тестовой БД с применёнными миграциями и установленным `DATABASE_URL`.
 
 
+### Email
+
+Воркер отправляет бизнес-уведомления из outbox после настройки
+`WORKER_SMTP_HOST` и `WORKER_SMTP_FROM_ADDRESS`. По умолчанию используется
+STARTTLS на порту 587. Для implicit TLS укажите `WORKER_SMTP_SECURITY=tls`
+и порт SMTP-провайдера. Режим `plain` подходит для локального MailHog.
+Если сервер требует аутентификацию, задайте `WORKER_SMTP_USERNAME` и
+`WORKER_SMTP_PASSWORD`. Аутентификация доступна только по TLS. Таймаут сокета
+`WORKER_SMTP_TIMEOUT_SECONDS` по умолчанию составляет 5 секунд.
+
+Счётчик `worker_email_delivery_attempts_total` показывает успешные отправки,
+пропуски, повторы и исчерпанные попытки. После ошибки очередь повторит отправку
+через 1, 5 и 15 минут. Для всех попыток одного события используется один
+`Message-ID`. Если SMTP примет письмо перед сбоем фиксации в PostgreSQL,
+следующий запуск может его повторить. Письма для сброса пароля и Web Push
+обрабатываются отдельными задачами. Письма о верификации ведут в личный кабинет, письма об арендах и тикетах открывают соответствующие списки.
+
+Для теста MailHog установите
+`MAILHOG_SMTP_PORT` и `MAILHOG_HTTP_URL` и запустите
+`pytest tests/infrastructure/test_notification_email_job.py`.
+
 ## Проверки
 
 ```powershell
@@ -188,8 +209,8 @@ GET  /api/v1/auth/session
 
 MFA, password reset, rate limit и полная проверка утечек остаются отдельными
 задачами. `phone` опционален для MVP; `offer_accepted` уже отражает принятие
-текущей active-оферты, а `prefs-summary` появится вместе с настройками
-уведомлений.
+текущей active-оферты. `prefs_summary.push_enabled` содержит состояние настройки
+push-уведомлений.
 В production обязательны непустой `JWT_SECRET`, cookie `__Host-rt`
 и `Secure=True`; dev-secret запрещён. Образ Docker выставляет
 `APP_ENV=production`, поэтому без `JWT_SECRET` контейнер не стартует.

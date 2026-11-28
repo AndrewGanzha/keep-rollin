@@ -3,6 +3,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
 
+from src.application.dtos.notification_preferences_dto import NotificationPreferencesSummary
 from src.domain.entities.user_account import EMAIL_RE, UserAccount
 
 UserRole = Literal["owner", "admin", "user"]
@@ -160,3 +161,4 @@ class SessionDTO(BaseModel):
     permissions: list[str]
     offer_accepted: bool
     mfa_enabled: bool = False
+    prefs_summary: NotificationPreferencesSummary
