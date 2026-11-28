@@ -25,6 +25,7 @@ from app.db import configure_session, create_engine
 from app.logging import configure_logging
 from app.models import Tenant
 from app.notification_email_job import SmtpSettings, create_email_job
+from app.notification_push_job import PushSettings, create_push_jobs
 from app.worker_jobs import JOBS, Job
 
 logger = logging.getLogger("app.worker")
@@ -41,6 +42,7 @@ class WorkerSettings(BaseSettings):
     batch_size: int = Field(default=500, ge=1, le=1000)
     sentry_dsn: SecretStr | None = None
     smtp: SmtpSettings = Field(default_factory=SmtpSettings)
+    push: PushSettings = Field(default_factory=PushSettings)
 
 
 class TenantJobFailed(RuntimeError):
@@ -83,7 +85,10 @@ class Worker:
         self.running: set[asyncio.Task[None]] = set()
         self.registry = CollectorRegistry()
         self.jobs = dict(JOBS)
-        email_job = create_email_job(settings.smtp, registry=self.registry)
+        self.jobs.update(create_push_jobs(settings.push, registry=self.registry))
+        email_job = create_email_job(
+            settings.smtp, registry=self.registry, push_routing_enabled=settings.push.enabled
+        )
         if email_job is not None:
             self.jobs["email_delivery"] = email_job
         self.sentry = (

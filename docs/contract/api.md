@@ -41,9 +41,9 @@
 | `POST /auth/password/forgot`     | гость | Всегда 202 (без enumeration) |
 | `POST /auth/password/reset`      | гость | Токен + новый пароль; 204 |
 | `GET /auth/session`              | все   | user, tenant, role, `permissions[]`, `verification_status`, `offer_accepted`, `mfa_enabled` и `prefs_summary.push_enabled` |
-| `GET /me/push-subscriptions`     | user+ | Список подписок |
-| `POST /me/push-subscriptions`    | user+ | Upsert по `endpoint` |
-| `DELETE /me/push-subscriptions/{id}` | user+ | Отписка |
+| `GET /me/push-subscriptions`     | user+ | Активные подписки владельца. Ответ содержит ID и SHA-256 endpoint без адреса и ключей |
+| `POST /me/push-subscriptions`    | user+ | Upsert по `endpoint` в формате браузера `{endpoint, expirationTime, keys:{p256dh,auth}}`. 409 при конфликте владельца или лимите 10 активных подписок |
+| `DELETE /me/push-subscriptions/{subscription_id}` | user+ | Отписка владельца, 204 при повторном запросе |
 | `GET /me/notification-preferences` | user+ | §3.10 |
 | `PUT /me/notification-preferences` | user+ | Критичные события отключить нельзя |
 

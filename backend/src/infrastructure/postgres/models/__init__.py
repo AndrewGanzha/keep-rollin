@@ -17,6 +17,7 @@ from src.infrastructure.postgres.models.outbox_message_record import OutboxMessa
 from src.infrastructure.postgres.models.password_reset_token_record import (
     PasswordResetTokenRecord,
 )
+from src.infrastructure.postgres.models.push_subscription_record import PushSubscriptionRecord
 from src.infrastructure.postgres.models.refresh_session_record import RefreshSessionRecord
 from src.infrastructure.postgres.models.rental_record import RentalRecord
 from src.infrastructure.postgres.models.tenant_settings_record import TenantSettingsRecord
@@ -43,6 +44,7 @@ __all__ = [
     "OfferVersionRecord",
     "OutboxMessageRecord",
     "PasswordResetTokenRecord",
+    "PushSubscriptionRecord",
     "RefreshSessionRecord",
     "RentalRecord",
     "TenantSettingsRecord",

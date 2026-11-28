@@ -23,6 +23,7 @@ from app.api.health import router as health_router
 from app.api.notification_preferences import router as notification_preferences_router
 from app.api.offers import me_router as me_offers_router
 from app.api.offers import public_router as public_offers_router
+from app.api.push_subscriptions import router as push_subscriptions_router
 from app.api.quote import router as quote_router
 from app.api.rental_reads import admin_router as admin_rental_reads_router
 from app.api.rental_reads import me_router as me_rental_reads_router
@@ -111,6 +112,7 @@ def create_app(
     application.include_router(files_router)
     application.include_router(auth_router)
     application.include_router(notification_preferences_router)
+    application.include_router(push_subscriptions_router)
     application.include_router(admin_calendar_router)
     application.include_router(admin_categories_router)
     application.include_router(admin_audit_router)

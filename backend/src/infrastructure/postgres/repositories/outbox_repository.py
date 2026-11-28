@@ -1,11 +1,13 @@
 from datetime import datetime
-from typing import cast
+from typing import Literal, cast
 from uuid import UUID
 
 from sqlalchemy import literal_column, or_, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import defer
+from sqlalchemy.sql.elements import ColumnElement
 
 from src.application.repositories.i_outbox_repository import IOutboxRepository
 from src.domain.entities.outbox_message import (
@@ -16,14 +18,20 @@ from src.domain.entities.outbox_message import (
 from src.infrastructure.postgres.models.outbox_message_record import OutboxMessageRecord
 
 UNIQUE_VIOLATION = "23505"
+NotificationRoute = Literal["email", "explicit_email", "unrouted", "push"]
 
 
 class OutboxRepository(IOutboxRepository):
     def __init__(
-        self, session: AsyncSession, *, email_event_types: frozenset[str] | None = None
+        self,
+        session: AsyncSession,
+        *,
+        event_types: frozenset[str] | None = None,
+        route: NotificationRoute | None = None,
     ) -> None:
         self._session = session
-        self._email_event_types = email_event_types
+        self._event_types = event_types
+        self._route = route
 
     def _tenant_id(self) -> UUID:
         value = self._session.info.get("tenant_id")
@@ -72,16 +80,47 @@ class OutboxRepository(IOutboxRepository):
             .limit(limit)
             .with_for_update(skip_locked=True)
         )
-        if self._email_event_types is not None:
+
+        if self._event_types is not None:
             statement = statement.options(defer(OutboxMessageRecord.payload, raiseload=True)).where(
-                OutboxMessageRecord.event_type.in_(self._email_event_types),
-                or_(
-                    OutboxMessageRecord.channel.is_(None),
-                    OutboxMessageRecord.channel == "email",
-                ),
+                OutboxMessageRecord.event_type.in_(self._event_types)
             )
+        if self._route is not None:
+            statement = statement.where(self._channel_filter(self._route))
         result = await self._session.execute(statement)
         return [self._to_domain(record) for record in result.scalars().all()]
+
+    @staticmethod
+    def _channel_filter(route: NotificationRoute) -> ColumnElement[bool]:
+        record = OutboxMessageRecord
+        unrouted: ColumnElement[bool] = record.channel.is_(None)
+        if route == "unrouted":
+            return unrouted & (record.attempts == 0)
+        if route == "push":
+            return record.channel == "push"
+        if route == "explicit_email":
+            # Earlier versions stored SMTP retries directly on the original event.
+            unrouted = unrouted & (record.attempts > 0)
+        return or_(record.channel == "email", unrouted)
+
+    async def enqueue_channel(
+        self, message: OutboxMessage, channel: Literal["email", "push"], *, now: datetime
+    ) -> None:
+        await self._session.execute(
+            pg_insert(OutboxMessageRecord)
+            .inline()
+            .values(
+                tenant_id=self._tenant_id(),
+                event_type=message.event_type,
+                entity_id=message.entity_id,
+                user_id=message.user_id,
+                channel=channel,
+                available_at=now,
+                created_at=now,
+                updated_at=now,
+            )
+            .on_conflict_do_nothing(constraint="uq_outbox_message_event_chain")
+        )
 
     async def mark_processed(self, message_id: UUID, *, processed_at: datetime) -> None:
         await self._session.execute(
@@ -125,7 +164,7 @@ class OutboxRepository(IOutboxRepository):
             entity_id=record.entity_id,
             user_id=record.user_id,
             channel=record.channel,
-            payload=record.payload if self._email_event_types is None else {},
+            payload=record.payload if self._event_types is None else {},
             status=cast(OutboxStatus, record.status),
             attempts=record.attempts,
             available_at=record.available_at,

@@ -16,7 +16,7 @@
 | `offer_version.status` + partial unique `(tenant_id) WHERE status='active'` | UC-4.1 |
 | `ticket` + `ticket_attachment` (0017) | Лот и владелец определяются через аренду того же тенанта. Приватные фото связаны составными ключами и исключены из очистки непривязанных файлов. Откат миграций 0017–0018 с тикетами или событиями создания требует плана переноса данных. |
 | `rental` + `battery_stock` (0015) | Аренда хранит замороженные цену, валюту, вариант и параметры АКБ. Составной FK связывает её с интервалом того же тенанта и лота. Остаток по типу задаётся владельцем. |
-| `push_subscription`: unique `(user_id, endpoint)`, `user_agent` | UC-11.2/11.3 |
+| `push_subscription`: unique `(tenant_id, endpoint)`, `user_id`, ключи, `user_agent`, срок и версия подписки | UC-11.2/11.3. Владелец обновляет подписку, а воркер деактивирует только полученную версию |
 | **NEW `audit_log`** (append-only, RLS, keyset) | Action enum, actor/role/IP, metadata JSONB без PII, retention: UC-4.6 |
 | `user`: индексы `(tenant_id, created_at, id)` и `(tenant_id, role, created_at, id)` | Owner-список администраторов (BE-ADM-01) |
 | `tenant_settings`: `vapid_public_key`, `vapid_private_key_enc`, `vapid_key_id` | Провижининг и Web Push (BE-TEN-02) |

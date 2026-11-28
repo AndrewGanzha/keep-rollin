@@ -2639,6 +2639,83 @@
         "title": "PublicOfferDTO",
         "type": "object"
       },
+      "PushSubscriptionKeys": {
+        "additionalProperties": false,
+        "properties": {
+          "auth": {
+            "maxLength": 24,
+            "title": "Auth",
+            "type": "string"
+          },
+          "p256dh": {
+            "maxLength": 88,
+            "title": "P256Dh",
+            "type": "string"
+          }
+        },
+        "required": [
+          "p256dh",
+          "auth"
+        ],
+        "title": "PushSubscriptionKeys",
+        "type": "object"
+      },
+      "PushSubscriptionResponse": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "endpoint_hash": {
+            "title": "Endpoint Hash",
+            "type": "string"
+          },
+          "expiration_time": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expiration Time"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "user_agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Agent"
+          }
+        },
+        "required": [
+          "id",
+          "endpoint_hash",
+          "expiration_time",
+          "user_agent",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "PushSubscriptionResponse",
+        "type": "object"
+      },
       "QuoteDTO": {
         "properties": {
           "end": {
@@ -4052,6 +4129,38 @@
           "url"
         ],
         "title": "UploadResultDTO",
+        "type": "object"
+      },
+      "UpsertPushSubscriptionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "endpoint": {
+            "maxLength": 2048,
+            "title": "Endpoint",
+            "type": "string"
+          },
+          "expirationTime": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 253402300799999.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expirationtime"
+          },
+          "keys": {
+            "$ref": "#/components/schemas/PushSubscriptionKeys"
+          }
+        },
+        "required": [
+          "endpoint",
+          "keys"
+        ],
+        "title": "UpsertPushSubscriptionRequest",
         "type": "object"
       },
       "UserDTO": {
@@ -7651,6 +7760,142 @@
         "summary": "Accept Offer",
         "tags": [
           "me-offers"
+        ]
+      }
+    },
+    "/api/v1/me/push-subscriptions": {
+      "get": {
+        "operationId": "listPushSubscriptions",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PushSubscriptionResponse"
+                  },
+                  "title": "Response Listpushsubscriptions",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Access denied"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Push Subscriptions",
+        "tags": [
+          "push-subscriptions"
+        ]
+      },
+      "post": {
+        "operationId": "upsertPushSubscription",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertPushSubscriptionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PushSubscriptionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Access denied"
+          },
+          "409": {
+            "description": "Subscription conflict or active subscription limit reached"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Upsert Push Subscription",
+        "tags": [
+          "push-subscriptions"
+        ]
+      }
+    },
+    "/api/v1/me/push-subscriptions/{subscription_id}": {
+      "delete": {
+        "operationId": "deletePushSubscription",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "subscription_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Subscription Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Access denied"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Push Subscription",
+        "tags": [
+          "push-subscriptions"
         ]
       }
     },

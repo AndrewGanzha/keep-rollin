@@ -95,6 +95,11 @@ _NOTIFICATIONS = {
 EMAIL_EVENT_TYPES = frozenset(_NOTIFICATIONS)
 
 
+def push_content(event_type: str) -> tuple[str, str, str]:
+    notification = _NOTIFICATIONS[event_type]
+    return notification.subject, notification.text, notification.path
+
+
 class NotificationEmailRenderer:
     def __init__(self) -> None:
         environment = Environment(

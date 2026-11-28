@@ -93,7 +93,10 @@ class EmailOutboxHandler:
 
 
 def create_email_job(
-    settings: SmtpSettings, *, registry: CollectorRegistry | None = None
+    settings: SmtpSettings,
+    *,
+    registry: CollectorRegistry | None = None,
+    push_routing_enabled: bool = False,
 ) -> Job | None:
     if settings.host is None:
         return None
@@ -119,7 +122,11 @@ def create_email_job(
         outcomes.labels(outcome)
 
     async def dispatch(session: AsyncSession, now: datetime, batch_size: int, trace_id: str) -> int:
-        repository = OutboxRepository(session, email_event_types=EMAIL_EVENT_TYPES)
+        repository = OutboxRepository(
+            session,
+            event_types=EMAIL_EVENT_TYPES,
+            route="explicit_email" if push_routing_enabled else "email",
+        )
         # Keep successful sends in independent transactions because SMTP is not transactional.
         handler = EmailOutboxHandler(session, renderer, sender)
         result = await OutboxConsumer(repository).process_once(
